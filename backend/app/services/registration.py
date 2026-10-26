@@ -180,7 +180,9 @@ def register_account(db: Session, payload: RegisterRequest) -> User:
     organization_id = None
     if payload.organization_name:
         organization = db.scalar(
-            select(Organization).where(func.lower(Organization.name) == payload.organization_name.lower())
+            select(Organization).where(
+                func.lower(Organization.name) == payload.organization_name.lower()
+            )
         )
         if organization is None:
             organization = Organization(

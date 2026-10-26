@@ -22,9 +22,7 @@ def login(client, email):
 
 
 def test_registration_keeps_the_three_experiences(client, accounts):
-    farmer = register(
-        client, "farmer", "grower@trial.treelife.local", district="Huye"
-    )
+    farmer = register(client, "farmer", "grower@trial.treelife.local", district="Huye")
     assert farmer.status_code == 201, farmer.text
     assert farmer.json()["role"] == "farmer"
     assert farmer.json()["farmer_id"]

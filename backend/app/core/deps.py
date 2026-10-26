@@ -56,9 +56,7 @@ def require_writer(user: User = Depends(get_current_user)) -> User:
 
 def require_staff(user: User = Depends(get_current_user)) -> User:
     if user.role not in STAFF_ROLES:
-        raise HTTPException(
-            status_code=403, detail="Only a field officer can open a login."
-        )
+        raise HTTPException(status_code=403, detail="Only a field officer can open a login.")
     return user
 
 
