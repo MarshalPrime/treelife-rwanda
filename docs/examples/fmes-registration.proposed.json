@@ -1,0 +1,28 @@
+{
+  "notice": "PROPOSED EXAMPLE ONLY. Synthetic data. This is not an FMES schema, endpoint, or official field dictionary.",
+  "data_origin": "synthetic_demo",
+  "treelife_public_code": "TREE-2026-EXAMPLE",
+  "treelife_id": "00000000-0000-4000-8000-000000000001",
+  "external_id": null,
+  "record_kind": "individual_tree",
+  "species_scientific_name": "Persea americana",
+  "species_common_name": "Avocado",
+  "category": "fruit",
+  "planting_date": "2026-03-01",
+  "quantity": 1,
+  "status": "planted",
+  "coordinate_reference_system": "EPSG:4326",
+  "latitude": -1.95,
+  "longitude": 30.06,
+  "site": {
+    "treelife_public_code": "SITE-2026-EXAMPLE",
+    "name": "SYNTHETIC Fruit orchard — demo",
+    "site_type": "orchard",
+    "province": "Example province",
+    "district": "Example district"
+  },
+  "organization": {
+    "name": "SYNTHETIC Demo Cooperative",
+    "org_type": "cooperative"
+  }
+}

@@ -1,0 +1,62 @@
+# Architecture
+
+TreeLife Rwanda is a single application. The browser talks to a FastAPI service, which talks to PostgreSQL with PostGIS. There is no separate integration service.
+
+```text
+Browser (Next.js)
+    |  HTTPS JSON, bearer token
+FastAPI
+    |  SQLAlchemy / GeoAlchemy2
+PostgreSQL + PostGIS
+```
+
+The FMES adapter in `backend/app/integrations/fmes` is a reserved seam. Registration does not call it. `dispatch_registration_hook` returns immediately after a local commit.
+
+## Modules
+
+| Path | Responsibility |
+| --- | --- |
+| `frontend/src/app` | Pages for sign-in, lists, forms, details, and the map |
+| `frontend/src/lib` | API client, validation, and labels |
+| `backend/app/api` | HTTP routes and status codes |
+| `backend/app/domain` | Coordinate, quantity, and date rules |
+| `backend/app/services` | Create, update, list, audit, and GeoJSON |
+| `backend/app/models` | Relational schema |
+| `backend/alembic` | Migrations |
+
+## Authentication
+
+Three roles are stored on the user: `admin`, `field_officer`, and `viewer`.
+
+- Every registration endpoint requires a bearer token.
+- Viewers can read.
+- Field officers and administrators can create and update.
+- Only administrators can read the audit log.
+- There is no public self-registration. Accounts are created by the seed or, later, by an operator.
+
+The token is a signed JWT kept in `sessionStorage`. That choice is documented as a prototype limit in [decisions/003-authentication.md](decisions/003-authentication.md).
+
+## Coordinates
+
+The coordinate reference system is WGS 84, SRID 4326.
+
+- Latitude is the north-south value, from -90 to 90.
+- Longitude is the east-west value, from -180 to 180.
+- A record may omit both. It may not store only one.
+- PostGIS stores `geography(POINT, 4326)`. Well-known text is `POINT(longitude latitude)`.
+- The map GeoJSON position is `[longitude, latitude]`.
+- Points outside an approximate Rwanda extent are accepted. The form shows a warning. The boundary is not a hard rule until domain experts confirm it.
+
+## Identifiers
+
+Each site, tree, batch, and event has a UUID primary key and a public code such as `TREE-2026-A1B2C3`. `external_id` is an optional slot for a future external key. Filling it does not mean a record was sent to FMES.
+
+Creates accept `client_request_id`. Repeating the same id returns the original record instead of inserting another one. See [offline-sync.md](offline-sync.md).
+
+## Map tiles
+
+The map uses OpenStreetMap tiles through Leaflet. The page attributes OpenStreetMap. Tile requests need a network connection. A later deployment should use a tile host that fits the expected traffic.
+
+## What is intentionally absent
+
+Nursery stock, distribution, maintenance work orders, harvest quantities, and sales are not modules yet. The lifecycle event types include `maintenance` and `harvest_observation` so those notes have a place without pretending the later workflows exist.

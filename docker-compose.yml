@@ -1,0 +1,50 @@
+# Local development stack. Database credentials here are development-only.
+# Do not point this file at a server that holds real farmer or farm data.
+
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: treelife
+      POSTGRES_PASSWORD: treelife
+      POSTGRES_DB: treelife
+    ports:
+      - "5432:5432"
+    volumes:
+      - treelife_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U treelife -d treelife"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build: ./backend
+    environment:
+      APP_ENV: development
+      SECRET_KEY: dev-only-change-me-use-a-long-random-string
+      DATABASE_URL: postgresql+psycopg://treelife:treelife@db:5432/treelife
+      CORS_ORIGINS: http://localhost:3000
+      ACCESS_TOKEN_EXPIRE_MINUTES: "480"
+      SEED_DEMO_DATA: "true"
+      DEMO_ADMIN_PASSWORD: demo-admin-pass
+      DEMO_OFFICER_PASSWORD: demo-officer-pass
+      DEMO_VIEWER_PASSWORD: demo-viewer-pass
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+volumes:
+  treelife_pg:

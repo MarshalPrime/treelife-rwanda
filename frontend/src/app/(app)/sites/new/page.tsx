@@ -1,0 +1,44 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { Banner } from "@/components/AppShell";
+import { SiteForm } from "@/components/forms";
+import { api } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
+import type { Organization, Site } from "@/lib/types";
+
+export default function NewSitePage() {
+  const router = useRouter();
+  const { canWrite } = useAuth();
+  const [organizations, setOrganizations] = useState<Organization[]>([]);
+
+  useEffect(() => {
+    api<Organization[]>("/organizations").then(setOrganizations).catch(() => setOrganizations([]));
+  }, []);
+
+  if (!canWrite) return <Banner tone="error">You do not have permission to register a site.</Banner>;
+  return (
+    <div className="page">
+      <div>
+        <h1>Register a planting site</h1>
+        <p className="lede">Save the place once. Trees and batches will refer to it.</p>
+      </div>
+      <div className="card">
+        <SiteForm
+          organizations={organizations}
+          submitLabel="Save site"
+          onCreateOrganization={async (input) => {
+            const created = await api<Organization>("/organizations", { method: "POST", body: JSON.stringify(input) });
+            setOrganizations((current) => [...current, created].sort((a, b) => a.name.localeCompare(b.name)));
+            return created;
+          }}
+          onSubmit={async (payload) => {
+            const site = await api<Site>("/sites", { method: "POST", body: JSON.stringify(payload) });
+            router.push(`/sites/${site.id}?created=1`);
+          }}
+        />
+      </div>
+    </div>
+  );
+}
