@@ -138,6 +138,7 @@ class SiteCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     site_type: SiteType
     organization_id: uuid.UUID | None = None
+    farmer_id: uuid.UUID | None = None
     province: str | None = Field(default=None, max_length=120)
     district: str | None = Field(default=None, max_length=120)
     sector: str | None = Field(default=None, max_length=120)
@@ -188,6 +189,7 @@ class SiteUpdate(BaseModel):
     name: str | None = Field(default=None, max_length=200)
     site_type: SiteType | None = None
     organization_id: uuid.UUID | None = None
+    farmer_id: uuid.UUID | None = None
     province: str | None = Field(default=None, max_length=120)
     district: str | None = Field(default=None, max_length=120)
     sector: str | None = Field(default=None, max_length=120)
@@ -234,6 +236,8 @@ class SiteRead(BaseModel):
     site_type: SiteType
     organization_id: uuid.UUID | None
     organization_name: str | None
+    farmer_id: uuid.UUID | None = None
+    farmer_name: str | None = None
     province: str | None
     district: str | None
     sector: str | None

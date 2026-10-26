@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 import { Banner, OriginBadge } from "@/components/AppShell";
 import { api } from "@/lib/api";
 import { label } from "@/lib/labels";
-import type { MapFeature, MapResponse, Species } from "@/lib/types";
+import type { Farmer, MapFeature, MapResponse, Species } from "@/lib/types";
 
 const MapView = dynamic(() => import("@/components/MapView"), {
   ssr: false,
@@ -19,10 +19,13 @@ const paths: Record<string, string> = { site: "sites", tree: "trees", batch: "ba
 export default function MapPage() {
   const search = useSearchParams();
   const [species, setSpecies] = useState<Species[]>([]);
+  const [farmers, setFarmers] = useState<Farmer[]>([]);
   const [kind, setKind] = useState("all");
   const [speciesId, setSpeciesId] = useState("");
   const [category, setCategory] = useState("");
   const [status, setStatus] = useState("");
+  const [district, setDistrict] = useState("");
+  const [farmerId, setFarmerId] = useState("");
   const [data, setData] = useState<MapResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -30,6 +33,7 @@ export default function MapPage() {
 
   useEffect(() => {
     api<Species[]>("/species").then(setSpecies).catch(() => setSpecies([]));
+    api<Farmer[]>("/farmers").then(setFarmers).catch(() => setFarmers([]));
   }, []);
 
   useEffect(() => {
@@ -38,6 +42,8 @@ export default function MapPage() {
     if (speciesId) params.set("species_id", speciesId);
     if (category) params.set("category", category);
     if (status) params.set("status", status);
+    if (district.trim()) params.set("district", district.trim());
+    if (farmerId) params.set("farmer_id", farmerId);
     let active = true;
     setLoading(true);
     api<MapResponse>(`/map?${params}`)
@@ -45,7 +51,7 @@ export default function MapPage() {
       .catch((caught: Error) => { if (active) setError(caught.message); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [category, kind, speciesId, status]);
+  }, [category, district, farmerId, kind, speciesId, status]);
 
   const selected = data?.features.find((feature) => feature.properties.id === selectedId) ?? null;
   const nothingLocated = !loading && data && data.features.length === 0;
@@ -74,6 +80,11 @@ export default function MapPage() {
           <option value="fruit">Fruit</option>
           <option value="agroforestry">Agroforestry</option>
           <option value="other">Other</option>
+        </select>
+        <input aria-label="District" placeholder="District" value={district} onChange={(event) => setDistrict(event.target.value)} />
+        <select aria-label="Farmer" value={farmerId} onChange={(event) => setFarmerId(event.target.value)}>
+          <option value="">All farmers</option>
+          {farmers.map((farmer) => <option key={farmer.id} value={farmer.id}>{farmer.display_name}</option>)}
         </select>
         <select aria-label="Status" value={status} onChange={(event) => setStatus(event.target.value)}>
           <option value="">All statuses</option>

@@ -225,6 +225,9 @@ class PlantingSite(Base):
     organization_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True
     )
+    farmer_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("farmers.id", ondelete="SET NULL"), nullable=True
+    )
     province: Mapped[str | None] = mapped_column(String(120), nullable=True)
     district: Mapped[str | None] = mapped_column(String(120), nullable=True)
     sector: Mapped[str | None] = mapped_column(String(120), nullable=True)
@@ -259,6 +262,7 @@ class PlantingSite(Base):
     )
 
     organization: Mapped[Organization | None] = relationship(back_populates="sites")
+    farmer: Mapped[Farmer | None] = relationship(back_populates="sites")
     registrar: Mapped[User] = relationship(foreign_keys=[registered_by])
     trees: Mapped[list[IndividualTree]] = relationship(back_populates="site")
     batches: Mapped[list[PlantingBatch]] = relationship(back_populates="site")
@@ -493,3 +497,325 @@ class AuditLog(Base):
     )
 
     actor: Mapped[User | None] = relationship()
+
+
+class Farmer(Base):
+    """A household or producer name linked to sites. No national identifier is stored."""
+
+    __tablename__ = "farmers"
+    __table_args__ = (
+        CheckConstraint(
+            "data_origin IN ('field_entry', 'synthetic_demo', 'imported')",
+            name="ck_farmers_origin",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    public_code: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
+    display_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    organization_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True
+    )
+    district: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    data_origin: Mapped[str] = mapped_column(
+        String(32), nullable=False, default=DataOrigin.field_entry.value
+    )
+    client_request_id: Mapped[str | None] = mapped_column(String(80), unique=True, nullable=True)
+    registered_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    registered_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        server_default=func.now(),
+        onupdate=utcnow,
+    )
+
+    organization: Mapped[Organization | None] = relationship()
+    registrar: Mapped[User] = relationship(foreign_keys=[registered_by])
+    sites: Mapped[list[PlantingSite]] = relationship(back_populates="farmer")
+
+
+class SeedlingLot(Base):
+    __tablename__ = "seedling_lots"
+    __table_args__ = (
+        CheckConstraint(
+            "quantity_produced >= 1 AND quantity_produced <= 100000", name="ck_lots_produced"
+        ),
+        CheckConstraint(
+            "quantity_remaining >= 0 AND quantity_remaining <= quantity_produced",
+            name="ck_lots_remaining",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    public_code: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
+    nursery_site_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("planting_sites.id", ondelete="RESTRICT"), nullable=False
+    )
+    species_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("species.id", ondelete="RESTRICT"), nullable=False
+    )
+    quantity_produced: Mapped[int] = mapped_column(Integer, nullable=False)
+    quantity_remaining: Mapped[int] = mapped_column(Integer, nullable=False)
+    produced_on: Mapped[date] = mapped_column(Date, nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    data_origin: Mapped[str] = mapped_column(
+        String(32), nullable=False, default=DataOrigin.field_entry.value
+    )
+    client_request_id: Mapped[str | None] = mapped_column(String(80), unique=True, nullable=True)
+    registered_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow, server_default=func.now()
+    )
+
+    nursery_site: Mapped[PlantingSite] = relationship()
+    species: Mapped[Species] = relationship()
+    registrar: Mapped[User] = relationship(foreign_keys=[registered_by])
+
+
+class Distribution(Base):
+    __tablename__ = "distributions"
+    __table_args__ = (
+        CheckConstraint("quantity >= 1 AND quantity <= 100000", name="ck_distributions_quantity"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    public_code: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
+    seedling_lot_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("seedling_lots.id", ondelete="RESTRICT"), nullable=False
+    )
+    destination_site_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("planting_sites.id", ondelete="RESTRICT"), nullable=False
+    )
+    farmer_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("farmers.id", ondelete="SET NULL"), nullable=True
+    )
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    distributed_on: Mapped[date] = mapped_column(Date, nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    data_origin: Mapped[str] = mapped_column(
+        String(32), nullable=False, default=DataOrigin.field_entry.value
+    )
+    client_request_id: Mapped[str | None] = mapped_column(String(80), unique=True, nullable=True)
+    registered_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow, server_default=func.now()
+    )
+
+    seedling_lot: Mapped[SeedlingLot] = relationship()
+    destination_site: Mapped[PlantingSite] = relationship()
+    farmer: Mapped[Farmer | None] = relationship()
+    registrar: Mapped[User] = relationship(foreign_keys=[registered_by])
+
+
+class GrowthMeasurement(Base):
+    __tablename__ = "growth_measurements"
+    __table_args__ = (
+        CheckConstraint(
+            "(tree_id IS NOT NULL AND batch_id IS NULL) OR (tree_id IS NULL AND batch_id IS NOT NULL)",
+            name="ck_growth_one_target",
+        ),
+        CheckConstraint(
+            "height_m IS NOT NULL OR dbh_cm IS NOT NULL OR survival_count IS NOT NULL",
+            name="ck_growth_measure",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    public_code: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
+    tree_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("individual_trees.id", ondelete="RESTRICT"), nullable=True
+    )
+    batch_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("planting_batches.id", ondelete="RESTRICT"), nullable=True
+    )
+    measured_on: Mapped[date] = mapped_column(Date, nullable=False)
+    height_m: Mapped[float | None] = mapped_column(Float, nullable=True)
+    dbh_cm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    survival_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    data_origin: Mapped[str] = mapped_column(
+        String(32), nullable=False, default=DataOrigin.field_entry.value
+    )
+    client_request_id: Mapped[str | None] = mapped_column(String(80), unique=True, nullable=True)
+    registered_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow, server_default=func.now()
+    )
+
+    tree: Mapped[IndividualTree | None] = relationship()
+    batch: Mapped[PlantingBatch | None] = relationship()
+    registrar: Mapped[User] = relationship(foreign_keys=[registered_by])
+
+
+class MaintenanceActivity(Base):
+    __tablename__ = "maintenance_activities"
+    __table_args__ = (
+        CheckConstraint(
+            "activity_type IN ('pruning', 'watering', 'mulching', 'pest_control', 'staking', 'other')",
+            name="ck_maintenance_type",
+        ),
+        CheckConstraint(
+            "(CASE WHEN tree_id IS NULL THEN 0 ELSE 1 END + "
+            "CASE WHEN batch_id IS NULL THEN 0 ELSE 1 END + "
+            "CASE WHEN site_id IS NULL THEN 0 ELSE 1 END) = 1",
+            name="ck_maintenance_one_target",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    public_code: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
+    tree_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("individual_trees.id", ondelete="RESTRICT"), nullable=True
+    )
+    batch_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("planting_batches.id", ondelete="RESTRICT"), nullable=True
+    )
+    site_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("planting_sites.id", ondelete="RESTRICT"), nullable=True
+    )
+    activity_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    performed_on: Mapped[date] = mapped_column(Date, nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    data_origin: Mapped[str] = mapped_column(
+        String(32), nullable=False, default=DataOrigin.field_entry.value
+    )
+    client_request_id: Mapped[str | None] = mapped_column(String(80), unique=True, nullable=True)
+    registered_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow, server_default=func.now()
+    )
+
+    tree: Mapped[IndividualTree | None] = relationship()
+    batch: Mapped[PlantingBatch | None] = relationship()
+    site: Mapped[PlantingSite | None] = relationship()
+    registrar: Mapped[User] = relationship(foreign_keys=[registered_by])
+
+
+class Harvest(Base):
+    __tablename__ = "harvests"
+    __table_args__ = (
+        CheckConstraint("unit IN ('kg', 'count')", name="ck_harvests_unit"),
+        CheckConstraint("quantity > 0 AND quantity <= 1000000", name="ck_harvests_quantity"),
+        CheckConstraint(
+            "quantity_remaining >= 0 AND quantity_remaining <= quantity",
+            name="ck_harvests_remaining",
+        ),
+        CheckConstraint(
+            "(tree_id IS NOT NULL AND batch_id IS NULL) OR (tree_id IS NULL AND batch_id IS NOT NULL)",
+            name="ck_harvests_one_target",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    public_code: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
+    tree_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("individual_trees.id", ondelete="RESTRICT"), nullable=True
+    )
+    batch_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("planting_batches.id", ondelete="RESTRICT"), nullable=True
+    )
+    harvested_on: Mapped[date] = mapped_column(Date, nullable=False)
+    quantity: Mapped[float] = mapped_column(Float, nullable=False)
+    quantity_remaining: Mapped[float] = mapped_column(Float, nullable=False)
+    unit: Mapped[str] = mapped_column(String(16), nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    data_origin: Mapped[str] = mapped_column(
+        String(32), nullable=False, default=DataOrigin.field_entry.value
+    )
+    client_request_id: Mapped[str | None] = mapped_column(String(80), unique=True, nullable=True)
+    registered_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow, server_default=func.now()
+    )
+
+    tree: Mapped[IndividualTree | None] = relationship()
+    batch: Mapped[PlantingBatch | None] = relationship()
+    registrar: Mapped[User] = relationship(foreign_keys=[registered_by])
+
+
+class Sale(Base):
+    __tablename__ = "sales"
+    __table_args__ = (
+        CheckConstraint("quantity > 0 AND quantity <= 1000000", name="ck_sales_quantity"),
+        CheckConstraint("amount_rwf >= 0 AND amount_rwf <= 100000000000", name="ck_sales_amount"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    public_code: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
+    harvest_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("harvests.id", ondelete="RESTRICT"), nullable=False
+    )
+    sold_on: Mapped[date] = mapped_column(Date, nullable=False)
+    quantity: Mapped[float] = mapped_column(Float, nullable=False)
+    unit: Mapped[str] = mapped_column(String(16), nullable=False)
+    amount_rwf: Mapped[float] = mapped_column(Float, nullable=False)
+    buyer_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    data_origin: Mapped[str] = mapped_column(
+        String(32), nullable=False, default=DataOrigin.field_entry.value
+    )
+    client_request_id: Mapped[str | None] = mapped_column(String(80), unique=True, nullable=True)
+    registered_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow, server_default=func.now()
+    )
+
+    harvest: Mapped[Harvest] = relationship()
+    registrar: Mapped[User] = relationship(foreign_keys=[registered_by])
+
+
+class Advisory(Base):
+    __tablename__ = "advisories"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    public_code: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    species_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("species.id", ondelete="SET NULL"), nullable=True
+    )
+    farmer_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("farmers.id", ondelete="SET NULL"), nullable=True
+    )
+    site_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("planting_sites.id", ondelete="SET NULL"), nullable=True
+    )
+    issued_on: Mapped[date] = mapped_column(Date, nullable=False)
+    data_origin: Mapped[str] = mapped_column(
+        String(32), nullable=False, default=DataOrigin.field_entry.value
+    )
+    client_request_id: Mapped[str | None] = mapped_column(String(80), unique=True, nullable=True)
+    registered_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow, server_default=func.now()
+    )
+
+    species: Mapped[Species | None] = relationship()
+    farmer: Mapped[Farmer | None] = relationship()
+    site: Mapped[PlantingSite | None] = relationship()
+    registrar: Mapped[User] = relationship(foreign_keys=[registered_by])

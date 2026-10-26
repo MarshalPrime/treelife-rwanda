@@ -53,6 +53,7 @@ SITE_FIELDS = [
     "name",
     "site_type",
     "organization_id",
+    "farmer_id",
     "province",
     "district",
     "sector",
@@ -105,7 +106,11 @@ def require_species(db: Session, species_id: uuid.UUID) -> Species:
 def load_site(db: Session, site_id: uuid.UUID) -> PlantingSite | None:
     return db.scalar(
         select(PlantingSite)
-        .options(joinedload(PlantingSite.organization), joinedload(PlantingSite.registrar))
+        .options(
+            joinedload(PlantingSite.organization),
+            joinedload(PlantingSite.farmer),
+            joinedload(PlantingSite.registrar),
+        )
         .where(PlantingSite.id == site_id)
     )
 
@@ -230,11 +235,15 @@ def create_site(db: Session, user: User, payload: SiteCreate) -> tuple[PlantingS
         loaded = load_site(db, existing.id)
         return loaded, True
     require_organization(db, payload.organization_id)
+    from app.services.valuechain import require_farmer
+
+    require_farmer(db, payload.farmer_id)
     site = PlantingSite(
         public_code=allocate_code(db, PlantingSite, "SITE"),
         name=payload.name,
         site_type=enum_value(payload.site_type),
         organization_id=payload.organization_id,
+        farmer_id=payload.farmer_id,
         province=payload.province,
         district=payload.district,
         sector=payload.sector,
@@ -279,6 +288,10 @@ def update_site(db: Session, user: User, site_id: uuid.UUID, payload: SiteUpdate
     data = payload.model_dump(exclude_unset=True)
     if "organization_id" in data:
         require_organization(db, data["organization_id"])
+    if "farmer_id" in data:
+        from app.services.valuechain import require_farmer
+
+        require_farmer(db, data["farmer_id"])
     changed = apply_fields(site, data, SITE_FIELDS)
     changed.extend(apply_coordinates(site, data))
     if changed:
@@ -327,7 +340,9 @@ def list_sites(
     if has_coordinates is False:
         filters.append(PlantingSite.latitude.is_(None))
     stmt = select(PlantingSite).options(
-        joinedload(PlantingSite.organization), joinedload(PlantingSite.registrar)
+        joinedload(PlantingSite.organization),
+        joinedload(PlantingSite.farmer),
+        joinedload(PlantingSite.registrar),
     )
     count_stmt = select(func.count()).select_from(PlantingSite)
     for condition in filters:

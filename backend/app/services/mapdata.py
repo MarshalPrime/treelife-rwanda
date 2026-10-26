@@ -55,6 +55,8 @@ def build_map(
     category: str | None,
     status: str | None,
     query: str | None,
+    district: str | None = None,
+    farmer_id: uuid.UUID | None = None,
 ) -> MapResponse:
     features: list[MapFeature] = []
     unlocated: list[UnlocatedRecord] = []
@@ -84,6 +86,10 @@ def build_map(
         )
         if query and text_filter is not None:
             stmt = stmt.where(text_filter)
+        if district:
+            stmt = stmt.where(PlantingSite.district.ilike(district.strip()))
+        if farmer_id:
+            stmt = stmt.where(PlantingSite.farmer_id == farmer_id)
         rows = (
             db.scalars(stmt.order_by(PlantingSite.created_at.desc()).limit(MAX_FEATURES + 1))
             .unique()
@@ -121,6 +127,10 @@ def build_map(
             stmt = stmt.where(model.category == category)
         if status:
             stmt = stmt.where(model.status == status)
+        if district:
+            stmt = stmt.where(PlantingSite.district.ilike(district.strip()))
+        if farmer_id:
+            stmt = stmt.where(PlantingSite.farmer_id == farmer_id)
         if query:
             like = f"%{query.strip()}%"
             stmt = stmt.where(

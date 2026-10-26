@@ -18,7 +18,7 @@ Use GitHub private vulnerability reporting on this repository. Do not open a pub
 - The API refuses to start in production when `SECRET_KEY` is missing, shorter than 32 characters, or still the development placeholder.
 - Write endpoints require a field officer or an administrator. The audit log requires an administrator.
 - The audit log stores field names, not note text or coordinate values.
-- The application does not collect phone numbers or national identifiers.
+- A farmer record can store a display name and an optional phone number. National identifiers are not collected.
 
 ## Known prototype limits
 

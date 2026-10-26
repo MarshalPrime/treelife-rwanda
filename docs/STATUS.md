@@ -10,13 +10,13 @@ Done. The project layout, license, environment example, Compose file, CI workflo
 
 ## Milestone 2 — Database and API
 
-Done. Alembic revision `0001_initial` creates the PostGIS schema. Site, tree, batch, inspection, map, and audit routes are implemented.
+Done. Alembic revisions `0001_initial` and `0002_value_chain` create the PostGIS schema. Site, tree, batch, inspection, farmer, nursery, distribution, growth, maintenance, harvest, sale, advice, analytics, map, and audit routes are implemented.
 
 Local result on 2026-10-26, against PostGIS in Docker:
 
 - `ruff check` passed
 - `ruff format --check` passed
-- `pytest`: 17 passed
+- `pytest`: 18 passed
 
 ## Milestone 3 — Frontend
 
@@ -24,7 +24,7 @@ Done. Registration, lists, details, editing, and role-aware actions call the API
 
 Local result:
 
-- Vitest: 3 passed
+- Vitest: 4 passed
 - `tsc --noEmit` passed
 - `next lint` passed
 - `next build` passed
@@ -47,13 +47,22 @@ Checked on 2026-10-26 against the local API and the Next.js dev server:
 
 These rows are synthetic interface checks. They are not field observations.
 
+Checked again on 2026-10-26 after the value-chain work, with `docker compose up` serving the API and the web app:
+
+- A field officer created a farmer, a seedling lot, a distribution, a growth measurement, a watering record, a harvest, a sale, and an advice note. A distribution larger than the remaining seedlings was rejected, and a sale larger than the remaining harvest was rejected.
+- Analytics showed the nursery balance, harvest, and sales totals from those records.
+- The map filtered to one farmer and showed that farmer's orchard, tree, and batch.
+- The viewer account could read farmers and was not offered a save button.
+
+These rows are synthetic interface checks. They are not field observations. The stack is available on this machine at `http://localhost:3000`. It is not a public deployment.
+
 ## Not done
 
 - The private remote is `https://github.com/MarshalPrime/treelife-rwanda.git`. Keep it private unless Protogene approves a visibility change.
 - FMES integration
-- Offline synchronization
+- Queuing edits, and sending saved creates after the browser session is signed out
 - Kinyarwanda and French
-- A hosted deployment
+- A public hosted deployment
 
 ## How to resume
 

@@ -6,7 +6,7 @@ import { Banner } from "@/components/AppShell";
 import { SiteForm } from "@/components/forms";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import type { Organization, Site } from "@/lib/types";
+import type { Farmer, Organization, Site } from "@/lib/types";
 
 export default function EditSitePage() {
   const params = useParams<{ id: string }>();
@@ -14,13 +14,19 @@ export default function EditSitePage() {
   const { canWrite } = useAuth();
   const [site, setSite] = useState<Site | null>(null);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
+  const [farmers, setFarmers] = useState<Farmer[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([api<Site>(`/sites/${params.id}`), api<Organization[]>("/organizations")])
-      .then(([nextSite, nextOrganizations]) => {
+    Promise.all([
+      api<Site>(`/sites/${params.id}`),
+      api<Organization[]>("/organizations"),
+      api<Farmer[]>("/farmers"),
+    ])
+      .then(([nextSite, nextOrganizations, nextFarmers]) => {
         setSite(nextSite);
         setOrganizations(nextOrganizations);
+        setFarmers(nextFarmers);
       })
       .catch((caught: Error) => setError(caught.message));
   }, [params.id]);
@@ -36,6 +42,7 @@ export default function EditSitePage() {
           editing
           initial={site}
           organizations={organizations}
+          farmers={farmers}
           submitLabel="Save changes"
           onSubmit={async (payload) => {
             await api(`/sites/${site.id}`, { method: "PATCH", body: JSON.stringify(payload) });

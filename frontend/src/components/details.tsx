@@ -162,6 +162,7 @@ export function SiteDetail() {
         <Facts rows={[
           ["Type", label(site.site_type)],
           ["Organization", site.organization_name ?? "—"],
+          ["Farmer", site.farmer_name ?? "—"],
           ["Location", [site.province, site.district, site.sector, site.cell, site.village].filter(Boolean).join(", ") || "—"],
           ["Coordinates", coordinateText(site.latitude, site.longitude)],
           ["Area", site.area_hectares === null ? "—" : `${site.area_hectares} ha`],

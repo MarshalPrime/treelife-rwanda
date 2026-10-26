@@ -40,6 +40,21 @@ export type Species = {
   category: string;
 };
 
+export type Farmer = {
+  id: string;
+  public_code: string;
+  display_name: string;
+  organization_id: string | null;
+  organization_name: string | null;
+  district: string | null;
+  phone: string | null;
+  notes: string | null;
+  data_origin: string;
+  registered_by_name: string | null;
+  registered_at: string;
+  site_count: number;
+};
+
 export type Site = {
   id: string;
   public_code: string;
@@ -47,6 +62,8 @@ export type Site = {
   site_type: string;
   organization_id: string | null;
   organization_name: string | null;
+  farmer_id: string | null;
+  farmer_name: string | null;
   province: string | null;
   district: string | null;
   sector: string | null;

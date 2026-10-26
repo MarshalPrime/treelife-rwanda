@@ -38,7 +38,7 @@ export default function LoginPage() {
           <p className="lede">Ejo Labs</p>
           <h1>TreeLife Rwanda</h1>
         </div>
-        <p>Register planting sites, individual trees, and planting batches. This demonstration is not connected to FMES.</p>
+        <p>Follow a tree from the nursery through planting, care, harvest, and sale. This demonstration is not connected to FMES.</p>
         {error ? <Banner tone="error">{error}</Banner> : null}
         <label htmlFor="email">Email
           <input id="email" type="email" autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} required />

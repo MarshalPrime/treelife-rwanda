@@ -52,11 +52,15 @@ p { margin: 0; }
   display: flex;
   flex-direction: column;
   gap: 18px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow: hidden;
 }
 .brand { display: flex; flex-direction: column; padding: 0 8px; text-decoration: none; color: inherit; }
 .brand strong { font-family: var(--serif); font-size: 1.45rem; }
 .brand span { color: #d5e6db; font-size: 0.85rem; }
-.nav { display: flex; flex-direction: column; gap: 4px; }
+.nav { display: flex; flex-direction: column; gap: 4px; flex: 1; min-height: 0; overflow-y: auto; }
 .nav a {
   color: #f6f3ec;
   text-decoration: none;
@@ -173,6 +177,9 @@ th, td { padding: 12px 8px; border-bottom: 1px solid var(--line); vertical-align
   .sidebar {
     position: fixed;
     left: 0; right: 0; bottom: 0;
+    top: auto;
+    height: auto;
+    overflow: visible;
     z-index: 20;
     padding: 8px;
     flex-direction: row;
@@ -193,7 +200,7 @@ th, td { padding: 12px 8px; border-bottom: 1px solid var(--line); vertical-align
   }
   .mobile-bar span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .mobile-bar .ghost { color: #f6f3ec; border-color: rgba(255,255,255,0.35); width: auto; margin: 0; min-height: 40px; }
-  .nav { flex-direction: row; overflow-x: auto; width: 100%; }
+  .nav { flex: none; flex-direction: row; overflow-x: auto; overflow-y: hidden; width: 100%; }
   .nav a { white-space: nowrap; padding: 8px 10px; }
   .content { padding: 16px 14px calc(var(--nav) + 28px); }
   .row, .definition, .map-layout { grid-template-columns: 1fr; }

@@ -41,6 +41,19 @@ def outside_rwanda(latitude: float | None, longitude: float | None) -> bool:
     return not (lat_min <= latitude <= lat_max and lon_min <= longitude <= lon_max)
 
 
+def check_positive_number(value: float, label: str) -> None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+        raise ValueError(f"{label} must be a number greater than 0.")
+    if value <= 0 or value > 1_000_000:
+        raise ValueError(f"{label} must be greater than 0 and at most 1000000.")
+
+
+def check_measure(quantity: float, unit: str) -> None:
+    check_positive_number(quantity, "Quantity")
+    if unit == "count" and abs(quantity - round(quantity)) > 1e-6:
+        raise ValueError("Fruit count must be a whole number.")
+
+
 def check_quantity(quantity: int) -> None:
     if not isinstance(quantity, int) or isinstance(quantity, bool):
         raise ValueError("Quantity must be a whole number from 1 to 100000.")

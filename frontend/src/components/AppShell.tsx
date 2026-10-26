@@ -2,13 +2,22 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { ApiError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { readOutbox, removeOutbox } from "@/lib/outbox";
 
 const links = [
   ["/dashboard", "Overview"],
   ["/sites", "Sites"],
   ["/trees", "Trees"],
   ["/batches", "Batches"],
+  ["/farmers", "Farmers"],
+  ["/nursery", "Nursery"],
+  ["/field", "Field"],
+  ["/harvest", "Harvest"],
+  ["/advice", "Advice"],
+  ["/analytics", "Analytics"],
   ["/map", "Map"],
   ["/species", "Species"],
   ["/about", "About"],
@@ -18,6 +27,34 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout } = useAuth();
+  const [pending, setPending] = useState(0);
+  const [syncNote, setSyncNote] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    async function flush() {
+      const items = readOutbox();
+      if (active) setPending(items.length);
+      for (const item of items) {
+        try {
+          await api(item.path, { method: "POST", body: item.body });
+          removeOutbox(item.id);
+        } catch (error) {
+          if (error instanceof ApiError && (error.status === 0 || error.status === 401)) break;
+          removeOutbox(item.id);
+          if (active) setSyncNote(error instanceof Error ? error.message : "A saved submission was rejected.");
+        }
+      }
+      if (active) setPending(readOutbox().length);
+    }
+    flush();
+    window.addEventListener("online", flush);
+    return () => {
+      active = false;
+      window.removeEventListener("online", flush);
+    };
+  }, []);
+
   function signOut() {
     logout();
     router.replace("/login");
@@ -55,6 +92,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
       <div className="content" id="main">
+        {pending > 0 ? (
+          <Banner tone="warning">
+            {pending} submission{pending === 1 ? "" : "s"} saved on this device. They send when the connection returns.
+          </Banner>
+        ) : null}
+        {syncNote ? <Banner tone="error">{syncNote}</Banner> : null}
         {children}
       </div>
     </div>

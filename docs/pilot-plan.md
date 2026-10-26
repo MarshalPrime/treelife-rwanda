@@ -10,7 +10,7 @@ TreeLife proposes a small registration system beside FMES: a planting site, then
 
 ## Initial pilot use case
 
-One supervised team registers planting sites and new trees or batches for a limited period, then records at least one follow-up inspection. The pilot answers whether the forms are understandable, whether coordinates are captured often enough to be useful, and whether the records can be reviewed by a supervisor. It does not try to run nursery sales, payments, or a national rollout.
+One supervised team can register planting sites, trees, and batches, then record nursery stock, distribution, growth, maintenance, harvest, a sale, and an advice note. The pilot answers whether those forms are understandable and whether the records can be reviewed by a supervisor. It does not run a national rollout, and no team has carried it out.
 
 Candidate roles, not assigned people:
 
@@ -117,7 +117,7 @@ Risks:
 
 - Coordinates reveal homes or farms if access control is loose.
 - English screens will exclude officers who need Kinyarwanda or French.
-- Officers will lose entries if the network fails, because offline sync does not exist.
+- A failed create can stay on the device, but an edit made while offline is not queued, and a signed-out browser cannot send the waiting creates.
 - Species local names in a later list may be wrong if they are guessed.
 - A premature FMES claim would misrepresent both systems.
 

@@ -14,8 +14,11 @@ The API image is `postgis/postgis:16-3.4`. On an Apple Silicon Mac, Docker may r
 From the repository root:
 
 ```bash
+cp .env.example .env
 docker compose up -d db
 ```
+
+`.env.example` is committed. `.env` is not. The copy gives every collaborator the same local database URL, demo passwords, and API address. Python libraries come from `backend/requirements-dev.txt`. Web libraries come from `frontend/package-lock.json` through `npm ci`.
 
 The database listens on `localhost:5432`. User, password, and database name are all `treelife`. This password is only for the local container.
 

@@ -34,6 +34,8 @@ def site_to_read(site: PlantingSite) -> SiteRead:
         site_type=site.site_type,
         organization_id=site.organization_id,
         organization_name=site.organization.name if site.organization else None,
+        farmer_id=site.farmer_id,
+        farmer_name=site.farmer.display_name if site.farmer else None,
         province=site.province,
         district=site.district,
         sector=site.sector,

@@ -10,8 +10,10 @@ from app.main import app
 from app.models.entities import User
 
 TRUNCATE = (
-    "TRUNCATE audit_logs, lifecycle_events, individual_trees, planting_batches, "
-    "planting_sites, users, organizations, species RESTART IDENTITY CASCADE"
+    "TRUNCATE audit_logs, sales, harvests, maintenance_activities, growth_measurements, "
+    "distributions, seedling_lots, advisories, lifecycle_events, individual_trees, "
+    "planting_batches, planting_sites, farmers, users, organizations, species "
+    "RESTART IDENTITY CASCADE"
 )
 
 

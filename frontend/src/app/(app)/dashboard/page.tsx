@@ -31,6 +31,11 @@ export default function DashboardPage() {
           <Link className="primary" href="/sites/new">Register a site</Link>
           <Link className="secondary" href="/trees/new">Register a tree</Link>
           <Link className="secondary" href="/batches/new">Register a batch</Link>
+          <Link className="secondary" href="/farmers">Add a farmer</Link>
+          <Link className="secondary" href="/nursery">Nursery</Link>
+          <Link className="secondary" href="/field">Field work</Link>
+          <Link className="secondary" href="/harvest">Harvest</Link>
+          <Link className="secondary" href="/analytics">Analytics</Link>
           <Link className="secondary" href="/map">Open map</Link>
         </div>
       ) : <p>Your account can review records but cannot change them.</p>}

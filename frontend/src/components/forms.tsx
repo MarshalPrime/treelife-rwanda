@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { ApiError } from "@/lib/api";
 import { categories, label, organizationTypes, siteTypes, treeStatuses } from "@/lib/labels";
-import type { Organization, Site, Species } from "@/lib/types";
+import type { Farmer, Organization, Site, Species } from "@/lib/types";
 import {
   newRequestId,
   optionalNumber,
@@ -24,6 +24,7 @@ function useRequestId() {
 export function SiteForm({
   initial,
   organizations,
+  farmers = [],
   submitLabel,
   editing = false,
   onSubmit,
@@ -31,6 +32,7 @@ export function SiteForm({
 }: {
   initial?: Partial<Site>;
   organizations: Organization[];
+  farmers?: Farmer[];
   submitLabel: string;
   editing?: boolean;
   onSubmit: (payload: Record<string, unknown>) => Promise<void>;
@@ -40,6 +42,7 @@ export function SiteForm({
   const [name, setName] = useState(initial?.name ?? "");
   const [siteType, setSiteType] = useState(initial?.site_type ?? "orchard");
   const [organizationId, setOrganizationId] = useState(initial?.organization_id ?? "");
+  const [farmerId, setFarmerId] = useState(initial?.farmer_id ?? "");
   const [province, setProvince] = useState(initial?.province ?? "");
   const [district, setDistrict] = useState(initial?.district ?? "");
   const [sector, setSector] = useState(initial?.sector ?? "");
@@ -83,6 +86,7 @@ export function SiteForm({
         name: name.trim(),
         site_type: siteType,
         organization_id: selectedOrganization,
+        farmer_id: farmerId || null,
         province: province.trim() || null,
         district: district.trim() || null,
         sector: sector.trim() || null,
@@ -133,6 +137,12 @@ export function SiteForm({
           </select>
         </Field>
       </div>
+      <Field label="Farmer" name="farmer_id" help="Optional. Use a display name already saved under Farmers. Do not enter a national ID.">
+        <select id="farmer_id" value={farmerId} onChange={(event) => setFarmerId(event.target.value)}>
+          <option value="">No farmer</option>
+          {farmers.map((farmer) => <option key={farmer.id} value={farmer.id}>{farmer.display_name}</option>)}
+        </select>
+      </Field>
       {onCreateOrganization ? (
         <div>
           <button className="secondary" type="button" onClick={() => setAddingOrg((value) => !value)}>

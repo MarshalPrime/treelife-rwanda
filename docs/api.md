@@ -55,7 +55,25 @@ Trees and batches: `q`, `site_id`, `species_id`, `category`, `status`, `has_coor
 
 Events: `tree_id`, `batch_id`, `site_id`.
 
-Map: `kind` (`site`, `tree`, `batch`, or `all`), `species_id`, `category`, `status`, `q`.
+Map: `kind` (`site`, `tree`, `batch`, or `all`), `species_id`, `category`, `status`, `q`, `district`, `farmer_id`.
+
+`district` and `farmer_id` keep sites that match, and trees or batches whose site matches.
+
+## Value chain
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET, POST | `/farmers` | List or create a farmer |
+| GET, POST | `/seedling-lots` | List or record nursery production |
+| GET, POST | `/distributions` | List or move seedlings to a site |
+| GET, POST | `/growth` | List or record a height, diameter, or survival count |
+| GET, POST | `/maintenance` | List or record pruning, watering, mulching, pest control, or staking |
+| GET, POST | `/harvests` | List or record fruit in kilograms or as a count |
+| GET, POST | `/sales` | List or record a sale in Rwandan francs |
+| GET, POST | `/advisories` | List or write an advice note |
+| GET | `/analytics` | Counts for the chain, including harvest by species and sites by district |
+
+These list routes return an array, not a page. Creates follow the same request-id rule as registration. A distribution larger than the remaining lot, or a sale larger than the remaining harvest, is rejected with `422`.
 
 A species or category filter applies to trees and batches. Sites are omitted from that map response because a site does not have one species.
 

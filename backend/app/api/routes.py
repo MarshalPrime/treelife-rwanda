@@ -38,6 +38,25 @@ from app.schemas.entities import (
     TreeUpdate,
     UserRead,
 )
+from app.schemas.valuechain import (
+    AdvisoryCreate,
+    AdvisoryRead,
+    AnalyticsResponse,
+    DistributionCreate,
+    DistributionRead,
+    FarmerCreate,
+    FarmerRead,
+    GrowthCreate,
+    GrowthRead,
+    HarvestCreate,
+    HarvestRead,
+    LotCreate,
+    LotRead,
+    MaintenanceCreate,
+    MaintenanceRead,
+    SaleCreate,
+    SaleRead,
+)
 from app.services.mapdata import build_map
 from app.services.registration import (
     collect_stats,
@@ -69,6 +88,25 @@ from app.services.serialize import (
     site_to_read,
     species_to_read,
     tree_to_read,
+)
+from app.services.valuechain import (
+    collect_analytics,
+    create_advisory,
+    create_distribution,
+    create_farmer,
+    create_growth,
+    create_harvest,
+    create_lot,
+    create_maintenance,
+    create_sale,
+    list_advisories,
+    list_distributions,
+    list_farmers,
+    list_growth,
+    list_harvests,
+    list_lots,
+    list_maintenance,
+    list_sales,
 )
 
 router = APIRouter()
@@ -408,12 +446,310 @@ def get_map(
     category: str | None = Query(default=None, max_length=40),
     status: str | None = Query(default=None, max_length=32),
     q: str | None = Query(default=None, max_length=200),
+    district: str | None = Query(default=None, max_length=120),
+    farmer_id: uuid.UUID | None = None,
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ) -> MapResponse:
     return build_map(
-        db, kind=kind, species_id=species_id, category=category, status=status, query=q
+        db,
+        kind=kind,
+        species_id=species_id,
+        category=category,
+        status=status,
+        query=q,
+        district=district,
+        farmer_id=farmer_id,
     )
+
+
+def _farmer(row) -> FarmerRead:
+    return FarmerRead(
+        id=row.id,
+        public_code=row.public_code,
+        display_name=row.display_name,
+        organization_id=row.organization_id,
+        organization_name=row.organization.name if row.organization else None,
+        district=row.district,
+        phone=row.phone,
+        notes=row.notes,
+        data_origin=row.data_origin,
+        registered_by_name=row.registrar.full_name if row.registrar else None,
+        registered_at=row.registered_at,
+        site_count=len(row.sites),
+    )
+
+
+@router.get("/farmers", response_model=list[FarmerRead])
+def get_farmers(
+    db: Session = Depends(get_db), _: User = Depends(get_current_user)
+) -> list[FarmerRead]:
+    return [_farmer(row) for row in list_farmers(db)]
+
+
+@router.post("/farmers", response_model=FarmerRead, status_code=201)
+def post_farmer(
+    payload: FarmerCreate,
+    response: Response,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_writer),
+) -> FarmerRead:
+    row, replay = create_farmer(db, user, payload)
+    mark_created(response, replay)
+    loaded = next(item for item in list_farmers(db) if item.id == row.id)
+    return _farmer(loaded)
+
+
+@router.get("/seedling-lots", response_model=list[LotRead])
+def get_lots(db: Session = Depends(get_db), _: User = Depends(get_current_user)) -> list[LotRead]:
+    return [
+        LotRead(
+            id=row.id,
+            public_code=row.public_code,
+            nursery_site_id=row.nursery_site_id,
+            nursery_site_name=row.nursery_site.name if row.nursery_site else None,
+            species_id=row.species_id,
+            species_common_name=row.species.common_name if row.species else None,
+            quantity_produced=row.quantity_produced,
+            quantity_remaining=row.quantity_remaining,
+            produced_on=row.produced_on,
+            notes=row.notes,
+            data_origin=row.data_origin,
+        )
+        for row in list_lots(db)
+    ]
+
+
+@router.post("/seedling-lots", response_model=LotRead, status_code=201)
+def post_lot(
+    payload: LotCreate,
+    response: Response,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_writer),
+) -> LotRead:
+    row, replay = create_lot(db, user, payload)
+    mark_created(response, replay)
+    return next(item for item in get_lots(db) if item.id == row.id)
+
+
+@router.get("/distributions", response_model=list[DistributionRead])
+def get_distributions(
+    db: Session = Depends(get_db), _: User = Depends(get_current_user)
+) -> list[DistributionRead]:
+    return [
+        DistributionRead(
+            id=row.id,
+            public_code=row.public_code,
+            seedling_lot_id=row.seedling_lot_id,
+            lot_code=row.seedling_lot.public_code if row.seedling_lot else None,
+            destination_site_id=row.destination_site_id,
+            destination_site_name=row.destination_site.name if row.destination_site else None,
+            farmer_id=row.farmer_id,
+            farmer_name=row.farmer.display_name if row.farmer else None,
+            quantity=row.quantity,
+            distributed_on=row.distributed_on,
+            notes=row.notes,
+            data_origin=row.data_origin,
+        )
+        for row in list_distributions(db)
+    ]
+
+
+@router.post("/distributions", response_model=DistributionRead, status_code=201)
+def post_distribution(
+    payload: DistributionCreate,
+    response: Response,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_writer),
+) -> DistributionRead:
+    row, replay = create_distribution(db, user, payload)
+    mark_created(response, replay)
+    return next(item for item in get_distributions(db) if item.id == row.id)
+
+
+def _target_code(row) -> str | None:
+    if getattr(row, "tree", None) is not None:
+        return row.tree.public_code
+    if getattr(row, "batch", None) is not None:
+        return row.batch.public_code
+    if getattr(row, "site", None) is not None:
+        return row.site.public_code
+    return None
+
+
+@router.get("/growth", response_model=list[GrowthRead])
+def get_growth(
+    db: Session = Depends(get_db), _: User = Depends(get_current_user)
+) -> list[GrowthRead]:
+    return [
+        GrowthRead(
+            id=row.id,
+            public_code=row.public_code,
+            tree_id=row.tree_id,
+            batch_id=row.batch_id,
+            target_code=_target_code(row),
+            measured_on=row.measured_on,
+            height_m=row.height_m,
+            dbh_cm=row.dbh_cm,
+            survival_count=row.survival_count,
+            notes=row.notes,
+            data_origin=row.data_origin,
+        )
+        for row in list_growth(db)
+    ]
+
+
+@router.post("/growth", response_model=GrowthRead, status_code=201)
+def post_growth(
+    payload: GrowthCreate,
+    response: Response,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_writer),
+) -> GrowthRead:
+    row, replay = create_growth(db, user, payload)
+    mark_created(response, replay)
+    return next(item for item in get_growth(db) if item.id == row.id)
+
+
+@router.get("/maintenance", response_model=list[MaintenanceRead])
+def get_maintenance(
+    db: Session = Depends(get_db), _: User = Depends(get_current_user)
+) -> list[MaintenanceRead]:
+    return [
+        MaintenanceRead(
+            id=row.id,
+            public_code=row.public_code,
+            tree_id=row.tree_id,
+            batch_id=row.batch_id,
+            site_id=row.site_id,
+            target_code=_target_code(row),
+            activity_type=row.activity_type,
+            performed_on=row.performed_on,
+            notes=row.notes,
+            data_origin=row.data_origin,
+        )
+        for row in list_maintenance(db)
+    ]
+
+
+@router.post("/maintenance", response_model=MaintenanceRead, status_code=201)
+def post_maintenance(
+    payload: MaintenanceCreate,
+    response: Response,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_writer),
+) -> MaintenanceRead:
+    row, replay = create_maintenance(db, user, payload)
+    mark_created(response, replay)
+    return next(item for item in get_maintenance(db) if item.id == row.id)
+
+
+@router.get("/harvests", response_model=list[HarvestRead])
+def get_harvests(
+    db: Session = Depends(get_db), _: User = Depends(get_current_user)
+) -> list[HarvestRead]:
+    return [
+        HarvestRead(
+            id=row.id,
+            public_code=row.public_code,
+            tree_id=row.tree_id,
+            batch_id=row.batch_id,
+            target_code=_target_code(row),
+            harvested_on=row.harvested_on,
+            quantity=row.quantity,
+            quantity_remaining=row.quantity_remaining,
+            unit=row.unit,
+            notes=row.notes,
+            data_origin=row.data_origin,
+        )
+        for row in list_harvests(db)
+    ]
+
+
+@router.post("/harvests", response_model=HarvestRead, status_code=201)
+def post_harvest(
+    payload: HarvestCreate,
+    response: Response,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_writer),
+) -> HarvestRead:
+    row, replay = create_harvest(db, user, payload)
+    mark_created(response, replay)
+    return next(item for item in get_harvests(db) if item.id == row.id)
+
+
+@router.get("/sales", response_model=list[SaleRead])
+def get_sales(db: Session = Depends(get_db), _: User = Depends(get_current_user)) -> list[SaleRead]:
+    return [
+        SaleRead(
+            id=row.id,
+            public_code=row.public_code,
+            harvest_id=row.harvest_id,
+            harvest_code=row.harvest.public_code if row.harvest else None,
+            sold_on=row.sold_on,
+            quantity=row.quantity,
+            unit=row.unit,
+            amount_rwf=row.amount_rwf,
+            buyer_name=row.buyer_name,
+            notes=row.notes,
+            data_origin=row.data_origin,
+        )
+        for row in list_sales(db)
+    ]
+
+
+@router.post("/sales", response_model=SaleRead, status_code=201)
+def post_sale(
+    payload: SaleCreate,
+    response: Response,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_writer),
+) -> SaleRead:
+    row, replay = create_sale(db, user, payload)
+    mark_created(response, replay)
+    return next(item for item in get_sales(db) if item.id == row.id)
+
+
+@router.get("/advisories", response_model=list[AdvisoryRead])
+def get_advisories(
+    db: Session = Depends(get_db), _: User = Depends(get_current_user)
+) -> list[AdvisoryRead]:
+    return [
+        AdvisoryRead(
+            id=row.id,
+            public_code=row.public_code,
+            title=row.title,
+            body=row.body,
+            species_id=row.species_id,
+            species_common_name=row.species.common_name if row.species else None,
+            farmer_id=row.farmer_id,
+            farmer_name=row.farmer.display_name if row.farmer else None,
+            site_id=row.site_id,
+            site_name=row.site.name if row.site else None,
+            issued_on=row.issued_on,
+            data_origin=row.data_origin,
+        )
+        for row in list_advisories(db)
+    ]
+
+
+@router.post("/advisories", response_model=AdvisoryRead, status_code=201)
+def post_advisory(
+    payload: AdvisoryCreate,
+    response: Response,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_writer),
+) -> AdvisoryRead:
+    row, replay = create_advisory(db, user, payload)
+    mark_created(response, replay)
+    return next(item for item in get_advisories(db) if item.id == row.id)
+
+
+@router.get("/analytics", response_model=AnalyticsResponse)
+def analytics(
+    db: Session = Depends(get_db), _: User = Depends(get_current_user)
+) -> AnalyticsResponse:
+    return collect_analytics(db)
 
 
 @router.get("/audit", response_model=Page[AuditRead])

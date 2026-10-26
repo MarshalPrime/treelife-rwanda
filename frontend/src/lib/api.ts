@@ -1,3 +1,4 @@
+import { enqueueOutbox } from "@/lib/outbox";
 import type { FieldErrors } from "@/lib/validation";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -41,6 +42,10 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   try {
     response = await fetch(`${API_URL}/api/v1${path}`, { ...init, headers });
   } catch {
+    const method = (init.method ?? "GET").toUpperCase();
+    if (method === "POST" && typeof init.body === "string" && enqueueOutbox(path, init.body)) {
+      throw new ApiError("Saved on this device. It will send when the connection returns.", 0);
+    }
     throw new ApiError("Could not reach the server. Check your connection and try again.", 0);
   }
 

@@ -13,12 +13,20 @@ from app.core.config import get_settings
 from app.core.security import hash_password
 from app.db.session import SessionLocal
 from app.models.entities import (
+    Advisory,
     DataOrigin,
+    Distribution,
+    Farmer,
+    GrowthMeasurement,
+    Harvest,
     IndividualTree,
     LifecycleEvent,
+    MaintenanceActivity,
     Organization,
     PlantingBatch,
     PlantingSite,
+    Sale,
+    SeedlingLot,
     Species,
     User,
 )
@@ -180,6 +188,161 @@ def _event(db, officer: User, request_id: str, **fields) -> None:
     db.flush()
 
 
+def _by_request(db, model, request_id: str):
+    return db.scalar(select(model).where(model.client_request_id == request_id))
+
+
+def _value_chain(
+    db,
+    officer: User,
+    cooperative: Organization,
+    species: dict[str, Species],
+    orchard: PlantingSite,
+    avocado: IndividualTree,
+    mango_batch: PlantingBatch,
+) -> None:
+    """Attach one synthetic nursery-to-sale chain. A second run does not duplicate it."""
+    farmer = _by_request(db, Farmer, "synthetic-demo-farmer-01")
+    if farmer is None:
+        farmer = Farmer(
+            public_code=allocate_code(db, Farmer, "FARM"),
+            display_name="SYNTHETIC Demo Producer",
+            organization_id=cooperative.id,
+            district="Bugesera",
+            notes=SYNTHETIC_NOTE,
+            data_origin=DataOrigin.synthetic_demo.value,
+            client_request_id="synthetic-demo-farmer-01",
+            registered_by=officer.id,
+            registered_at=utcnow(),
+        )
+        db.add(farmer)
+        db.flush()
+    if orchard.farmer_id is None:
+        orchard.farmer_id = farmer.id
+    nursery = _site(
+        db,
+        officer,
+        cooperative,
+        "synthetic-demo-site-nursery-01",
+        name="SYNTHETIC Nursery holding — demo D",
+        site_type="nursery_holding",
+        province="Eastern Province",
+        district="Bugesera",
+        sector="Demo sector",
+        latitude=-1.965000,
+        longitude=30.090000,
+    )
+    lot = _by_request(db, SeedlingLot, "synthetic-demo-lot-01")
+    if lot is None:
+        lot = SeedlingLot(
+            public_code=allocate_code(db, SeedlingLot, "LOT"),
+            nursery_site_id=nursery.id,
+            species_id=species["Mangifera indica"].id,
+            quantity_produced=80,
+            quantity_remaining=80,
+            produced_on=date(2026, 1, 10),
+            notes=SYNTHETIC_NOTE,
+            data_origin=DataOrigin.synthetic_demo.value,
+            client_request_id="synthetic-demo-lot-01",
+            registered_by=officer.id,
+        )
+        db.add(lot)
+        db.flush()
+    if _by_request(db, Distribution, "synthetic-demo-dist-01") is None:
+        db.add(
+            Distribution(
+                public_code=allocate_code(db, Distribution, "DIST"),
+                seedling_lot_id=lot.id,
+                destination_site_id=orchard.id,
+                farmer_id=farmer.id,
+                quantity=20,
+                distributed_on=date(2026, 2, 1),
+                notes=SYNTHETIC_NOTE,
+                data_origin=DataOrigin.synthetic_demo.value,
+                client_request_id="synthetic-demo-dist-01",
+                registered_by=officer.id,
+            )
+        )
+        lot.quantity_remaining = lot.quantity_produced - 20
+        db.flush()
+    if _by_request(db, GrowthMeasurement, "synthetic-demo-growth-01") is None:
+        db.add(
+            GrowthMeasurement(
+                public_code=allocate_code(db, GrowthMeasurement, "GROW"),
+                tree_id=avocado.id,
+                measured_on=date(2026, 9, 15),
+                height_m=1.8,
+                notes=SYNTHETIC_NOTE,
+                data_origin=DataOrigin.synthetic_demo.value,
+                client_request_id="synthetic-demo-growth-01",
+                registered_by=officer.id,
+            )
+        )
+    if _by_request(db, MaintenanceActivity, "synthetic-demo-work-01") is None:
+        db.add(
+            MaintenanceActivity(
+                public_code=allocate_code(db, MaintenanceActivity, "WORK"),
+                batch_id=mango_batch.id,
+                activity_type="mulching",
+                performed_on=date(2026, 6, 4),
+                notes=SYNTHETIC_NOTE,
+                data_origin=DataOrigin.synthetic_demo.value,
+                client_request_id="synthetic-demo-work-01",
+                registered_by=officer.id,
+            )
+        )
+    harvest = _by_request(db, Harvest, "synthetic-demo-harvest-01")
+    if harvest is None:
+        harvest = Harvest(
+            public_code=allocate_code(db, Harvest, "HARV"),
+            batch_id=mango_batch.id,
+            harvested_on=date(2026, 10, 1),
+            quantity=12,
+            quantity_remaining=12,
+            unit="kg",
+            notes=SYNTHETIC_NOTE,
+            data_origin=DataOrigin.synthetic_demo.value,
+            client_request_id="synthetic-demo-harvest-01",
+            registered_by=officer.id,
+        )
+        db.add(harvest)
+        db.flush()
+    if _by_request(db, Sale, "synthetic-demo-sale-01") is None:
+        db.add(
+            Sale(
+                public_code=allocate_code(db, Sale, "SALE"),
+                harvest_id=harvest.id,
+                sold_on=date(2026, 10, 2),
+                quantity=5,
+                unit="kg",
+                amount_rwf=4000,
+                buyer_name="SYNTHETIC Demo Market",
+                notes=SYNTHETIC_NOTE,
+                data_origin=DataOrigin.synthetic_demo.value,
+                client_request_id="synthetic-demo-sale-01",
+                registered_by=officer.id,
+            )
+        )
+        harvest.quantity_remaining = 7
+        db.flush()
+    if _by_request(db, Advisory, "synthetic-demo-advice-01") is None:
+        db.add(
+            Advisory(
+                public_code=allocate_code(db, Advisory, "ADV"),
+                title="SYNTHETIC mulch after harvest",
+                body="Keep the soil covered and water during a dry week. This note is a demonstration, not agronomic advice from a field visit.",
+                species_id=species["Mangifera indica"].id,
+                farmer_id=farmer.id,
+                site_id=orchard.id,
+                issued_on=date(2026, 10, 3),
+                data_origin=DataOrigin.synthetic_demo.value,
+                client_request_id="synthetic-demo-advice-01",
+                registered_by=officer.id,
+            )
+        )
+    db.flush()
+
+
 def seed() -> None:
     settings = get_settings()
     if settings.is_production:
@@ -314,6 +477,7 @@ def seed() -> None:
             status_after="surviving",
             survival_count=36,
         )
+        _value_chain(db, officer, cooperative, species, orchard, avocado, mango_batch)
         db.commit()
         print("Synthetic demonstration data is ready.")
         print("These accounts and coordinates are not real field records.")

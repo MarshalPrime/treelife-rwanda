@@ -1,6 +1,6 @@
 # Data model
 
-The schema is created by `backend/alembic/versions/0001_initial.py`. Enumerations are stored as text with check constraints so later values can be added in a migration.
+The schema is created by `backend/alembic/versions/0001_initial.py` and extended by `0002_value_chain.py`. Enumerations are stored as text with check constraints so later values can be added in a migration.
 
 ## Records
 
@@ -42,7 +42,7 @@ Public code, name, site type, optional organization, administrative place names 
 
 Coordinates are optional and paired. `location` is `geography(POINT, 4326)`.
 
-Site types include `nursery_holding` so a later nursery module has a place to attach without a second copy of the site.
+Site types include `nursery_holding`. A site can also point at one farmer. A seedling lot is produced at a nursery site and reduced when a distribution moves seedlings to a destination site.
 
 ### individual_trees and planting_batches
 
@@ -84,4 +84,26 @@ Unique public codes, unique client request ids, and GIST indexes on the three ge
 
 ## Personal and location data
 
-The model avoids phone numbers, national IDs, and free-text contact fields. Place names and coordinates can still identify a plot. Treat exports as sensitive. Do not load real farmer data until a pilot has an agreed consent and retention process. See [pilot-plan.md](pilot-plan.md).
+A farmer record stores a display name, an optional district, and an optional phone number. It does not store a national ID. Place names and coordinates can still identify a plot. Treat exports as sensitive. Do not load real farmer data until a pilot has an agreed consent and retention process. See [pilot-plan.md](pilot-plan.md).
+
+## Value chain
+
+```text
+farmers 1---* planting_sites
+planting_sites 1---* seedling_lots     (the nursery site)
+species 1---* seedling_lots
+seedling_lots 1---* distributions
+planting_sites 1---* distributions     (the destination site)
+farmers 1---* distributions
+individual_trees 1---* growth_measurements
+planting_batches 1---* growth_measurements
+individual_trees 1---* maintenance_activities
+planting_batches 1---* maintenance_activities
+planting_sites 1---* maintenance_activities
+individual_trees 1---* harvests
+planting_batches 1---* harvests
+harvests 1---* sales
+farmers 1---* advisories
+```
+
+A distribution cannot exceed the seedlings still in its lot. A sale cannot exceed the quantity still on its harvest. Growth and harvest records point at exactly one tree or one batch. Maintenance points at exactly one tree, batch, or site. Public codes use the prefixes `FARM`, `LOT`, `DIST`, `GROW`, `WORK`, `HARV`, `SALE`, and `ADV`.
