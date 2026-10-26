@@ -140,9 +140,15 @@ def issue_token(db: Session, email: str, password: str) -> TokenResponse:
 @router.get("/health")
 def health(db: Session = Depends(get_db)) -> dict:
     try:
+        db.execute(text("SELECT 1"))
         postgis = db.execute(text("SELECT PostGIS_Version()")).scalar_one()
     except Exception as exc:
-        raise DomainError("Database is unavailable.", status_code=503) from exc
+        from app.db.bootstrap import database_failure
+
+        raise DomainError(
+            f"Database is unavailable ({database_failure(exc)}).",
+            status_code=503,
+        ) from exc
     return {"status": "ok", "database": "ok", "postgis": postgis}
 
 

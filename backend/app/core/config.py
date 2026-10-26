@@ -12,12 +12,16 @@ LOCAL_DATABASE_URL = "postgresql+psycopg://treelife:treelife@localhost:5432/tree
 
 
 def normalize_database_url(url: str) -> str:
-    """Use the psycopg driver and require SSL for a hosted database."""
+    """Use the psycopg driver and a connection string Neon accepts."""
     cleaned = url.strip()
     if cleaned.startswith("postgres://"):
         cleaned = "postgresql://" + cleaned[len("postgres://") :]
     if cleaned.startswith("postgresql://"):
         cleaned = "postgresql+psycopg://" + cleaned[len("postgresql://") :]
+    for token in ("channel_binding=require", "pgbouncer=true"):
+        cleaned = cleaned.replace(f"&{token}", "")
+        cleaned = cleaned.replace(f"?{token}&", "?")
+        cleaned = cleaned.replace(f"?{token}", "")
     hosted = "localhost" not in cleaned and "127.0.0.1" not in cleaned
     if hosted and "sslmode=" not in cleaned:
         cleaned += "&sslmode=require" if "?" in cleaned else "?sslmode=require"
@@ -45,8 +49,8 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def prefer_hosted_database(self):
-        # Vercel’s Neon integration sets POSTGRES_URL, not DATABASE_URL.
-        if self.database_url == LOCAL_DATABASE_URL:
+        # Prefer a direct Neon connection. The pooled URL rejects schema changes.
+        if self.database_url == LOCAL_DATABASE_URL or "-pooler" in self.database_url:
             hosted = self.postgres_url_non_pooling or self.postgres_url
             if hosted:
                 self.database_url = hosted

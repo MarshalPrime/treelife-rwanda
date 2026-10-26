@@ -25,26 +25,9 @@ Coordinates use WGS 84 (EPSG:4326). Latitude is north-south. Longitude is east-w
 
 
 def prepare_hosted_database() -> None:
-    """Create tables and the demonstration accounts on the hosted database."""
-    from pathlib import Path
+    from app.db.bootstrap import ensure_hosted_database
 
-    from alembic.config import Config
-    from sqlalchemy import select
-
-    from alembic import command
-    from app.db.session import SessionLocal
-    from app.models.entities import User
-    from app.seed import seed
-
-    ini = Path(__file__).resolve().parents[1] / "alembic.ini"
-    command.upgrade(Config(str(ini)), "head")
-    db = SessionLocal()
-    try:
-        ready = db.scalar(select(User.id).where(User.email == "admin@demo.treelife.local"))
-    finally:
-        db.close()
-    if ready is None:
-        seed(allow_production=True)
+    ensure_hosted_database()
 
 
 @asynccontextmanager
@@ -100,9 +83,11 @@ def create_app() -> FastAPI:
     @app.exception_handler(SQLAlchemyError)
     async def database_error_handler(_: Request, exc: SQLAlchemyError):
         print(f"Database error: {exc.__class__.__name__}")
+        from app.db.bootstrap import database_failure
+
         return JSONResponse(
             status_code=503,
-            content={"detail": "Database is unavailable.", "errors": []},
+            content={"detail": f"Database is unavailable ({database_failure(exc)}).", "errors": []},
         )
 
     @app.exception_handler(RequestValidationError)

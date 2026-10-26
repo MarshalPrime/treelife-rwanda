@@ -16,6 +16,9 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, expi
 
 
 def get_db() -> Generator[Session, None, None]:
+    from app.db.bootstrap import ensure_hosted_database
+
+    ensure_hosted_database()
     db = SessionLocal()
     try:
         yield db
