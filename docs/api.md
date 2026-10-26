@@ -8,6 +8,7 @@ The API is not an FMES interface. `external_id` is stored and returned, and noth
 
 | Method | Path | Who |
 | --- | --- | --- |
+| POST | `/auth/register` | Public. Name, email, password, and role (`admin`, `field_officer`, `farmer`, or `viewer`). Optional organisation, and for a farmer an optional district and phone. A farmer account also creates the linked farmer record. Duplicate email returns 409. |
 | POST | `/auth/login` | Public. JSON email and password. |
 | POST | `/auth/token` | Public. Form fields `username` and `password`, for the interactive docs. |
 | GET | `/auth/me` | Any signed-in user. |
@@ -64,6 +65,7 @@ Map: `kind` (`site`, `tree`, `batch`, or `all`), `species_id`, `category`, `stat
 | Method | Path | Purpose |
 | --- | --- | --- |
 | GET, POST | `/farmers` | List or create a farmer |
+| POST | `/farmers/{id}/login` | Field officer opens a smallholder login |
 | GET, POST | `/seedling-lots` | List or record nursery production |
 | GET, POST | `/distributions` | List or move seedlings to a site |
 | GET, POST | `/growth` | List or record a height, diameter, or survival count |

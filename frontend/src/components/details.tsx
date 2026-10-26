@@ -260,6 +260,7 @@ export function PlantingDetail({ mode }: { mode: "tree" | "batch" }) {
       <section className="card">
         <Facts rows={[
           ["Site", record.site_name ?? "—"],
+          ["Farmer", record.farmer_name ?? "—"],
           ["Species", `${record.species_common_name ?? "—"} (${record.species_scientific_name ?? "—"})`],
           ["Category", label(record.category)],
           ["Planting date", record.planting_date],

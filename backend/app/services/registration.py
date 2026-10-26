@@ -9,12 +9,14 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
+from app.core.security import hash_password
 from app.domain.errors import DomainError
 from app.domain.validation import check_historical_date
 from app.integrations.fmes.adapter import dispatch_registration_hook
 from app.models.entities import (
     AuditLog,
     DataOrigin,
+    Farmer,
     IndividualTree,
     LifecycleEvent,
     Organization,
@@ -24,12 +26,14 @@ from app.models.entities import (
     Species,
     TreeStatus,
     User,
+    UserRole,
 )
 from app.schemas.entities import (
     BatchCreate,
     BatchUpdate,
     EventCreate,
     OrganizationCreate,
+    RegisterRequest,
     SiteCreate,
     SiteUpdate,
     SpeciesCreate,
@@ -120,6 +124,7 @@ def load_tree(db: Session, tree_id: uuid.UUID) -> IndividualTree | None:
         select(IndividualTree)
         .options(
             joinedload(IndividualTree.site),
+            joinedload(IndividualTree.farmer),
             joinedload(IndividualTree.species),
             joinedload(IndividualTree.registrar),
         )
@@ -132,6 +137,7 @@ def load_batch(db: Session, batch_id: uuid.UUID) -> PlantingBatch | None:
         select(PlantingBatch)
         .options(
             joinedload(PlantingBatch.site),
+            joinedload(PlantingBatch.farmer),
             joinedload(PlantingBatch.species),
             joinedload(PlantingBatch.registrar),
         )
@@ -161,6 +167,57 @@ def _commit(db: Session) -> None:
 def _finish(db: Session, entity_type: str, entity_id: uuid.UUID) -> None:
     _commit(db)
     dispatch_registration_hook(entity_type, str(entity_id))
+
+
+def register_account(db: Session, payload: RegisterRequest) -> User:
+    existing = db.scalar(select(User).where(User.email == payload.email))
+    if existing is not None:
+        raise DomainError(
+            "An account with this email already exists.",
+            status_code=409,
+            field="email",
+        )
+    organization_id = None
+    if payload.organization_name:
+        organization = db.scalar(
+            select(Organization).where(func.lower(Organization.name) == payload.organization_name.lower())
+        )
+        if organization is None:
+            organization = Organization(
+                name=payload.organization_name,
+                org_type="public_institution" if payload.role == UserRole.admin else "other",
+            )
+            db.add(organization)
+            db.flush()
+        organization_id = organization.id
+    account = User(
+        email=payload.email,
+        full_name=payload.full_name,
+        password_hash=hash_password(payload.password),
+        role=payload.role.value,
+        organization_id=organization_id,
+        is_active=True,
+    )
+    db.add(account)
+    db.flush()
+    if payload.role == UserRole.farmer:
+        db.add(
+            Farmer(
+                public_code=allocate_code(db, Farmer, "FARM"),
+                display_name=payload.full_name,
+                organization_id=organization_id,
+                district=payload.district,
+                phone=payload.phone,
+                data_origin=DataOrigin.field_entry.value,
+                user_id=account.id,
+                registered_by=account.id,
+                registered_at=utcnow(),
+            )
+        )
+        db.flush()
+    write_audit(db, account, "create", "user", account.id, ["email", "role"])
+    _commit(db)
+    return account
 
 
 def create_organization(db: Session, user: User, payload: OrganizationCreate) -> Organization:
@@ -235,8 +292,16 @@ def create_site(db: Session, user: User, payload: SiteCreate) -> tuple[PlantingS
         loaded = load_site(db, existing.id)
         return loaded, True
     require_organization(db, payload.organization_id)
-    from app.services.valuechain import require_farmer
+    from app.services.valuechain import farmer_for_user, require_farmer
 
+    if user.role == "farmer" and payload.farmer_id is None:
+        own = farmer_for_user(db, user.id)
+        if own is None:
+            raise DomainError(
+                "This login is not linked to a farmer record.",
+                field="farmer_id",
+            )
+        payload = payload.model_copy(update={"farmer_id": own.id})
     require_farmer(db, payload.farmer_id)
     site = PlantingSite(
         public_code=allocate_code(db, PlantingSite, "SITE"),
@@ -380,12 +445,25 @@ def _create_planted_record(
     existing = find_by_request_id(db, model, payload.client_request_id)
     if existing is not None:
         return existing.id, True
-    require_site(db, payload.site_id)
+    site = require_site(db, payload.site_id)
     require_species(db, payload.species_id)
     check_historical_date(payload.planting_date, "Planting date")
+    from app.services.valuechain import farmer_for_user, require_farmer
+
+    farmer_id = payload.farmer_id
+    if user.role == UserRole.farmer.value:
+        own = farmer_for_user(db, user.id)
+        if own is None:
+            raise DomainError("This login is not linked to a farmer record.", field="farmer_id")
+        farmer_id = own.id
+    elif farmer_id is not None:
+        require_farmer(db, farmer_id)
+    if farmer_id is not None and site.farmer_id is None:
+        site.farmer_id = farmer_id
     record = model(
         public_code=allocate_code(db, model, prefix),
         site_id=payload.site_id,
+        farmer_id=farmer_id,
         species_id=payload.species_id,
         category=enum_value(payload.category),
         planting_date=payload.planting_date,
@@ -576,6 +654,7 @@ def list_trees(db: Session, **kwargs) -> tuple[list[IndividualTree], int]:
         IndividualTree,
         (
             joinedload(IndividualTree.site),
+            joinedload(IndividualTree.farmer),
             joinedload(IndividualTree.species),
             joinedload(IndividualTree.registrar),
         ),
@@ -589,6 +668,7 @@ def list_batches(db: Session, **kwargs) -> tuple[list[PlantingBatch], int]:
         PlantingBatch,
         (
             joinedload(PlantingBatch.site),
+            joinedload(PlantingBatch.farmer),
             joinedload(PlantingBatch.species),
             joinedload(PlantingBatch.registrar),
         ),

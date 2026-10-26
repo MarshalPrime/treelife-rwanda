@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useRef, useState } from "react";
 import { ApiError } from "@/lib/api";
 import { categories, label, organizationTypes, siteTypes, treeStatuses } from "@/lib/labels";
@@ -14,6 +15,11 @@ import {
   type FieldErrors,
 } from "@/lib/validation";
 import { Banner, Field, describedBy } from "@/components/AppShell";
+
+const LocationPicker = dynamic(() => import("@/components/LocationPicker"), {
+  ssr: false,
+  loading: () => <p className="help">Loading the map…</p>,
+});
 
 function useRequestId() {
   const ref = useRef<string>("");
@@ -171,13 +177,25 @@ export function SiteForm({
         <Field label="Cell" name="cell"><input id="cell" value={cell} onChange={(event) => setCell(event.target.value)} /></Field>
       </div>
       <Field label="Village" name="village"><input id="village" value={village} onChange={(event) => setVillage(event.target.value)} /></Field>
-      <div className="row">
-        <Field label="Latitude" name="latitude" error={errors.coordinates} help="Decimal degrees, WGS 84. Leave both coordinates empty if the point is not known.">
-          <input id="latitude" inputMode="decimal" value={latitude} onChange={(event) => setLatitude(event.target.value)} aria-invalid={Boolean(errors.coordinates)} aria-describedby={describedBy("latitude", errors.coordinates, "lat")} />
-        </Field>
-        <Field label="Longitude" name="longitude">
-          <input id="longitude" inputMode="decimal" value={longitude} onChange={(event) => setLongitude(event.target.value)} aria-invalid={Boolean(errors.coordinates)} />
-        </Field>
+      <LocationPicker
+        latitude={latitude}
+        longitude={longitude}
+        onPick={(nextLatitude, nextLongitude) => {
+          setLatitude(nextLatitude);
+          setLongitude(nextLongitude);
+        }}
+      />
+      <div className="coordinate-pair">
+        <div className="row">
+          <Field label="Latitude" name="latitude">
+            <input id="latitude" inputMode="decimal" value={latitude} onChange={(event) => setLatitude(event.target.value)} aria-invalid={Boolean(errors.coordinates)} aria-describedby={describedBy("latitude", errors.coordinates, "lat")} />
+          </Field>
+          <Field label="Longitude" name="longitude">
+            <input id="longitude" inputMode="decimal" value={longitude} onChange={(event) => setLongitude(event.target.value)} aria-invalid={Boolean(errors.coordinates)} aria-describedby={describedBy("latitude", errors.coordinates, "lat")} />
+          </Field>
+        </div>
+        <p className="help" id="latitude-help">Decimal degrees, WGS 84. Leave both empty if the point is not known.</p>
+        {errors.coordinates ? <p className="error-text" id="latitude-error">{errors.coordinates}</p> : null}
       </div>
       <Field label="Area in hectares" name="area_hectares" error={errors.area_hectares}>
         <input id="area_hectares" inputMode="decimal" value={area} onChange={(event) => setArea(event.target.value)} aria-invalid={Boolean(errors.area_hectares)} aria-describedby={describedBy("area_hectares", errors.area_hectares)} />
@@ -203,6 +221,8 @@ export function PlantingForm({
   mode,
   sites,
   species,
+  farmers = [],
+  showFarmerHelp = false,
   initial,
   editing = false,
   onSubmit,
@@ -210,6 +230,8 @@ export function PlantingForm({
   mode: "tree" | "batch";
   sites: Site[];
   species: Species[];
+  farmers?: Farmer[];
+  showFarmerHelp?: boolean;
   initial?: Partial<{
     site_id: string;
     species_id: string;
@@ -234,6 +256,11 @@ export function PlantingForm({
   const [quantity, setQuantity] = useState(initial?.quantity?.toString() ?? "");
   const [notes, setNotes] = useState(initial?.notes ?? "");
   const [status, setStatus] = useState(initial?.status ?? "planted");
+  const [helping, setHelping] = useState<"none" | "existing" | "new">(showFarmerHelp ? "new" : "none");
+  const [farmerId, setFarmerId] = useState("");
+  const [farmerName, setFarmerName] = useState("");
+  const [farmerDistrict, setFarmerDistrict] = useState("");
+  const [farmerPhone, setFarmerPhone] = useState("");
   const [errors, setErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -263,6 +290,14 @@ export function PlantingForm({
     setErrors(nextErrors);
     setFormError(null);
     if (Object.keys(nextErrors).length) return;
+    if (showFarmerHelp && !editing && helping === "existing" && !farmerId) {
+      setFormError("Choose the farmer you are helping.");
+      return;
+    }
+    if (showFarmerHelp && !editing && helping === "new" && !farmerName.trim()) {
+      setFormError("Enter the name of the farmer you are helping.");
+      return;
+    }
     setSaving(true);
     try {
       const payload: Record<string, unknown> = {
@@ -277,6 +312,16 @@ export function PlantingForm({
       };
       if (mode === "batch") payload.quantity = Number(quantity);
       if (!editing) payload.client_request_id = requestId;
+      if (showFarmerHelp && !editing) {
+        payload.farmer_id = helping === "existing" ? farmerId : null;
+        payload.new_farmer = helping === "new"
+          ? {
+              display_name: farmerName.trim(),
+              district: farmerDistrict.trim() || null,
+              phone: farmerPhone.trim() || null,
+            }
+          : null;
+      }
       await onSubmit(payload);
     } catch (error) {
       if (error instanceof ApiError) {
@@ -333,15 +378,62 @@ export function PlantingForm({
           <p className="help">An individual tree is always one tree. Use a planting batch for a group.</p>
         )}
       </div>
-      <div className="row">
-        <Field label="Latitude" name="latitude" error={errors.coordinates} help="Leave both empty if this record should not appear on the map.">
-          <input id="latitude" inputMode="decimal" value={latitude} onChange={(event) => setLatitude(event.target.value)} aria-invalid={Boolean(errors.coordinates)} aria-describedby={describedBy("latitude", errors.coordinates, "lat")} />
-        </Field>
-        <Field label="Longitude" name="longitude">
-          <input id="longitude" inputMode="decimal" value={longitude} onChange={(event) => setLongitude(event.target.value)} aria-invalid={Boolean(errors.coordinates)} />
-        </Field>
+      <LocationPicker
+        latitude={latitude}
+        longitude={longitude}
+        onPick={(nextLatitude, nextLongitude) => {
+          setLatitude(nextLatitude);
+          setLongitude(nextLongitude);
+        }}
+      />
+      <div className="coordinate-pair">
+        <div className="row">
+          <Field label="Latitude" name="latitude">
+            <input id="latitude" inputMode="decimal" value={latitude} onChange={(event) => setLatitude(event.target.value)} aria-invalid={Boolean(errors.coordinates)} aria-describedby={describedBy("latitude", errors.coordinates, "lat")} />
+          </Field>
+          <Field label="Longitude" name="longitude">
+            <input id="longitude" inputMode="decimal" value={longitude} onChange={(event) => setLongitude(event.target.value)} aria-invalid={Boolean(errors.coordinates)} aria-describedby={describedBy("latitude", errors.coordinates, "lat")} />
+          </Field>
+        </div>
+        <p className="help" id="latitude-help">Filled from the map, or typed here. Leave both empty if this record should not appear on the map.</p>
+        {errors.coordinates ? <p className="error-text" id="latitude-error">{errors.coordinates}</p> : null}
       </div>
       <button className="secondary" type="button" onClick={useSiteCoordinates}>Use site coordinates</button>
+      {showFarmerHelp && !editing ? (
+        <fieldset className="role-choice">
+          <legend>Farmer you are helping</legend>
+          <p className="help">An officer names the household. Use an existing farmer, or enter their name. Do not enter a national ID.</p>
+          <label>
+            <span><input type="radio" name="helping" checked={helping === "none"} onChange={() => setHelping("none")} /> No named farmer</span>
+          </label>
+          <label>
+            <span><input type="radio" name="helping" checked={helping === "existing"} onChange={() => setHelping("existing")} /> A farmer already on the list</span>
+          </label>
+          {helping === "existing" ? (
+            <select aria-label="Existing farmer" value={farmerId} onChange={(event) => setFarmerId(event.target.value)}>
+              <option value="">Choose a farmer</option>
+              {farmers.map((farmer) => <option key={farmer.id} value={farmer.id}>{farmer.display_name}</option>)}
+            </select>
+          ) : null}
+          <label>
+            <span><input type="radio" name="helping" checked={helping === "new"} onChange={() => setHelping("new")} /> Enter a farmer name and information</span>
+          </label>
+          {helping === "new" ? (
+            <>
+              <label htmlFor="farmer_name">Farmer name
+                <input id="farmer_name" value={farmerName} onChange={(event) => setFarmerName(event.target.value)} />
+              </label>
+              <label htmlFor="farmer_district">District
+                <input id="farmer_district" value={farmerDistrict} onChange={(event) => setFarmerDistrict(event.target.value)} />
+              </label>
+              <label htmlFor="farmer_phone">Phone
+                <input id="farmer_phone" value={farmerPhone} onChange={(event) => setFarmerPhone(event.target.value)} />
+              </label>
+              <p className="help">Phone is optional and sensitive.</p>
+            </>
+          ) : null}
+        </fieldset>
+      ) : null}
       {editing ? (
         <Field label="Status" name="status">
           <select id="status" value={status} onChange={(event) => setStatus(event.target.value)}>

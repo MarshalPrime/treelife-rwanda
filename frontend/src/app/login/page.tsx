@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Banner } from "@/components/AppShell";
@@ -15,7 +16,7 @@ export default function LoginPage() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (!loading && user) router.replace("/dashboard");
+    if (!loading && user) router.replace(user.role === "viewer" ? "/map" : "/dashboard");
   }, [loading, router, user]);
 
   async function handleSubmit(event: React.FormEvent) {
@@ -23,8 +24,8 @@ export default function LoginPage() {
     setSaving(true);
     setError(null);
     try {
-      await login(email, password);
-      router.replace("/dashboard");
+      const account = await login(email, password);
+      router.replace(account.role === "viewer" ? "/map" : "/dashboard");
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : "Sign-in failed.");
       setSaving(false);
@@ -34,11 +35,14 @@ export default function LoginPage() {
   return (
     <main className="login-wrap">
       <form className="card login-card" onSubmit={handleSubmit}>
-        <div>
-          <p className="lede">Ejo Labs</p>
-          <h1>TreeLife Rwanda</h1>
+        <div className="auth-head">
+          <Link className="auth-mark" href="/" aria-label="TreeLife home">TL</Link>
+          <div>
+            <p className="lede">Ejo Labs</p>
+            <h1>TreeLife Rwanda</h1>
+          </div>
         </div>
-        <p>Follow a tree from the nursery through planting, care, harvest, and sale. This demonstration is not connected to FMES.</p>
+        <p>Sign in to follow a tree from the nursery through planting, care, harvest, and sale.</p>
         {error ? <Banner tone="error">{error}</Banner> : null}
         <label htmlFor="email">Email
           <input id="email" type="email" autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} required />
@@ -47,7 +51,7 @@ export default function LoginPage() {
           <input id="password" type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required />
         </label>
         <button className="primary" type="submit" disabled={saving}>{saving ? "Signing in…" : "Sign in"}</button>
-        <p className="help">Development accounts use the .local suffix and are created by the synthetic seed. They are not real mailboxes.</p>
+        <p className="help">New to TreeLife? <Link href="/register">Create an account</Link> · <Link href="/">About TreeLife</Link></p>
       </form>
     </main>
   );

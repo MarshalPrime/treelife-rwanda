@@ -26,7 +26,7 @@ An individual tree is one tree. It has no quantity column. A planting batch has 
 
 Email, full name, password hash, role, optional organization, and active flag. No phone number and no national identifier.
 
-Roles: `admin`, `field_officer`, `viewer`.
+Roles: `admin`, `field_officer`, `farmer`, `viewer`. A farmer login is optional and is stored as `farmers.user_id`. It does not store a national ID.
 
 ### organizations
 
@@ -46,7 +46,7 @@ Site types include `nursery_holding`. A site can also point at one farmer. A see
 
 ### individual_trees and planting_batches
 
-Public code, site, species, category (`urban`, `fruit`, `agroforestry`, `other`), planting date, optional coordinates, status, notes, data origin, external id, client request id, registrar, and timestamps.
+Public code, site, optional farmer, species, category (`urban`, `fruit`, `agroforestry`, `other`), planting date, optional coordinates, status, notes, data origin, external id, client request id, registrar, and timestamps. A farmer account that omits the farmer is stored against that account's own household. An officer can set the farmer when they are helping a household.
 
 Tree and batch status: `planted`, `surviving`, `stressed`, `dead`, `removed`, `unknown`.
 

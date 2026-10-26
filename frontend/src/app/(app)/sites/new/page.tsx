@@ -10,7 +10,7 @@ import type { Farmer, Organization, Site } from "@/lib/types";
 
 export default function NewSitePage() {
   const router = useRouter();
-  const { canWrite } = useAuth();
+  const { canWrite, user } = useAuth();
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [farmers, setFarmers] = useState<Farmer[]>([]);
 
@@ -30,6 +30,7 @@ export default function NewSitePage() {
         <SiteForm
           organizations={organizations}
           farmers={farmers}
+          initial={user?.farmer_id ? { farmer_id: user.farmer_id } : undefined}
           submitLabel="Save site"
           onCreateOrganization={async (input) => {
             const created = await api<Organization>("/organizations", { method: "POST", body: JSON.stringify(input) });

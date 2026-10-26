@@ -200,6 +200,7 @@ def _value_chain(
     orchard: PlantingSite,
     avocado: IndividualTree,
     mango_batch: PlantingBatch,
+    smallholder: User,
 ) -> None:
     """Attach one synthetic nursery-to-sale chain. A second run does not duplicate it."""
     farmer = _by_request(db, Farmer, "synthetic-demo-farmer-01")
@@ -219,6 +220,8 @@ def _value_chain(
         db.flush()
     if orchard.farmer_id is None:
         orchard.farmer_id = farmer.id
+    if farmer.user_id is None:
+        farmer.user_id = smallholder.id
     nursery = _site(
         db,
         officer,
@@ -365,6 +368,13 @@ def seed() -> None:
         viewer = _get_or_create_user(
             db, "viewer@demo.treelife.local", "Demo Viewer", "viewer", settings.demo_viewer_password
         )
+        smallholder = _get_or_create_user(
+            db,
+            "farmer@demo.treelife.local",
+            "Demo Smallholder",
+            "farmer",
+            settings.demo_farmer_password,
+        )
         urban = _site(
             db,
             officer,
@@ -477,15 +487,17 @@ def seed() -> None:
             status_after="surviving",
             survival_count=36,
         )
-        _value_chain(db, officer, cooperative, species, orchard, avocado, mango_batch)
+        _value_chain(db, officer, cooperative, species, orchard, avocado, mango_batch, smallholder)
         db.commit()
         print("Synthetic demonstration data is ready.")
         print("These accounts and coordinates are not real field records.")
         print(f"Admin   {admin.email}")
         print(f"Officer {officer.email}")
         print(f"Viewer  {viewer.email}")
+        print(f"Farmer  {smallholder.email}")
         print(
-            "Passwords come from DEMO_ADMIN_PASSWORD, DEMO_OFFICER_PASSWORD, and DEMO_VIEWER_PASSWORD."
+            "Passwords come from DEMO_ADMIN_PASSWORD, DEMO_OFFICER_PASSWORD, "
+            "DEMO_VIEWER_PASSWORD, and DEMO_FARMER_PASSWORD."
         )
     except Exception:
         db.rollback()

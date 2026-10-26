@@ -26,13 +26,13 @@ The FMES adapter in `backend/app/integrations/fmes` is a reserved seam. Registra
 
 ## Authentication
 
-Three roles are stored on the user: `admin`, `field_officer`, and `viewer`.
+Four roles are stored on the user: `admin`, `field_officer`, `farmer`, and `viewer`. A farmer login can record the same field records as a field officer.
 
 - Every registration endpoint requires a bearer token.
-- Viewers can read.
-- Field officers and administrators can create and update.
-- Only administrators can read the audit log.
-- There is no public self-registration. Accounts are created by the seed or, later, by an operator.
+- A viewer can read the map and the trees.
+- A field officer or a farmer can create and update field records. An officer names the farmer on a tree or batch. A farmer’s record uses their own household.
+- An administrator can read the overview, reports, and the audit log, and cannot create or update field records.
+- `POST /auth/register` creates an account and asks for one of the four roles. The seeded demonstration sign-ins remain.
 
 The token is a signed JWT kept in `sessionStorage`. That choice is documented as a prototype limit in [decisions/003-authentication.md](decisions/003-authentication.md).
 

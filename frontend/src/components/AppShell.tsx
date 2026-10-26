@@ -7,7 +7,7 @@ import { ApiError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { readOutbox, removeOutbox } from "@/lib/outbox";
 
-const links = [
+const fieldLinks = [
   ["/dashboard", "Overview"],
   ["/sites", "Sites"],
   ["/trees", "Trees"],
@@ -22,6 +22,39 @@ const links = [
   ["/species", "Species"],
   ["/about", "About"],
 ];
+
+const adminLinks = [
+  ["/dashboard", "Overview"],
+  ["/analytics", "Reports"],
+  ["/map", "Map"],
+  ["/sites", "Sites"],
+  ["/trees", "Trees"],
+  ["/batches", "Batches"],
+  ["/about", "About"],
+];
+
+const viewerLinks = [
+  ["/map", "Map"],
+  ["/trees", "Trees"],
+];
+
+export function linksForRole(role: string | undefined) {
+  if (role === "admin") return adminLinks;
+  if (role === "viewer") return viewerLinks;
+  return fieldLinks;
+}
+
+export function pathAllowed(role: string, pathname: string) {
+  if (role === "viewer") {
+    return pathname === "/map" || pathname === "/trees" || /^\/trees\/[^/]+$/.test(pathname);
+  }
+  if (role === "admin") {
+    if (pathname.includes("/edit") || pathname.endsWith("/new")) return false;
+    const hidden = ["/farmers", "/nursery", "/field", "/harvest", "/advice", "/species"];
+    return !hidden.some((path) => pathname === path || pathname.startsWith(`${path}/`));
+  }
+  return true;
+}
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -69,13 +102,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <button className="ghost" type="button" onClick={signOut}>Log out</button>
       </header>
       <aside className="sidebar">
-        <Link className="brand" href="/dashboard">
+        <Link className="brand" href={user?.role === "viewer" ? "/map" : "/dashboard"}>
           <strong>TreeLife</strong>
           <span>Rwanda registration</span>
         </Link>
         <nav className="nav" aria-label="Primary">
-          {links.map(([href, name]) => (
-            <Link key={href} href={href} aria-current={pathname.startsWith(href) ? "page" : undefined}>
+          {linksForRole(user?.role).map(([href, name]) => (
+            <Link key={href} href={href} aria-current={pathname === href || (href !== "/map" && pathname.startsWith(href)) ? "page" : undefined}>
               {name}
             </Link>
           ))}
@@ -87,7 +120,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </nav>
         <div className="sidebar-foot">
           <p>{user?.full_name}</p>
-          <small>{user?.role.replace("_", " ")}</small>
+          <small>
+            {user?.role === "farmer"
+              ? "Smallholder farmer"
+              : user?.role === "field_officer"
+                ? "Field officer"
+                : user?.role === "admin"
+                  ? "Administrator"
+                  : "Viewer"}
+          </small>
           <button className="ghost" type="button" onClick={signOut}>Log out</button>
         </div>
       </aside>
@@ -173,6 +214,7 @@ export function Pager({
 }
 
 export function OriginBadge({ origin }: { origin: string }) {
-  if (origin === "synthetic_demo") return <span className="badge warn">Synthetic demo</span>;
-  return <span className="badge">{origin.replaceAll("_", " ")}</span>;
+  if (origin === "synthetic_demo") return null;
+  const text = origin === "field_entry" ? "Field record" : origin === "imported" ? "Imported" : origin.replaceAll("_", " ");
+  return <span className="badge">{text}</span>;
 }

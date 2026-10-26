@@ -14,6 +14,7 @@ from app.domain.validation import (
     check_area,
     check_coordinate_pair,
     check_historical_date,
+    check_password_strength,
     check_quantity,
     check_request_id,
     clean_optional_text,
@@ -60,6 +61,42 @@ class LoginRequest(BaseModel):
         return cleaned
 
 
+class RegisterRequest(BaseModel):
+    full_name: str = Field(min_length=1, max_length=200)
+    email: str = Field(min_length=3, max_length=254)
+    password: str = Field(min_length=8, max_length=200)
+    role: UserRole
+    organization_name: str | None = Field(default=None, max_length=200)
+    district: str | None = Field(default=None, max_length=120)
+    phone: str | None = Field(default=None, max_length=30)
+
+    @field_validator("full_name")
+    @classmethod
+    def clean_name(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("Name is required.")
+        return cleaned
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: str) -> str:
+        cleaned = value.strip().lower()
+        if re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", cleaned) is None:
+            raise ValueError("Enter a valid email address.")
+        return cleaned
+
+    @field_validator("password")
+    @classmethod
+    def strong_password(cls, value: str) -> str:
+        return check_password_strength(value)
+
+    @field_validator("organization_name", "district", "phone")
+    @classmethod
+    def clean_optional(cls, value: str | None) -> str | None:
+        return clean_optional_text(value)
+
+
 class UserRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -69,6 +106,7 @@ class UserRead(BaseModel):
     role: UserRole
     organization_id: uuid.UUID | None
     is_active: bool
+    farmer_id: uuid.UUID | None = None
 
 
 class OrganizationCreate(BaseModel):
@@ -279,6 +317,7 @@ class TreeCreate(TreeWriteBase):
     species_id: uuid.UUID
     category: TreeCategory
     planting_date: date
+    farmer_id: uuid.UUID | None = None
     client_request_id: str | None = Field(default=None, max_length=80)
 
     @field_validator("client_request_id")
@@ -317,6 +356,8 @@ class TreeRead(BaseModel):
     site_id: uuid.UUID
     site_name: str | None
     site_code: str | None
+    farmer_id: uuid.UUID | None = None
+    farmer_name: str | None = None
     species_id: uuid.UUID
     species_common_name: str | None
     species_scientific_name: str | None

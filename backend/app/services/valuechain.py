@@ -10,6 +10,7 @@ import uuid
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
+from app.core.security import hash_password
 from app.domain.errors import DomainError
 from app.domain.validation import check_measure
 from app.models.entities import (
@@ -27,6 +28,7 @@ from app.models.entities import (
     SeedlingLot,
     Species,
     User,
+    UserRole,
 )
 from app.schemas.valuechain import (
     AdvisoryCreate,
@@ -34,6 +36,7 @@ from app.schemas.valuechain import (
     DistributionCreate,
     DistrictTotal,
     FarmerCreate,
+    FarmerLoginCreate,
     GrowthCreate,
     HarvestCreate,
     LotCreate,
@@ -43,6 +46,36 @@ from app.schemas.valuechain import (
 )
 from app.services.common import allocate_code, find_by_request_id, utcnow, write_audit
 from app.services.registration import _commit, require_organization
+
+
+def farmer_for_user(db: Session, user_id: uuid.UUID) -> Farmer | None:
+    return db.scalar(select(Farmer).where(Farmer.user_id == user_id))
+
+
+def open_farmer_login(
+    db: Session, actor: User, farmer_id: uuid.UUID, payload: FarmerLoginCreate
+) -> User:
+    farmer = db.get(Farmer, farmer_id)
+    if farmer is None:
+        raise DomainError("Farmer was not found.", status_code=404)
+    if farmer.user_id is not None:
+        raise DomainError("This farmer already has a login.", status_code=409, field="email")
+    taken = db.scalar(select(User).where(User.email == payload.email))
+    if taken is not None:
+        raise DomainError("That email is already in use.", status_code=409, field="email")
+    account = User(
+        email=payload.email,
+        full_name=(payload.full_name or farmer.display_name).strip(),
+        password_hash=hash_password(payload.password),
+        role=UserRole.farmer.value,
+        is_active=True,
+    )
+    db.add(account)
+    db.flush()
+    farmer.user_id = account.id
+    write_audit(db, actor, "create", "user", account.id, ["email", "role"])
+    _commit(db)
+    return account
 
 
 def require_farmer(db: Session, farmer_id: uuid.UUID | None) -> Farmer | None:

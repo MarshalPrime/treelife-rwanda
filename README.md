@@ -29,7 +29,7 @@ A signed-in user can:
 - see located records on a map, filter them by district or farmer, and see which records have no coordinates
 - keep a failed create on the device and send it again when the connection returns
 
-Readers can review records. Field officers and administrators can change them. Administrators can also read the audit log.
+Anyone can create an account and choose administrator, field officer, farmer, or viewer. An administrator sees the overview, reports, and the audit log, and does not register trees. A field officer registers sites, trees, and batches, and names the farmer they are helping. A farmer registers for their own household, and the record uses their name. A viewer can see the map and the trees, and cannot change them. A field officer can still open a login for an existing farmer from the Farmers page.
 
 ## Architecture
 
@@ -92,6 +92,7 @@ Development sign-in, after seeding:
 | `admin@demo.treelife.local` | Administrator | `demo-admin-pass` |
 | `officer@demo.treelife.local` | Field officer | `demo-officer-pass` |
 | `viewer@demo.treelife.local` | Viewer | `demo-viewer-pass` |
+| `farmer@demo.treelife.local` | Smallholder farmer | `demo-farmer-pass` |
 
 These are demonstration accounts. The `.local` suffix is intentional so they are not deliverable mailboxes. Change the passwords before any shared deployment, and do not enable the seed outside local development.
 

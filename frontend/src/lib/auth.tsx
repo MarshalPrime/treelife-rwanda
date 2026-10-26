@@ -8,7 +8,7 @@ type AuthValue = {
   user: User | null;
   loading: boolean;
   canWrite: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<User>;
   logout: () => void;
 };
 
@@ -43,7 +43,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     () => ({
       user,
       loading,
-      canWrite: user?.role === "admin" || user?.role === "field_officer",
+      canWrite: user?.role === "field_officer" || user?.role === "farmer",
       async login(email: string, password: string) {
         const token = await api<TokenResponse>("/auth/login", {
           method: "POST",
@@ -52,6 +52,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setToken(token.access_token);
         const me = await api<User>("/auth/me");
         setUser(me);
+        return me;
       },
       logout() {
         clearToken();

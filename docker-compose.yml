@@ -30,6 +30,7 @@ services:
       DEMO_ADMIN_PASSWORD: demo-admin-pass
       DEMO_OFFICER_PASSWORD: demo-officer-pass
       DEMO_VIEWER_PASSWORD: demo-viewer-pass
+      DEMO_FARMER_PASSWORD: demo-farmer-pass
     ports:
       - "8000:8000"
     depends_on:

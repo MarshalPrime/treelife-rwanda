@@ -84,6 +84,12 @@ def check_request_id(value: str | None) -> None:
         )
 
 
+def check_password_strength(value: str) -> str:
+    if len(value) < 8 or re.search(r"[A-Za-z]", value) is None or re.search(r"\d", value) is None:
+        raise ValueError("Use at least 8 characters, including a letter and a number.")
+    return value
+
+
 def clean_optional_text(value: str | None) -> str | None:
     if value is None:
         return None

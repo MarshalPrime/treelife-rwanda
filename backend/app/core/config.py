@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     demo_admin_password: str = "demo-admin-pass"
     demo_officer_password: str = "demo-officer-pass"
     demo_viewer_password: str = "demo-viewer-pass"
+    demo_farmer_password: str = "demo-farmer-pass"
 
     @property
     def cors_origin_list(self) -> list[str]:

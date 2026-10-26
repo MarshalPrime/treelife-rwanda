@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import date, datetime
 
@@ -57,6 +58,26 @@ class FarmerRead(BaseModel):
     registered_by_name: str | None
     registered_at: datetime
     site_count: int
+    has_login: bool = False
+
+
+class FarmerLoginCreate(BaseModel):
+    email: str = Field(min_length=3, max_length=254)
+    password: str = Field(min_length=8, max_length=200)
+    full_name: str | None = Field(default=None, max_length=200)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: str) -> str:
+        cleaned = value.strip().lower()
+        if re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", cleaned) is None:
+            raise ValueError("Enter a valid email address.")
+        return cleaned
+
+    @field_validator("full_name")
+    @classmethod
+    def clean_name(cls, value: str | None) -> str | None:
+        return clean_optional_text(value)
 
 
 class LotCreate(BaseModel):

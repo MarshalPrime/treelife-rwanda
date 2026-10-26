@@ -5,7 +5,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "TreeLife Rwanda",
-  description: "Register planting sites, individual trees, and planting batches.",
+  description: "Follow urban and fruit trees in Rwanda from the nursery through planting, care, harvest, and sale.",
   robots: { index: false, follow: false },
 };
 

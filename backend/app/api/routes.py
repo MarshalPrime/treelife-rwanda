@@ -9,11 +9,11 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_user, require_admin, require_writer
+from app.core.deps import get_current_user, require_admin, require_staff, require_writer
 from app.core.security import create_access_token, verify_password
 from app.db.session import get_db
 from app.domain.errors import DomainError
-from app.models.entities import User
+from app.models.entities import Farmer, User
 from app.schemas.entities import (
     AuditRead,
     BatchCreate,
@@ -26,6 +26,7 @@ from app.schemas.entities import (
     OrganizationCreate,
     OrganizationRead,
     Page,
+    RegisterRequest,
     SiteCreate,
     SiteRead,
     SiteUpdate,
@@ -45,6 +46,7 @@ from app.schemas.valuechain import (
     DistributionCreate,
     DistributionRead,
     FarmerCreate,
+    FarmerLoginCreate,
     FarmerRead,
     GrowthCreate,
     GrowthRead,
@@ -76,6 +78,7 @@ from app.services.registration import (
     list_sites,
     list_species,
     list_trees,
+    register_account,
     update_batch,
     update_site,
     update_tree,
@@ -107,6 +110,7 @@ from app.services.valuechain import (
     list_lots,
     list_maintenance,
     list_sales,
+    open_farmer_login,
 )
 
 router = APIRouter()
@@ -142,6 +146,21 @@ def health(db: Session = Depends(get_db)) -> dict:
     return {"status": "ok", "database": "ok", "postgis": postgis}
 
 
+@router.post("/auth/register", response_model=UserRead, status_code=201)
+def register(payload: RegisterRequest, db: Session = Depends(get_db)) -> UserRead:
+    account = register_account(db, payload)
+    farmer_id = db.scalar(select(Farmer.id).where(Farmer.user_id == account.id))
+    return UserRead(
+        id=account.id,
+        email=account.email,
+        full_name=account.full_name,
+        role=account.role,
+        organization_id=account.organization_id,
+        is_active=account.is_active,
+        farmer_id=farmer_id,
+    )
+
+
 @router.post("/auth/login", response_model=TokenResponse)
 def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
     return issue_token(db, payload.email, payload.password)
@@ -156,8 +175,17 @@ def login_form(
 
 
 @router.get("/auth/me", response_model=UserRead)
-def me(user: User = Depends(get_current_user)) -> User:
-    return user
+def me(db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> UserRead:
+    farmer_id = db.scalar(select(Farmer.id).where(Farmer.user_id == user.id))
+    return UserRead(
+        id=user.id,
+        email=user.email,
+        full_name=user.full_name,
+        role=user.role,
+        organization_id=user.organization_id,
+        is_active=user.is_active,
+        farmer_id=farmer_id,
+    )
 
 
 @router.get("/stats", response_model=StatsResponse)
@@ -477,6 +505,7 @@ def _farmer(row) -> FarmerRead:
         registered_by_name=row.registrar.full_name if row.registrar else None,
         registered_at=row.registered_at,
         site_count=len(row.sites),
+        has_login=row.user_id is not None,
     )
 
 
@@ -498,6 +527,25 @@ def post_farmer(
     mark_created(response, replay)
     loaded = next(item for item in list_farmers(db) if item.id == row.id)
     return _farmer(loaded)
+
+
+@router.post("/farmers/{farmer_id}/login", response_model=UserRead, status_code=201)
+def post_farmer_login(
+    farmer_id: uuid.UUID,
+    payload: FarmerLoginCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_staff),
+) -> UserRead:
+    account = open_farmer_login(db, user, farmer_id, payload)
+    return UserRead(
+        id=account.id,
+        email=account.email,
+        full_name=account.full_name,
+        role=account.role,
+        organization_id=account.organization_id,
+        is_active=account.is_active,
+        farmer_id=farmer_id,
+    )
 
 
 @router.get("/seedling-lots", response_model=list[LotRead])

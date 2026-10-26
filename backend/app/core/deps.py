@@ -15,7 +15,8 @@ from app.models.entities import User, UserRole
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token", auto_error=False)
 
-WRITER_ROLES = {UserRole.admin.value, UserRole.field_officer.value}
+WRITER_ROLES = {UserRole.field_officer.value, UserRole.farmer.value}
+STAFF_ROLES = {UserRole.field_officer.value}
 
 
 def get_current_user(
@@ -50,6 +51,14 @@ def get_current_user(
 def require_writer(user: User = Depends(get_current_user)) -> User:
     if user.role not in WRITER_ROLES:
         raise HTTPException(status_code=403, detail="You do not have permission to change records.")
+    return user
+
+
+def require_staff(user: User = Depends(get_current_user)) -> User:
+    if user.role not in STAFF_ROLES:
+        raise HTTPException(
+            status_code=403, detail="Only a field officer can open a login."
+        )
     return user
 
 

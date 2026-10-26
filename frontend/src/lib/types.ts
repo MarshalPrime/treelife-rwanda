@@ -1,4 +1,4 @@
-export type Role = "admin" | "field_officer" | "viewer";
+export type Role = "admin" | "field_officer" | "farmer" | "viewer";
 
 export type User = {
   id: string;
@@ -7,6 +7,7 @@ export type User = {
   role: Role;
   organization_id: string | null;
   is_active: boolean;
+  farmer_id: string | null;
 };
 
 export type TokenResponse = {
@@ -53,6 +54,7 @@ export type Farmer = {
   registered_by_name: string | null;
   registered_at: string;
   site_count: number;
+  has_login: boolean;
 };
 
 export type Site = {
@@ -90,6 +92,8 @@ export type PlantingRecord = {
   site_id: string;
   site_name: string | null;
   site_code: string | null;
+  farmer_id: string | null;
+  farmer_name: string | null;
   species_id: string;
   species_common_name: string | null;
   species_scientific_name: string | null;

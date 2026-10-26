@@ -1,16 +1,27 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { AppShell } from "@/components/AppShell";
+import { AppShell, pathAllowed } from "@/components/AppShell";
 import { useAuth } from "@/lib/auth";
 
 export default function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
+  const allowed = user ? pathAllowed(user.role, pathname) : true;
+
   useEffect(() => {
-    if (!loading && !user) router.replace("/login");
-  }, [loading, router, user]);
-  if (loading || !user) return <p className="loading">Loading…</p>;
+    if (loading) return;
+    if (!user) {
+      router.replace("/login");
+      return;
+    }
+    if (!pathAllowed(user.role, pathname)) {
+      router.replace(user.role === "viewer" ? "/map" : "/dashboard");
+    }
+  }, [loading, pathname, router, user]);
+
+  if (loading || !user || !allowed) return <p className="loading">Loading…</p>;
   return <AppShell>{children}</AppShell>;
 }

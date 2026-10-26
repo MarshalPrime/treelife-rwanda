@@ -42,6 +42,7 @@ def utcnow() -> datetime:
 class UserRole(str, enum.Enum):
     admin = "admin"
     field_officer = "field_officer"
+    farmer = "farmer"
     viewer = "viewer"
 
 
@@ -137,7 +138,7 @@ class User(Base):
     __tablename__ = "users"
     __table_args__ = (
         CheckConstraint(
-            "role IN ('admin', 'field_officer', 'viewer')",
+            "role IN ('admin', 'field_officer', 'farmer', 'viewer')",
             name="ck_users_role",
         ),
     )
@@ -303,6 +304,9 @@ class IndividualTree(Base):
     site_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("planting_sites.id", ondelete="RESTRICT"), nullable=False
     )
+    farmer_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("farmers.id", ondelete="SET NULL"), nullable=True
+    )
     species_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("species.id", ondelete="RESTRICT"), nullable=False
     )
@@ -338,6 +342,7 @@ class IndividualTree(Base):
     )
 
     site: Mapped[PlantingSite] = relationship(back_populates="trees")
+    farmer: Mapped[Farmer | None] = relationship(foreign_keys=[farmer_id])
     species: Mapped[Species] = relationship()
     registrar: Mapped[User] = relationship(foreign_keys=[registered_by])
 
@@ -378,6 +383,9 @@ class PlantingBatch(Base):
     site_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("planting_sites.id", ondelete="RESTRICT"), nullable=False
     )
+    farmer_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("farmers.id", ondelete="SET NULL"), nullable=True
+    )
     species_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("species.id", ondelete="RESTRICT"), nullable=False
     )
@@ -414,6 +422,7 @@ class PlantingBatch(Base):
     )
 
     site: Mapped[PlantingSite] = relationship(back_populates="batches")
+    farmer: Mapped[Farmer | None] = relationship(foreign_keys=[farmer_id])
     species: Mapped[Species] = relationship()
     registrar: Mapped[User] = relationship(foreign_keys=[registered_by])
 
@@ -523,6 +532,9 @@ class Farmer(Base):
         String(32), nullable=False, default=DataOrigin.field_entry.value
     )
     client_request_id: Mapped[str | None] = mapped_column(String(80), unique=True, nullable=True)
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), unique=True, nullable=True
+    )
     registered_by: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
@@ -541,6 +553,7 @@ class Farmer(Base):
     )
 
     organization: Mapped[Organization | None] = relationship()
+    account: Mapped[User | None] = relationship(foreign_keys=[user_id])
     registrar: Mapped[User] = relationship(foreign_keys=[registered_by])
     sites: Mapped[list[PlantingSite]] = relationship(back_populates="farmer")
 

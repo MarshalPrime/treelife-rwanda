@@ -59,18 +59,25 @@ function SelectField({
 }
 
 export function FarmersPage() {
-  const { canWrite } = useAuth();
+  const { canWrite, user } = useAuth();
+  const canOpenLogin = user?.role === "field_officer";
   const request = useRequestId();
   const [name, setName] = useState("");
   const [district, setDistrict] = useState("");
   const [phone, setPhone] = useState("");
-  const [rows, setRows] = useState<string[]>([]);
+  const [farmers, setFarmers] = useState<Farmer[]>([]);
+  const [loginFarmerId, setLoginFarmerId] = useState("");
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   function load() {
     api<Farmer[]>("/farmers")
-      .then((items) => setRows(items.map((item) => `${item.public_code} · ${item.display_name}${item.district ? ` · ${item.district}` : ""}`)))
+      .then((items) => {
+        setFarmers(items);
+        setLoginFarmerId((current) => current || items.find((item) => !item.has_login)?.id || items[0]?.id || "");
+      })
       .catch((caught: Error) => setError(caught.message));
   }
   useEffect(load, []);
@@ -100,7 +107,7 @@ export function FarmersPage() {
   return (
     <div className="page">
       <h1>Farmers</h1>
-      <p className="lede">A display name for the household or producer. Do not enter a national ID.</p>
+      <p className="lede">A display name for the household or producer. An officer can open a login so that farmer can register trees. Do not enter a national ID.</p>
       {notice ? <Banner tone="success">{notice}</Banner> : null}
       {error ? <Banner tone="error">{error}</Banner> : null}
       {canWrite ? (
@@ -117,7 +124,49 @@ export function FarmersPage() {
           <button className="primary" type="submit">Save farmer</button>
         </form>
       ) : null}
-      <SavedList rows={rows} />
+      {canOpenLogin ? (
+        <form
+          className="card form"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            setError(null);
+            try {
+              const account = await api<{ email: string }>(`/farmers/${loginFarmerId}/login`, {
+                method: "POST",
+                body: JSON.stringify({ email: loginEmail, password: loginPassword }),
+              });
+              setNotice(`Login opened for ${account.email}.`);
+              setLoginEmail("");
+              setLoginPassword("");
+              load();
+            } catch (caught) {
+              setError(message(caught));
+            }
+          }}
+        >
+          <h2>Open a farmer login</h2>
+          <SelectField
+            label="Farmer"
+            name="login_farmer_id"
+            value={loginFarmerId}
+            options={farmers.map((farmer) => ({
+              id: farmer.id,
+              label: `${farmer.display_name}${farmer.has_login ? " · login open" : ""}`,
+            }))}
+            onChange={setLoginFarmerId}
+          />
+          <div className="row">
+            <Field label="Email" name="login_email">
+              <input id="login_email" value={loginEmail} onChange={(event) => setLoginEmail(event.target.value)} required />
+            </Field>
+            <Field label="First password" name="login_password" help="At least 8 characters. Give this to the farmer in person.">
+              <input id="login_password" type="password" value={loginPassword} onChange={(event) => setLoginPassword(event.target.value)} required />
+            </Field>
+          </div>
+          <button className="primary" type="submit">Open login</button>
+        </form>
+      ) : null}
+      <SavedList rows={farmers.map((item) => `${item.public_code} · ${item.display_name}${item.district ? ` · ${item.district}` : ""}${item.has_login ? " · can sign in" : ""}`)} />
     </div>
   );
 }
@@ -586,7 +635,7 @@ export function AnalyticsPage() {
   const survival = data && data.trees > 0 ? Math.round((data.surviving_trees / data.trees) * 100) : 0;
   return (
     <div className="page">
-      <h1>Analytics</h1>
+      <h1>Reports</h1>
       <p className="lede">Counts from the records in this database. They describe what has been entered, not a national survey.</p>
       {error ? <Banner tone="error">{error}</Banner> : null}
       {data ? (

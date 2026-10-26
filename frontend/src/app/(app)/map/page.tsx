@@ -61,7 +61,6 @@ export default function MapPage() {
         <h1>Map</h1>
         <p className="lede">Markers use the coordinates stored on each record. The opening view is a map of Rwanda, not a surveyed tree.</p>
       </div>
-      <Banner tone="warning">Synthetic demonstration points are labelled on each record. They are not verified field observations.</Banner>
       {error ? <Banner tone="error">{error}</Banner> : null}
       <div className="filters">
         <select aria-label="Record type" value={kind} onChange={(event) => setKind(event.target.value)}>

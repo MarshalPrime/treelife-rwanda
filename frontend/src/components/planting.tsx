@@ -8,7 +8,7 @@ import { PlantingForm } from "@/components/forms";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { label } from "@/lib/labels";
-import type { Page, PlantingRecord, Site, Species } from "@/lib/types";
+import type { Farmer, Page, PlantingRecord, Site, Species } from "@/lib/types";
 
 export function PlantingList({ mode }: { mode: "tree" | "batch" }) {
   const base = mode === "tree" ? "trees" : "batches";
@@ -102,35 +102,60 @@ export function PlantingList({ mode }: { mode: "tree" | "batch" }) {
 export function NewPlanting({ mode }: { mode: "tree" | "batch" }) {
   const router = useRouter();
   const search = useSearchParams();
-  const { canWrite } = useAuth();
+  const { canWrite, user } = useAuth();
   const [sites, setSites] = useState<Site[]>([]);
   const [species, setSpecies] = useState<Species[]>([]);
+  const [farmers, setFarmers] = useState<Farmer[]>([]);
   const [error, setError] = useState<string | null>(null);
   const base = mode === "tree" ? "trees" : "batches";
+  const showFarmerHelp = user?.role === "field_officer";
 
   useEffect(() => {
-    Promise.all([
+    const loads: Promise<unknown>[] = [
       api<Page<Site>>("/sites?page_size=100"),
       api<Species[]>("/species"),
-    ]).then(([sitePage, speciesList]) => {
+    ];
+    if (showFarmerHelp) loads.push(api<Farmer[]>("/farmers"));
+    Promise.all(loads).then((results) => {
+      const sitePage = results[0] as Page<Site>;
+      const speciesList = results[1] as Species[];
       setSites(sitePage.items);
       setSpecies(speciesList);
+      if (showFarmerHelp) setFarmers(results[2] as Farmer[]);
     }).catch((caught: Error) => setError(caught.message));
-  }, []);
+  }, [showFarmerHelp]);
 
   if (!canWrite) return <Banner tone="error">You do not have permission to register records.</Banner>;
   if (error) return <Banner tone="error">{error}</Banner>;
   return (
     <div className="page">
       <h1>{mode === "tree" ? "Register an individual tree" : "Register a planting batch"}</h1>
+      {user?.role === "farmer" ? (
+        <p className="help">This record is saved under {user.full_name}. Your name is already on the account, so it is not asked again.</p>
+      ) : null}
       <div className="card">
         <PlantingForm
           mode={mode}
           sites={sites}
           species={species}
+          farmers={farmers}
+          showFarmerHelp={showFarmerHelp}
           initial={{ site_id: search.get("site") ?? "" }}
           onSubmit={async (payload) => {
-            const created = await api<PlantingRecord>(`/${base}`, { method: "POST", body: JSON.stringify(payload) });
+            const body = { ...payload };
+            const named = body.new_farmer as { display_name: string; district: string | null; phone: string | null } | null;
+            delete body.new_farmer;
+            if (named) {
+              const createdFarmer = await api<Farmer>("/farmers", {
+                method: "POST",
+                body: JSON.stringify({
+                  ...named,
+                  client_request_id: `${body.client_request_id}-farmer`,
+                }),
+              });
+              body.farmer_id = createdFarmer.id;
+            }
+            const created = await api<PlantingRecord>(`/${base}`, { method: "POST", body: JSON.stringify(body) });
             router.push(`/${base}/${created.id}?created=1`);
           }}
         />
