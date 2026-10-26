@@ -346,9 +346,9 @@ def _value_chain(
     db.flush()
 
 
-def seed() -> None:
+def seed(allow_production: bool = False) -> None:
     settings = get_settings()
-    if settings.is_production:
+    if settings.is_production and not allow_production and not settings.seed_demo_data:
         raise SystemExit("Refusing to seed demonstration data when APP_ENV=production.")
     db = SessionLocal()
     try:

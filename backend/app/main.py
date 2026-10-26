@@ -6,6 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.routes import router
 from app.core.config import get_settings
@@ -23,6 +24,29 @@ Coordinates use WGS 84 (EPSG:4326). Latitude is north-south. Longitude is east-w
 """
 
 
+def prepare_hosted_database() -> None:
+    """Create tables and the demonstration accounts on the hosted database."""
+    from pathlib import Path
+
+    from alembic.config import Config
+    from sqlalchemy import select
+
+    from alembic import command
+    from app.db.session import SessionLocal
+    from app.models.entities import User
+    from app.seed import seed
+
+    ini = Path(__file__).resolve().parents[1] / "alembic.ini"
+    command.upgrade(Config(str(ini)), "head")
+    db = SessionLocal()
+    try:
+        ready = db.scalar(select(User.id).where(User.email == "admin@demo.treelife.local"))
+    finally:
+        db.close()
+    if ready is None:
+        seed(allow_production=True)
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     settings = get_settings()
@@ -30,6 +54,13 @@ async def lifespan(_: FastAPI):
         settings.secret_key.startswith("dev-only") or len(settings.secret_key) < 32
     ):
         raise RuntimeError("Set a SECRET_KEY of at least 32 characters before production use.")
+    if settings.uses_hosted_database:
+        try:
+            prepare_hosted_database()
+        except Exception:
+            import traceback
+
+            traceback.print_exc()
     yield
 
 
@@ -64,6 +95,14 @@ def create_app() -> FastAPI:
         return JSONResponse(
             status_code=exc.status_code,
             content={"detail": exc.message, "errors": errors},
+        )
+
+    @app.exception_handler(SQLAlchemyError)
+    async def database_error_handler(_: Request, exc: SQLAlchemyError):
+        print(f"Database error: {exc.__class__.__name__}")
+        return JSONResponse(
+            status_code=503,
+            content={"detail": "Database is unavailable.", "errors": []},
         )
 
     @app.exception_handler(RequestValidationError)
