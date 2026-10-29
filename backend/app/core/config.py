@@ -9,6 +9,17 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 REPO_ROOT = BACKEND_ROOT.parent
 LOCAL_DATABASE_URL = "postgresql+psycopg://treelife:treelife@localhost:5432/treelife"
+LOCAL_DATABASE_HOSTS = {"localhost", "127.0.0.1", "db", "postgres", "host.docker.internal"}
+
+
+def database_host(url: str) -> str:
+    after_at = url.rsplit("@", 1)[-1]
+    host = after_at.split("/", 1)[0].split(":")[0]
+    return host.strip("[]")
+
+
+def is_local_database(url: str) -> bool:
+    return database_host(url) in LOCAL_DATABASE_HOSTS
 
 
 def normalize_database_url(url: str) -> str:
@@ -22,8 +33,7 @@ def normalize_database_url(url: str) -> str:
         cleaned = cleaned.replace(f"&{token}", "")
         cleaned = cleaned.replace(f"?{token}&", "?")
         cleaned = cleaned.replace(f"?{token}", "")
-    hosted = "localhost" not in cleaned and "127.0.0.1" not in cleaned
-    if hosted and "sslmode=" not in cleaned:
+    if not is_local_database(cleaned) and "sslmode=" not in cleaned:
         cleaned += "&sslmode=require" if "?" in cleaned else "?sslmode=require"
     return cleaned
 
@@ -59,7 +69,7 @@ class Settings(BaseSettings):
 
     @property
     def uses_hosted_database(self) -> bool:
-        return "localhost" not in self.database_url and "127.0.0.1" not in self.database_url
+        return not is_local_database(self.database_url)
 
     @property
     def cors_origin_list(self) -> list[str]:

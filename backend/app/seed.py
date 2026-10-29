@@ -207,7 +207,7 @@ def _value_chain(
     if farmer is None:
         farmer = Farmer(
             public_code=allocate_code(db, Farmer, "FARM"),
-            display_name="SYNTHETIC Demo Producer",
+            display_name="Farmer",
             organization_id=cooperative.id,
             district="Bugesera",
             notes=SYNTHETIC_NOTE,
@@ -218,6 +218,7 @@ def _value_chain(
         )
         db.add(farmer)
         db.flush()
+    farmer.display_name = "Farmer"
     if orchard.farmer_id is None:
         orchard.farmer_id = farmer.id
     if farmer.user_id is None:
@@ -371,10 +372,11 @@ def seed(allow_production: bool = False) -> None:
         smallholder = _get_or_create_user(
             db,
             "farmer@demo.treelife.local",
-            "Demo Smallholder",
+            "Farmer",
             "farmer",
             settings.demo_farmer_password,
         )
+        smallholder.full_name = "Farmer"
         urban = _site(
             db,
             officer,

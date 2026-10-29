@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import or_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.entities import IndividualTree, PlantingBatch, PlantingSite, Species
@@ -57,6 +57,7 @@ def build_map(
     query: str | None,
     district: str | None = None,
     farmer_id: uuid.UUID | None = None,
+    entered_by: uuid.UUID | None = None,
 ) -> MapResponse:
     features: list[MapFeature] = []
     unlocated: list[UnlocatedRecord] = []
@@ -90,6 +91,8 @@ def build_map(
             stmt = stmt.where(PlantingSite.district.ilike(district.strip()))
         if farmer_id:
             stmt = stmt.where(PlantingSite.farmer_id == farmer_id)
+        if entered_by:
+            stmt = stmt.where(PlantingSite.registered_by == entered_by)
         rows = (
             db.scalars(stmt.order_by(PlantingSite.created_at.desc()).limit(MAX_FEATURES + 1))
             .unique()
@@ -130,7 +133,14 @@ def build_map(
         if district:
             stmt = stmt.where(PlantingSite.district.ilike(district.strip()))
         if farmer_id:
-            stmt = stmt.where(PlantingSite.farmer_id == farmer_id)
+            stmt = stmt.where(
+                or_(
+                    model.farmer_id == farmer_id,
+                    and_(model.farmer_id.is_(None), PlantingSite.farmer_id == farmer_id),
+                )
+            )
+        if entered_by:
+            stmt = stmt.where(model.registered_by == entered_by)
         if query:
             like = f"%{query.strip()}%"
             stmt = stmt.where(

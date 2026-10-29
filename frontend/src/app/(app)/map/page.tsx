@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Banner, OriginBadge } from "@/components/AppShell";
 import { api } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import { label } from "@/lib/labels";
 import type { Farmer, MapFeature, MapResponse, Species } from "@/lib/types";
 
@@ -18,6 +19,8 @@ const paths: Record<string, string> = { site: "sites", tree: "trees", batch: "ba
 
 export default function MapPage() {
   const search = useSearchParams();
+  const { user } = useAuth();
+  const viewer = user?.role === "viewer";
   const [species, setSpecies] = useState<Species[]>([]);
   const [farmers, setFarmers] = useState<Farmer[]>([]);
   const [kind, setKind] = useState("all");
@@ -33,8 +36,9 @@ export default function MapPage() {
 
   useEffect(() => {
     api<Species[]>("/species").then(setSpecies).catch(() => setSpecies([]));
+    if (viewer) return;
     api<Farmer[]>("/farmers").then(setFarmers).catch(() => setFarmers([]));
-  }, []);
+  }, [viewer]);
 
   useEffect(() => {
     const params = new URLSearchParams();
@@ -81,10 +85,12 @@ export default function MapPage() {
           <option value="other">Other</option>
         </select>
         <input aria-label="District" placeholder="District" value={district} onChange={(event) => setDistrict(event.target.value)} />
-        <select aria-label="Farmer" value={farmerId} onChange={(event) => setFarmerId(event.target.value)}>
-          <option value="">All farmers</option>
-          {farmers.map((farmer) => <option key={farmer.id} value={farmer.id}>{farmer.display_name}</option>)}
-        </select>
+        {viewer ? null : (
+          <select aria-label="Farmer" value={farmerId} onChange={(event) => setFarmerId(event.target.value)}>
+            <option value="">All farmers</option>
+            {farmers.map((farmer) => <option key={farmer.id} value={farmer.id}>{farmer.display_name}</option>)}
+          </select>
+        )}
         <select aria-label="Status" value={status} onChange={(event) => setStatus(event.target.value)}>
           <option value="">All statuses</option>
           <option value="active">Active sites</option>

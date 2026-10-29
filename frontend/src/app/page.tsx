@@ -19,7 +19,7 @@ export default function HomePage() {
 
   useEffect(() => {
     if (loading || !user) return;
-    router.replace(user.role === "viewer" ? "/map" : "/dashboard");
+    router.replace("/dashboard");
   }, [loading, router, user]);
 
   if (loading || user) return <p className="loading">Loading…</p>;

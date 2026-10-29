@@ -3,14 +3,15 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Banner } from "@/components/AppShell";
+import { CountryOverview } from "@/components/country-overview";
+import { FarmerOverview } from "@/components/farmer-overview";
+import { OfficerOverview } from "@/components/officer-overview";
+import { AdminReport } from "@/components/report";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import type { Role, Stats } from "@/lib/types";
 
 function roleNote(role: Role | undefined) {
-  if (role === "admin") {
-    return "You are signed in as an administrator. You can review the overview, the reports, and the audit log.";
-  }
   if (role === "viewer") {
     return "You are signed in as a viewer. You can see the map and the trees. You cannot change records.";
   }
@@ -32,6 +33,11 @@ export default function DashboardPage() {
     api<Stats>("/stats").then(setStats).catch((caught: Error) => setError(caught.message));
   }, []);
 
+  if (user?.role === "admin") return <AdminReport />;
+  if (user?.role === "farmer") return <FarmerOverview />;
+  if (user?.role === "field_officer") return <OfficerOverview />;
+  if (user?.role === "viewer") return <CountryOverview />;
+
   return (
     <div className="page">
       <div>
@@ -39,14 +45,7 @@ export default function DashboardPage() {
         <p className="lede">{roleNote(user?.role)}</p>
       </div>
       {error ? <Banner tone="error">{error}</Banner> : null}
-      {user?.role === "admin" ? (
-        <div className="actions">
-          <Link className="primary" href="/analytics">Open reports</Link>
-          <Link className="secondary" href="/audit">Audit log</Link>
-          <Link className="secondary" href="/map">Open map</Link>
-          <Link className="secondary" href="/trees">Review trees</Link>
-        </div>
-      ) : canWrite ? (
+      {canWrite ? (
         <div className="actions">
           <Link className="primary" href="/sites/new">Register a site</Link>
           <Link className="secondary" href="/trees/new">Register a tree</Link>

@@ -6,9 +6,10 @@ These writes do not call the FMES adapter.
 from __future__ import annotations
 
 import uuid
+from datetime import date
 
-from sqlalchemy import func, select
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import and_, func, or_, select
+from sqlalchemy.orm import Session, aliased, joinedload
 
 from app.core.security import hash_password
 from app.domain.errors import DomainError
@@ -21,6 +22,7 @@ from app.models.entities import (
     GrowthMeasurement,
     Harvest,
     IndividualTree,
+    LifecycleEvent,
     MaintenanceActivity,
     PlantingBatch,
     PlantingSite,
@@ -31,17 +33,26 @@ from app.models.entities import (
     UserRole,
 )
 from app.schemas.valuechain import (
+    ActivityDay,
+    ActivitySlice,
     AdvisoryCreate,
     AnalyticsResponse,
+    CountryOverview,
     DistributionCreate,
     DistrictTotal,
+    DistrictTrees,
+    FarmerBadge,
     FarmerCreate,
     FarmerLoginCreate,
+    FarmerOverview,
+    FarmerPlanting,
     GrowthCreate,
     HarvestCreate,
     LotCreate,
     MaintenanceCreate,
+    OfficerOverview,
     SaleCreate,
+    SpeciesCount,
     SpeciesTotal,
 )
 from app.services.common import allocate_code, find_by_request_id, utcnow, write_audit
@@ -461,6 +472,890 @@ def _count(db: Session, model) -> int:
     return db.scalar(select(func.count()).select_from(model)) or 0
 
 
+def _report_figures(db: Session) -> dict:
+    """Counts an administrator can put in a report.
+
+    A tree is checked when an individual tree has a field visit or a status
+    other than planted or unknown, or when a batch has a survival count.
+    Survival is the share of those checked trees still marked alive.
+    """
+    recorded_trees = _count(db, IndividualTree) + int(_sum(db, PlantingBatch.quantity))
+    checked_ids = set(
+        db.scalars(select(LifecycleEvent.tree_id).where(LifecycleEvent.tree_id.is_not(None)))
+    )
+    checked_ids.update(
+        db.scalars(
+            select(IndividualTree.id).where(IndividualTree.status.notin_(["planted", "unknown"]))
+        )
+    )
+    alive_individuals = 0
+    if checked_ids:
+        alive_individuals = (
+            db.scalar(
+                select(func.count())
+                .select_from(IndividualTree)
+                .where(
+                    IndividualTree.id.in_(checked_ids),
+                    IndividualTree.status.in_(["surviving", "stressed"]),
+                )
+            )
+            or 0
+        )
+
+    latest: dict[uuid.UUID, tuple[date, int, int, uuid.UUID]] = {}
+
+    def consider(batch_id, quantity, site_id, count, day) -> None:
+        if count is None:
+            return
+        current = latest.get(batch_id)
+        if current is None or day >= current[0]:
+            latest[batch_id] = (day, int(count), int(quantity), site_id)
+
+    for row in db.execute(
+        select(
+            PlantingBatch.id,
+            PlantingBatch.quantity,
+            PlantingBatch.site_id,
+            LifecycleEvent.survival_count,
+            LifecycleEvent.event_date,
+        )
+        .join(LifecycleEvent, LifecycleEvent.batch_id == PlantingBatch.id)
+        .where(LifecycleEvent.survival_count.is_not(None))
+    ):
+        consider(*row)
+    for row in db.execute(
+        select(
+            PlantingBatch.id,
+            PlantingBatch.quantity,
+            PlantingBatch.site_id,
+            GrowthMeasurement.survival_count,
+            GrowthMeasurement.measured_on,
+        )
+        .join(GrowthMeasurement, GrowthMeasurement.batch_id == PlantingBatch.id)
+        .where(GrowthMeasurement.survival_count.is_not(None))
+    ):
+        consider(*row)
+
+    checked_batch = sum(quantity for _, _, quantity, _ in latest.values())
+    alive_batch = sum(min(count, quantity) for _, count, quantity, _ in latest.values())
+    checked_trees = len(checked_ids) + checked_batch
+    alive = alive_individuals + alive_batch
+    survival_percent = round(100 * alive / checked_trees) if checked_trees else None
+
+    counts: dict[str, int] = {}
+    for name, count in db.execute(
+        select(Species.common_name, func.count())
+        .join(IndividualTree, IndividualTree.species_id == Species.id)
+        .group_by(Species.common_name)
+    ):
+        counts[name] = counts.get(name, 0) + int(count)
+    for name, quantity in db.execute(
+        select(Species.common_name, func.coalesce(func.sum(PlantingBatch.quantity), 0))
+        .join(PlantingBatch, PlantingBatch.species_id == Species.id)
+        .group_by(Species.common_name)
+    ):
+        counts[name] = counts.get(name, 0) + int(quantity)
+
+    activity_map: dict[date, dict[str, int]] = {}
+
+    def add_species(rows) -> None:
+        for day, name, count in rows:
+            bucket = activity_map.setdefault(day, {})
+            label = name or "Site work"
+            bucket[label] = bucket.get(label, 0) + int(count)
+
+    add_species(
+        db.execute(
+            select(LifecycleEvent.event_date, Species.common_name, func.count())
+            .outerjoin(IndividualTree, LifecycleEvent.tree_id == IndividualTree.id)
+            .outerjoin(PlantingBatch, LifecycleEvent.batch_id == PlantingBatch.id)
+            .outerjoin(
+                Species,
+                Species.id == func.coalesce(IndividualTree.species_id, PlantingBatch.species_id),
+            )
+            .group_by(LifecycleEvent.event_date, Species.common_name)
+        )
+    )
+    add_species(
+        db.execute(
+            select(GrowthMeasurement.measured_on, Species.common_name, func.count())
+            .outerjoin(IndividualTree, GrowthMeasurement.tree_id == IndividualTree.id)
+            .outerjoin(PlantingBatch, GrowthMeasurement.batch_id == PlantingBatch.id)
+            .outerjoin(
+                Species,
+                Species.id == func.coalesce(IndividualTree.species_id, PlantingBatch.species_id),
+            )
+            .group_by(GrowthMeasurement.measured_on, Species.common_name)
+        )
+    )
+    add_species(
+        db.execute(
+            select(MaintenanceActivity.performed_on, Species.common_name, func.count())
+            .outerjoin(IndividualTree, MaintenanceActivity.tree_id == IndividualTree.id)
+            .outerjoin(PlantingBatch, MaintenanceActivity.batch_id == PlantingBatch.id)
+            .outerjoin(
+                Species,
+                Species.id == func.coalesce(IndividualTree.species_id, PlantingBatch.species_id),
+            )
+            .group_by(MaintenanceActivity.performed_on, Species.common_name)
+        )
+    )
+
+    visited: set[uuid.UUID] = set()
+    visited.update(site_id for _, _, _, site_id in latest.values())
+    visited.update(
+        site_id
+        for site_id in db.scalars(select(MaintenanceActivity.site_id))
+        if site_id is not None
+    )
+    visited.update(
+        db.scalars(select(LifecycleEvent.site_id).where(LifecycleEvent.site_id.is_not(None)))
+    )
+    visited.update(
+        db.scalars(
+            select(IndividualTree.site_id).where(
+                IndividualTree.id.in_(
+                    select(LifecycleEvent.tree_id).where(LifecycleEvent.tree_id.is_not(None))
+                )
+            )
+        )
+    )
+    visited.update(
+        db.scalars(
+            select(IndividualTree.site_id).where(
+                IndividualTree.status.notin_(["planted", "unknown"])
+            )
+        )
+    )
+    visited.update(
+        db.scalars(
+            select(IndividualTree.site_id).join(
+                GrowthMeasurement, GrowthMeasurement.tree_id == IndividualTree.id
+            )
+        )
+    )
+    demonstration = bool(
+        db.scalar(
+            select(IndividualTree.id)
+            .where(IndividualTree.data_origin == DataOrigin.synthetic_demo.value)
+            .limit(1)
+        )
+        or db.scalar(
+            select(PlantingBatch.id)
+            .where(PlantingBatch.data_origin == DataOrigin.synthetic_demo.value)
+            .limit(1)
+        )
+        or db.scalar(
+            select(PlantingSite.id)
+            .where(PlantingSite.data_origin == DataOrigin.synthetic_demo.value)
+            .limit(1)
+        )
+    )
+    return {
+        "recorded_trees": recorded_trees,
+        "checked_trees": checked_trees,
+        "survival_percent": survival_percent,
+        "sites": _count(db, PlantingSite),
+        "sites_visited": len(visited),
+        "includes_demonstration": demonstration,
+        "species_counts": [
+            SpeciesCount(species_common_name=name, trees=total)
+            for name, total in sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+        ],
+        "activity": [
+            ActivityDay(
+                day=day,
+                checks=sum(slices.values()),
+                by_species=[
+                    ActivitySlice(species_common_name=name, checks=count)
+                    for name, count in sorted(slices.items(), key=lambda item: (-item[1], item[0]))
+                ],
+            )
+            for day, slices in sorted(activity_map.items())[-30:]
+        ],
+    }
+
+
+def _owned(model, farmer_id: uuid.UUID):
+    return or_(
+        model.farmer_id == farmer_id,
+        and_(model.farmer_id.is_(None), PlantingSite.farmer_id == farmer_id),
+    )
+
+
+def farmer_badges(
+    recorded_trees: int, species: int, sites: int, follow_through: bool
+) -> list[FarmerBadge]:
+    """Appreciation for one account. Metals follow recorded trees: 1, 20, then 50."""
+    if recorded_trees >= 50:
+        metal = FarmerBadge(
+            key="gold",
+            title="Gold",
+            sentence="Fifty trees are recorded.",
+            earned=True,
+        )
+    elif recorded_trees >= 20:
+        metal = FarmerBadge(
+            key="silver",
+            title="Silver",
+            sentence=_trees_until(50 - recorded_trees, "gold"),
+            earned=True,
+        )
+    elif recorded_trees >= 1:
+        metal = FarmerBadge(
+            key="bronze",
+            title="Bronze",
+            sentence=_trees_until(20 - recorded_trees, "silver"),
+            earned=True,
+        )
+    else:
+        metal = FarmerBadge(
+            key="bronze",
+            title="Bronze",
+            sentence="Record your first tree.",
+            earned=False,
+        )
+    return [
+        metal,
+        FarmerBadge(
+            key="several_species",
+            title="Several species",
+            sentence=(
+                "Two or more species are on your records."
+                if species >= 2
+                else "Record a second species."
+            ),
+            earned=species >= 2,
+        ),
+        FarmerBadge(
+            key="several_places",
+            title="Several places",
+            sentence=(
+                "Trees are recorded on two or more sites."
+                if sites >= 2
+                else "Record a second site."
+            ),
+            earned=sites >= 2,
+        ),
+        FarmerBadge(
+            key="follow_through",
+            title="Follow-through",
+            sentence=(
+                "A survival check or a later visit is recorded."
+                if follow_through
+                else "Record a survival check or a later visit."
+            ),
+            earned=follow_through,
+        ),
+    ]
+
+
+def _trees_until(remaining: int, next_metal: str) -> str:
+    if remaining == 1:
+        return f"1 more tree moves this to {next_metal}."
+    return f"{remaining} more trees move this to {next_metal}."
+
+
+def _follow_through(db: Session, farmer_id: uuid.UUID) -> bool:
+    """True after a survival check or any later visit on this farmer's records."""
+    owned_trees = _owned(IndividualTree, farmer_id)
+    owned_batches = _owned(PlantingBatch, farmer_id)
+
+    def found(stmt) -> bool:
+        return db.scalar(stmt.limit(1)) is not None
+
+    if found(
+        select(IndividualTree.id)
+        .join(PlantingSite, IndividualTree.site_id == PlantingSite.id)
+        .where(owned_trees, IndividualTree.status.notin_(["planted", "unknown"]))
+    ):
+        return True
+    if found(
+        select(PlantingBatch.id)
+        .join(PlantingSite, PlantingBatch.site_id == PlantingSite.id)
+        .where(owned_batches, PlantingBatch.status.notin_(["planted", "unknown"]))
+    ):
+        return True
+    if found(
+        select(LifecycleEvent.id)
+        .join(IndividualTree, LifecycleEvent.tree_id == IndividualTree.id)
+        .join(PlantingSite, IndividualTree.site_id == PlantingSite.id)
+        .where(owned_trees)
+    ):
+        return True
+    if found(
+        select(LifecycleEvent.id)
+        .join(PlantingBatch, LifecycleEvent.batch_id == PlantingBatch.id)
+        .join(PlantingSite, PlantingBatch.site_id == PlantingSite.id)
+        .where(owned_batches)
+    ):
+        return True
+    if found(
+        select(LifecycleEvent.id)
+        .join(PlantingSite, LifecycleEvent.site_id == PlantingSite.id)
+        .where(PlantingSite.farmer_id == farmer_id)
+    ):
+        return True
+    if found(
+        select(GrowthMeasurement.id)
+        .join(IndividualTree, GrowthMeasurement.tree_id == IndividualTree.id)
+        .join(PlantingSite, IndividualTree.site_id == PlantingSite.id)
+        .where(owned_trees)
+    ):
+        return True
+    if found(
+        select(GrowthMeasurement.id)
+        .join(PlantingBatch, GrowthMeasurement.batch_id == PlantingBatch.id)
+        .join(PlantingSite, PlantingBatch.site_id == PlantingSite.id)
+        .where(owned_batches)
+    ):
+        return True
+    if found(
+        select(MaintenanceActivity.id)
+        .join(IndividualTree, MaintenanceActivity.tree_id == IndividualTree.id)
+        .join(PlantingSite, IndividualTree.site_id == PlantingSite.id)
+        .where(owned_trees)
+    ):
+        return True
+    if found(
+        select(MaintenanceActivity.id)
+        .join(PlantingBatch, MaintenanceActivity.batch_id == PlantingBatch.id)
+        .join(PlantingSite, PlantingBatch.site_id == PlantingSite.id)
+        .where(owned_batches)
+    ):
+        return True
+    return found(
+        select(MaintenanceActivity.id)
+        .join(PlantingSite, MaintenanceActivity.site_id == PlantingSite.id)
+        .where(PlantingSite.farmer_id == farmer_id)
+    )
+
+
+def held_metal(recorded_trees: int) -> str | None:
+    badge = farmer_badges(recorded_trees, 0, 0, False)[0]
+    return badge.key if badge.earned else None
+
+
+def _empty_overview(name: str) -> FarmerOverview:
+    return FarmerOverview(
+        linked=False,
+        farmer_id=None,
+        farmer_name=name,
+        sites=0,
+        trees=0,
+        batches=0,
+        recorded_trees=0,
+        surviving_trees=0,
+        harvested_kg=0,
+        sales_rwf=0,
+        species_counts=[],
+        plantings=[],
+        district=None,
+        organization_name=None,
+        phone=None,
+        metal=None,
+    )
+
+
+def collect_farmer_overview(db: Session, user: User) -> FarmerOverview:
+    """Counts and recent plantings for the signed-in farmer only."""
+    if user.role != UserRole.farmer.value:
+        raise DomainError("This overview is for a farmer account.", status_code=403)
+    farmer = farmer_for_user(db, user.id)
+    if farmer is None:
+        return _empty_overview(user.full_name)
+
+    owned_trees = _owned(IndividualTree, farmer.id)
+    owned_batches = _owned(PlantingBatch, farmer.id)
+    trees = (
+        db.scalar(
+            select(func.count())
+            .select_from(IndividualTree)
+            .join(PlantingSite, IndividualTree.site_id == PlantingSite.id)
+            .where(owned_trees)
+        )
+        or 0
+    )
+    batches = (
+        db.scalar(
+            select(func.count())
+            .select_from(PlantingBatch)
+            .join(PlantingSite, PlantingBatch.site_id == PlantingSite.id)
+            .where(owned_batches)
+        )
+        or 0
+    )
+    batch_quantity = int(
+        db.scalar(
+            select(func.coalesce(func.sum(PlantingBatch.quantity), 0))
+            .join(PlantingSite, PlantingBatch.site_id == PlantingSite.id)
+            .where(owned_batches)
+        )
+        or 0
+    )
+    surviving = (
+        db.scalar(
+            select(func.count())
+            .select_from(IndividualTree)
+            .join(PlantingSite, IndividualTree.site_id == PlantingSite.id)
+            .where(owned_trees, IndividualTree.status == "surviving")
+        )
+        or 0
+    )
+
+    def harvested_kg(model, owned) -> float:
+        return float(
+            db.scalar(
+                select(func.coalesce(func.sum(Harvest.quantity), 0))
+                .join(
+                    model,
+                    Harvest.tree_id == model.id
+                    if model is IndividualTree
+                    else Harvest.batch_id == model.id,
+                )
+                .join(PlantingSite, model.site_id == PlantingSite.id)
+                .where(Harvest.unit == "kg", owned)
+            )
+            or 0
+        )
+
+    def sales_rwf(model, owned) -> float:
+        link = (
+            Harvest.tree_id == model.id if model is IndividualTree else Harvest.batch_id == model.id
+        )
+        return float(
+            db.scalar(
+                select(func.coalesce(func.sum(Sale.amount_rwf), 0))
+                .join(Harvest, Sale.harvest_id == Harvest.id)
+                .join(model, link)
+                .join(PlantingSite, model.site_id == PlantingSite.id)
+                .where(owned)
+            )
+            or 0
+        )
+
+    counts: dict[str, int] = {}
+    for name, count in db.execute(
+        select(Species.common_name, func.count())
+        .join(IndividualTree, IndividualTree.species_id == Species.id)
+        .join(PlantingSite, IndividualTree.site_id == PlantingSite.id)
+        .where(owned_trees)
+        .group_by(Species.common_name)
+    ):
+        counts[name] = counts.get(name, 0) + int(count)
+    for name, quantity in db.execute(
+        select(Species.common_name, func.coalesce(func.sum(PlantingBatch.quantity), 0))
+        .join(PlantingBatch, PlantingBatch.species_id == Species.id)
+        .join(PlantingSite, PlantingBatch.site_id == PlantingSite.id)
+        .where(owned_batches)
+        .group_by(Species.common_name)
+    ):
+        counts[name] = counts.get(name, 0) + int(quantity)
+
+    plantings: list[tuple[date, FarmerPlanting]] = []
+    for row, species_name, site_name in db.execute(
+        select(IndividualTree, Species.common_name, PlantingSite.name)
+        .join(Species, IndividualTree.species_id == Species.id)
+        .join(PlantingSite, IndividualTree.site_id == PlantingSite.id)
+        .where(owned_trees)
+    ):
+        plantings.append(
+            (
+                row.planting_date,
+                FarmerPlanting(
+                    id=row.id,
+                    kind="tree",
+                    species_common_name=species_name,
+                    site_name=site_name,
+                    status=row.status,
+                    planting_date=row.planting_date,
+                    quantity=1,
+                ),
+            )
+        )
+    for row, species_name, site_name in db.execute(
+        select(PlantingBatch, Species.common_name, PlantingSite.name)
+        .join(Species, PlantingBatch.species_id == Species.id)
+        .join(PlantingSite, PlantingBatch.site_id == PlantingSite.id)
+        .where(owned_batches)
+    ):
+        plantings.append(
+            (
+                row.planting_date,
+                FarmerPlanting(
+                    id=row.id,
+                    kind="batch",
+                    species_common_name=species_name,
+                    site_name=site_name,
+                    status=row.status,
+                    planting_date=row.planting_date,
+                    quantity=row.quantity,
+                ),
+            )
+        )
+    plantings.sort(key=lambda item: item[0], reverse=True)
+    sites = (
+        db.scalar(
+            select(func.count())
+            .select_from(PlantingSite)
+            .where(PlantingSite.farmer_id == farmer.id)
+        )
+        or 0
+    )
+    recorded = trees + batch_quantity
+
+    return FarmerOverview(
+        linked=True,
+        farmer_id=farmer.id,
+        farmer_name=farmer.display_name,
+        sites=sites,
+        trees=trees,
+        batches=batches,
+        recorded_trees=recorded,
+        surviving_trees=surviving,
+        harvested_kg=harvested_kg(IndividualTree, owned_trees)
+        + harvested_kg(PlantingBatch, owned_batches),
+        sales_rwf=sales_rwf(IndividualTree, owned_trees) + sales_rwf(PlantingBatch, owned_batches),
+        species_counts=[
+            SpeciesCount(species_common_name=name, trees=total)
+            for name, total in sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+        ],
+        plantings=[item for _, item in plantings[:8]],
+        district=farmer.district,
+        organization_name=farmer.organization.name if farmer.organization is not None else None,
+        phone=farmer.phone,
+        metal=held_metal(recorded),
+    )
+
+
+def farmers_helped(db: Session, user_id: uuid.UUID) -> int:
+    """Distinct farmers this officer added or recorded a site, tree, visit, or sale for."""
+    found: set[uuid.UUID] = set()
+
+    def take(rows) -> None:
+        for value in rows:
+            if value is not None:
+                found.add(value)
+
+    take(db.scalars(select(Farmer.id).where(Farmer.registered_by == user_id)))
+    take(
+        db.scalars(
+            select(PlantingSite.farmer_id).where(
+                PlantingSite.registered_by == user_id,
+                PlantingSite.farmer_id.is_not(None),
+            )
+        )
+    )
+    for model in (IndividualTree, PlantingBatch):
+        take(
+            db.scalars(
+                select(func.coalesce(model.farmer_id, PlantingSite.farmer_id))
+                .join(PlantingSite, model.site_id == PlantingSite.id)
+                .where(model.registered_by == user_id)
+            )
+        )
+    take(
+        db.scalars(
+            select(Distribution.farmer_id).where(
+                Distribution.registered_by == user_id,
+                Distribution.farmer_id.is_not(None),
+            )
+        )
+    )
+    take(
+        db.scalars(
+            select(Advisory.farmer_id).where(
+                Advisory.registered_by == user_id,
+                Advisory.farmer_id.is_not(None),
+            )
+        )
+    )
+    for model, link in (
+        (IndividualTree, LifecycleEvent.tree_id == IndividualTree.id),
+        (PlantingBatch, LifecycleEvent.batch_id == PlantingBatch.id),
+    ):
+        take(
+            db.scalars(
+                select(func.coalesce(model.farmer_id, PlantingSite.farmer_id))
+                .select_from(LifecycleEvent)
+                .join(model, link)
+                .join(PlantingSite, model.site_id == PlantingSite.id)
+                .where(LifecycleEvent.recorded_by == user_id)
+            )
+        )
+    take(
+        db.scalars(
+            select(PlantingSite.farmer_id)
+            .select_from(LifecycleEvent)
+            .join(PlantingSite, LifecycleEvent.site_id == PlantingSite.id)
+            .where(LifecycleEvent.recorded_by == user_id, PlantingSite.farmer_id.is_not(None))
+        )
+    )
+    for model, link in (
+        (IndividualTree, MaintenanceActivity.tree_id == IndividualTree.id),
+        (PlantingBatch, MaintenanceActivity.batch_id == PlantingBatch.id),
+    ):
+        take(
+            db.scalars(
+                select(func.coalesce(model.farmer_id, PlantingSite.farmer_id))
+                .select_from(MaintenanceActivity)
+                .join(model, link)
+                .join(PlantingSite, model.site_id == PlantingSite.id)
+                .where(MaintenanceActivity.registered_by == user_id)
+            )
+        )
+    take(
+        db.scalars(
+            select(PlantingSite.farmer_id)
+            .select_from(MaintenanceActivity)
+            .join(PlantingSite, MaintenanceActivity.site_id == PlantingSite.id)
+            .where(
+                MaintenanceActivity.registered_by == user_id,
+                PlantingSite.farmer_id.is_not(None),
+            )
+        )
+    )
+    for model, link in (
+        (IndividualTree, Harvest.tree_id == IndividualTree.id),
+        (PlantingBatch, Harvest.batch_id == PlantingBatch.id),
+    ):
+        take(
+            db.scalars(
+                select(func.coalesce(model.farmer_id, PlantingSite.farmer_id))
+                .select_from(Harvest)
+                .join(model, link)
+                .join(PlantingSite, model.site_id == PlantingSite.id)
+                .where(Harvest.registered_by == user_id)
+            )
+        )
+    return len(found)
+
+
+def collect_officer_overview(db: Session, user: User) -> OfficerOverview:
+    """Plantings this field officer recorded, and the farmers that work reached."""
+    if user.role != UserRole.field_officer.value:
+        raise DomainError("This overview is for a field officer account.", status_code=403)
+
+    def harvested_kg(model) -> float:
+        link = (
+            Harvest.tree_id == model.id if model is IndividualTree else Harvest.batch_id == model.id
+        )
+        return float(
+            db.scalar(
+                select(func.coalesce(func.sum(Harvest.quantity), 0))
+                .join(model, link)
+                .where(Harvest.unit == "kg", model.registered_by == user.id)
+            )
+            or 0
+        )
+
+    def sales_rwf(model) -> float:
+        link = (
+            Harvest.tree_id == model.id if model is IndividualTree else Harvest.batch_id == model.id
+        )
+        return float(
+            db.scalar(
+                select(func.coalesce(func.sum(Sale.amount_rwf), 0))
+                .join(Harvest, Sale.harvest_id == Harvest.id)
+                .join(model, link)
+                .where(model.registered_by == user.id)
+            )
+            or 0
+        )
+
+    trees = (
+        db.scalar(
+            select(func.count())
+            .select_from(IndividualTree)
+            .where(IndividualTree.registered_by == user.id)
+        )
+        or 0
+    )
+    batches = (
+        db.scalar(
+            select(func.count())
+            .select_from(PlantingBatch)
+            .where(PlantingBatch.registered_by == user.id)
+        )
+        or 0
+    )
+    batch_quantity = int(
+        db.scalar(
+            select(func.coalesce(func.sum(PlantingBatch.quantity), 0)).where(
+                PlantingBatch.registered_by == user.id
+            )
+        )
+        or 0
+    )
+    surviving = (
+        db.scalar(
+            select(func.count())
+            .select_from(IndividualTree)
+            .where(
+                IndividualTree.registered_by == user.id,
+                IndividualTree.status == "surviving",
+            )
+        )
+        or 0
+    )
+    counts: dict[str, int] = {}
+    for name, count in db.execute(
+        select(Species.common_name, func.count())
+        .join(IndividualTree, IndividualTree.species_id == Species.id)
+        .where(IndividualTree.registered_by == user.id)
+        .group_by(Species.common_name)
+    ):
+        counts[name] = counts.get(name, 0) + int(count)
+    for name, quantity in db.execute(
+        select(Species.common_name, func.coalesce(func.sum(PlantingBatch.quantity), 0))
+        .join(PlantingBatch, PlantingBatch.species_id == Species.id)
+        .where(PlantingBatch.registered_by == user.id)
+        .group_by(Species.common_name)
+    ):
+        counts[name] = counts.get(name, 0) + int(quantity)
+
+    plantings: list[tuple[date, FarmerPlanting]] = []
+    tree_farmer = aliased(Farmer)
+    site_farmer = aliased(Farmer)
+    for row, species_name, site_name, farmer_name in db.execute(
+        select(
+            IndividualTree,
+            Species.common_name,
+            PlantingSite.name,
+            func.coalesce(tree_farmer.display_name, site_farmer.display_name),
+        )
+        .join(Species, IndividualTree.species_id == Species.id)
+        .join(PlantingSite, IndividualTree.site_id == PlantingSite.id)
+        .outerjoin(tree_farmer, IndividualTree.farmer_id == tree_farmer.id)
+        .outerjoin(site_farmer, PlantingSite.farmer_id == site_farmer.id)
+        .where(IndividualTree.registered_by == user.id)
+    ):
+        plantings.append(
+            (
+                row.planting_date,
+                FarmerPlanting(
+                    id=row.id,
+                    kind="tree",
+                    species_common_name=species_name,
+                    site_name=site_name,
+                    farmer_name=farmer_name,
+                    status=row.status,
+                    planting_date=row.planting_date,
+                    quantity=1,
+                ),
+            )
+        )
+    batch_farmer = aliased(Farmer)
+    batch_site_farmer = aliased(Farmer)
+    for row, species_name, site_name, farmer_name in db.execute(
+        select(
+            PlantingBatch,
+            Species.common_name,
+            PlantingSite.name,
+            func.coalesce(batch_farmer.display_name, batch_site_farmer.display_name),
+        )
+        .join(Species, PlantingBatch.species_id == Species.id)
+        .join(PlantingSite, PlantingBatch.site_id == PlantingSite.id)
+        .outerjoin(batch_farmer, PlantingBatch.farmer_id == batch_farmer.id)
+        .outerjoin(batch_site_farmer, PlantingSite.farmer_id == batch_site_farmer.id)
+        .where(PlantingBatch.registered_by == user.id)
+    ):
+        plantings.append(
+            (
+                row.planting_date,
+                FarmerPlanting(
+                    id=row.id,
+                    kind="batch",
+                    species_common_name=species_name,
+                    site_name=site_name,
+                    farmer_name=farmer_name,
+                    status=row.status,
+                    planting_date=row.planting_date,
+                    quantity=row.quantity,
+                ),
+            )
+        )
+    plantings.sort(key=lambda item: item[0], reverse=True)
+    sites = (
+        db.scalar(
+            select(func.count())
+            .select_from(PlantingSite)
+            .where(PlantingSite.registered_by == user.id)
+        )
+        or 0
+    )
+    recorded = trees + batch_quantity
+    return OfficerOverview(
+        officer_name=user.full_name,
+        farmers_helped=farmers_helped(db, user.id),
+        sites=sites,
+        trees=trees,
+        batches=batches,
+        recorded_trees=recorded,
+        surviving_trees=surviving,
+        harvested_kg=harvested_kg(IndividualTree) + harvested_kg(PlantingBatch),
+        sales_rwf=sales_rwf(IndividualTree) + sales_rwf(PlantingBatch),
+        species_counts=[
+            SpeciesCount(species_common_name=name, trees=total)
+            for name, total in sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+        ],
+        plantings=[item for _, item in plantings[:8]],
+        metal=held_metal(recorded),
+    )
+
+
+def collect_country_overview(db: Session) -> CountryOverview:
+    """Trees by species and district. No farmer or officer names."""
+    trees = db.scalar(select(func.count()).select_from(IndividualTree)) or 0
+    batch_quantity = int(db.scalar(select(func.coalesce(func.sum(PlantingBatch.quantity), 0))) or 0)
+    species: dict[str, int] = {}
+    for name, count in db.execute(
+        select(Species.common_name, func.count())
+        .join(IndividualTree, IndividualTree.species_id == Species.id)
+        .group_by(Species.common_name)
+    ):
+        species[name] = species.get(name, 0) + int(count)
+    for name, quantity in db.execute(
+        select(Species.common_name, func.coalesce(func.sum(PlantingBatch.quantity), 0))
+        .join(PlantingBatch, PlantingBatch.species_id == Species.id)
+        .group_by(Species.common_name)
+    ):
+        species[name] = species.get(name, 0) + int(quantity)
+
+    districts: dict[str, int] = {}
+
+    def add_district(rows) -> None:
+        for district, count in rows:
+            label = district or "District not recorded"
+            districts[label] = districts.get(label, 0) + int(count)
+
+    add_district(
+        db.execute(
+            select(PlantingSite.district, func.count())
+            .join(IndividualTree, IndividualTree.site_id == PlantingSite.id)
+            .group_by(PlantingSite.district)
+        )
+    )
+    add_district(
+        db.execute(
+            select(PlantingSite.district, func.coalesce(func.sum(PlantingBatch.quantity), 0))
+            .join(PlantingBatch, PlantingBatch.site_id == PlantingSite.id)
+            .group_by(PlantingSite.district)
+        )
+    )
+    return CountryOverview(
+        recorded_trees=trees + batch_quantity,
+        species_counts=[
+            SpeciesCount(species_common_name=name, trees=total)
+            for name, total in sorted(species.items(), key=lambda item: (-item[1], item[0]))
+        ],
+        districts=[
+            DistrictTrees(district=name, trees=total)
+            for name, total in sorted(districts.items(), key=lambda item: (-item[1], item[0]))
+        ],
+    )
+
+
 def collect_analytics(db: Session) -> AnalyticsResponse:
     from app.models.entities import TreeStatus
 
@@ -505,6 +1400,7 @@ def collect_analytics(db: Session) -> AnalyticsResponse:
             .where(IndividualTree.status == TreeStatus.surviving.value)
         )
         or 0,
+        **_report_figures(db),
         by_species=[
             SpeciesTotal(
                 species_common_name=name,

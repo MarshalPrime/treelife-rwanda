@@ -18,7 +18,7 @@ export default function AuthenticatedLayout({ children }: { children: React.Reac
       return;
     }
     if (!pathAllowed(user.role, pathname)) {
-      router.replace(user.role === "viewer" ? "/map" : "/dashboard");
+      router.replace("/dashboard");
     }
   }, [loading, pathname, router, user]);
 

@@ -187,9 +187,51 @@ def test_value_chain_from_nursery_to_sale(client, accounts):
     assert body["advisories"] == 1
     assert body["maintenance_activities"] == 1
     assert body["growth_measurements"] == 1
+    assert body["recorded_trees"] == 1
+    assert body["checked_trees"] == 0
+    assert body["survival_percent"] is None
+    assert body["sites"] == 2
+    assert body["sites_visited"] == 1
+    assert body["species_counts"][0]["trees"] == 1
+    assert len(body["activity"]) == 2
+    by_day = {row["day"]: row for row in body["activity"]}
+    assert by_day["2026-06-01"]["by_species"] == [{"species_common_name": "Avocado", "checks": 1}]
+    assert by_day["2026-05-01"]["by_species"] == [{"species_common_name": "Site work", "checks": 1}]
 
     mapped = client.get(f"/api/v1/map?farmer_id={farmer_id}", headers=headers)
     assert mapped.status_code == 200
     titles = [feature["properties"]["title"] for feature in mapped.json()["features"]]
     assert "Receiving orchard" in titles
     assert "Nursery holding" not in titles
+
+    country = client.get("/api/v1/overview/country", headers=auth(accounts, "viewer"))
+    assert country.status_code == 200, country.text
+    country_body = country.json()
+    assert set(country_body) == {"recorded_trees", "species_counts", "districts"}
+    assert country_body["recorded_trees"] == 1
+    assert country_body["species_counts"][0]["species_common_name"] == "Avocado"
+    assert country_body["districts"] == [{"district": "Bugesera", "trees": 1}]
+    assert client.get("/api/v1/overview/country", headers=headers).status_code == 403
+
+    overview = client.get("/api/v1/overview/officer", headers=headers)
+    assert overview.status_code == 200, overview.text
+    officer = overview.json()
+    assert officer["farmers_helped"] == 1
+    assert officer["recorded_trees"] == 1
+    assert officer["metal"] == "bronze"
+    assert officer["sites"] == 2
+    assert officer["harvested_kg"] == 12
+    assert officer["sales_rwf"] == 4000
+    assert officer["species_counts"][0]["species_common_name"] == "Avocado"
+    assert officer["plantings"][0]["farmer_name"] == "SYNTHETIC Household A"
+    blocked = client.get("/api/v1/overview/officer", headers=auth(accounts, "viewer"))
+    assert blocked.status_code == 403
+
+    second = client.post(
+        "/api/v1/farmers",
+        json={"display_name": "SYNTHETIC Household B", "client_request_id": "farmer-request-0002"},
+        headers=headers,
+    )
+    assert second.status_code == 201, second.text
+    again = client.get("/api/v1/overview/officer", headers=headers)
+    assert again.json()["farmers_helped"] == 2

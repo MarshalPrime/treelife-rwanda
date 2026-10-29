@@ -89,7 +89,51 @@ p { margin: 0; }
 .secondary, .ghost { background: transparent; border-color: var(--line); color: var(--ink); }
 .sidebar .ghost { color: #f6f3ec; border-color: rgba(255,255,255,0.3); width: 100%; margin-top: 10px; }
 .primary:disabled { opacity: 0.65; cursor: progress; }
-.content { padding: 28px 20px 32px; }
+.content { position: relative; padding: 28px 20px 32px; }
+.content:has(.account-slot) { padding-top: 78px; }
+.account-slot { position: absolute; top: 16px; right: 20px; z-index: 8; }
+.account-orb {
+  width: 48px;
+  height: 48px;
+  padding: 3px;
+  border: 0;
+  border-radius: 50%;
+  background: #d9d3c7;
+  cursor: pointer;
+}
+.account-orb span {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: #f7f3ea;
+  color: var(--green);
+  font-family: var(--serif);
+  font-size: 1.25rem;
+}
+.account-orb.metal-bronze { background: conic-gradient(from 210deg, #f0c9a0, #8a4b24, #e7d3c4, #a8643a, #f0c9a0); }
+.account-orb.metal-silver { background: conic-gradient(from 210deg, #f7f8f8, #8d959c, #e4e7ea, #b7bdc2, #f7f8f8); }
+.account-orb.metal-gold { background: conic-gradient(from 210deg, #fff1c2, #c8962e, #f8e7b0, #a97812, #fff1c2); }
+.account-panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: min(280px, calc(100vw - 28px));
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+}
+.account-panel strong { font-family: var(--serif); font-size: 1.35rem; }
+.account-identity { display: grid; gap: 4px; }
+.account-identity p { margin: 0; color: var(--muted); }
+.account-line { display: flex; align-items: center; gap: 8px; margin: 0; }
+.account-medal { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; }
+.account-panel .ghost { justify-self: start; margin-top: 4px; }
 .page { max-width: 1040px; margin: 0 auto; display: grid; gap: 18px; }
 .page-head, .split { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
 .lede { color: var(--muted); max-width: 62ch; }
@@ -219,6 +263,41 @@ th, td { padding: 12px 8px; border-bottom: 1px solid var(--line); vertical-align
   box-shadow: 0 1px 4px rgba(28, 25, 21, 0.35);
 }
 .map-frame { height: min(70vh, 640px); border-radius: 12px; overflow: hidden; border: 1px solid var(--line); }
+.report-page { max-width: 1280px; }
+.report-board { display: grid; gap: 22px; }
+.report-main { display: grid; gap: 22px; }
+.kpi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.kpi { background: #f6f4ef; border: 1px solid var(--line); border-radius: 12px; padding: 18px 16px; }
+.kpi strong { display: block; font-family: var(--serif); font-size: 1.65rem; }
+.kpi span { color: var(--muted); font-size: 0.86rem; }
+.species-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; }
+.species-tile { display: grid; gap: 6px; }
+.species-tile strong { font-size: 1.45rem; }
+.species-tile span { color: var(--muted); font-size: 1rem; }
+.species-swatch { position: relative; height: 168px; border-radius: 14px; overflow: hidden; display: grid; place-items: center; }
+.species-photo { object-fit: cover; }
+.activity-legend { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px 14px; margin: 0; padding: 0; list-style: none; max-width: 52%; }
+.activity-legend li { display: flex; align-items: center; gap: 6px; font-size: 0.92rem; }
+.activity-legend span { width: 14px; height: 14px; border-radius: 4px; flex: none; }
+.activity-chart { display: flex; align-items: flex-end; gap: 18px; min-height: 240px; }
+.activity-col { flex: 1; min-width: 64px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 8px; }
+.activity-count { font-size: 1rem; color: var(--muted); }
+.activity-stack { width: 100%; max-width: 56px; display: flex; flex-direction: column-reverse; border-radius: 8px 8px 0 0; overflow: hidden; }
+.activity-segment { width: 100%; min-height: 8px; }
+.activity-col small { font-size: 0.92rem; color: var(--muted); text-align: center; }
+.report-map { height: 520px; }
+.record-card { display: grid; gap: 4px; }
+.record-card h3 { margin: 0; font-size: 1.05rem; }
+.record-card p { margin: 0; }
+.record-card .kicker { font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.record-card .scientific { font-style: italic; color: var(--muted); }
+.leaflet-popup.record-popup .leaflet-popup-content-wrapper { border-radius: 14px; }
+.leaflet-popup.record-popup .leaflet-popup-content { margin: 14px 16px 16px; min-width: 220px; }
+.report-map-card { align-content: start; }
+.report-page details ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; }
+.planting-list { list-style: none; margin: 0; padding: 0; display: grid; }
+.planting-list li { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.planting-list p { margin: 4px 0 0; }
 .map-frame .leaflet-container { height: 100%; width: 100%; background: #dfe8e2; }
 .record-list { display: grid; gap: 8px; max-height: 640px; overflow: auto; }
 .record-button, .choice {
@@ -417,7 +496,10 @@ a.auth-mark { text-decoration: none; color: white; }
   .nav { flex: none; flex-direction: row; overflow-x: auto; overflow-y: hidden; width: 100%; }
   .nav a { white-space: nowrap; padding: 8px 10px; }
   .content { padding: 16px 14px calc(var(--nav) + 28px); }
-  .row, .definition, .map-layout, .location-search, .home-grid, .home-scene-grid, .home-how ol, .home-hero { grid-template-columns: 1fr; }
+  .content:has(.account-slot) { padding-top: 16px; }
+  .account-slot { position: fixed; top: 8px; right: 12px; z-index: 20; }
+  .row, .definition, .map-layout, .location-search, .home-grid, .home-scene-grid, .home-how ol, .home-hero, .kpi-grid { grid-template-columns: 1fr; }
+  .report-map { height: 420px; }
   .home-bar { padding: 14px 16px; }
   .home-bar nav a:not(.primary):not(.secondary) { display: none; }
   .home-hero { min-height: 0; padding: 32px 16px 40px; }

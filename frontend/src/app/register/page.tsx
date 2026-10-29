@@ -57,7 +57,7 @@ export default function RegisterPage() {
   const passwordReady = checks.every((check) => check.ok);
 
   useEffect(() => {
-    if (!loading && user) router.replace(user.role === "viewer" ? "/map" : "/dashboard");
+    if (!loading && user) router.replace("/dashboard");
   }, [loading, router, user]);
 
   async function handleSubmit(event: React.FormEvent) {
@@ -82,7 +82,7 @@ export default function RegisterPage() {
         }),
       });
       const account = await login(email, password);
-      router.replace(account.role === "viewer" ? "/map" : "/dashboard");
+      router.replace("/dashboard");
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : "Registration failed.");
       setSaving(false);

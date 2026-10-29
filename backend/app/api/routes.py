@@ -43,10 +43,12 @@ from app.schemas.valuechain import (
     AdvisoryCreate,
     AdvisoryRead,
     AnalyticsResponse,
+    CountryOverview,
     DistributionCreate,
     DistributionRead,
     FarmerCreate,
     FarmerLoginCreate,
+    FarmerOverview,
     FarmerRead,
     GrowthCreate,
     GrowthRead,
@@ -56,6 +58,7 @@ from app.schemas.valuechain import (
     LotRead,
     MaintenanceCreate,
     MaintenanceRead,
+    OfficerOverview,
     SaleCreate,
     SaleRead,
 )
@@ -94,6 +97,9 @@ from app.services.serialize import (
 )
 from app.services.valuechain import (
     collect_analytics,
+    collect_country_overview,
+    collect_farmer_overview,
+    collect_officer_overview,
     create_advisory,
     create_distribution,
     create_farmer,
@@ -482,6 +488,7 @@ def get_map(
     q: str | None = Query(default=None, max_length=200),
     district: str | None = Query(default=None, max_length=120),
     farmer_id: uuid.UUID | None = None,
+    entered_by: uuid.UUID | None = None,
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ) -> MapResponse:
@@ -494,6 +501,7 @@ def get_map(
         query=q,
         district=district,
         farmer_id=farmer_id,
+        entered_by=entered_by,
     )
 
 
@@ -797,6 +805,29 @@ def post_advisory(
     row, replay = create_advisory(db, user, payload)
     mark_created(response, replay)
     return next(item for item in get_advisories(db) if item.id == row.id)
+
+
+@router.get("/overview/mine", response_model=FarmerOverview)
+def my_overview(
+    db: Session = Depends(get_db), user: User = Depends(get_current_user)
+) -> FarmerOverview:
+    return collect_farmer_overview(db, user)
+
+
+@router.get("/overview/officer", response_model=OfficerOverview)
+def officer_overview(
+    db: Session = Depends(get_db), user: User = Depends(get_current_user)
+) -> OfficerOverview:
+    return collect_officer_overview(db, user)
+
+
+@router.get("/overview/country", response_model=CountryOverview)
+def country_overview(
+    db: Session = Depends(get_db), user: User = Depends(get_current_user)
+) -> CountryOverview:
+    if user.role != "viewer":
+        raise DomainError("This overview is for a viewer account.", status_code=403)
+    return collect_country_overview(db)
 
 
 @router.get("/analytics", response_model=AnalyticsResponse)

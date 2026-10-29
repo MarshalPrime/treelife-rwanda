@@ -23,6 +23,11 @@ function Facts({ rows }: { rows: [string, React.ReactNode][] }) {
   );
 }
 
+function visibleToViewer(rows: [string, React.ReactNode][], role: string | undefined) {
+  if (role !== "viewer") return rows;
+  return rows.filter(([name]) => name !== "Farmer" && name !== "Registered by");
+}
+
 function InspectionForm({
   target,
   onSaved,
@@ -215,7 +220,7 @@ function EventSection({
 export function PlantingDetail({ mode }: { mode: "tree" | "batch" }) {
   const params = useParams<{ id: string }>();
   const search = useSearchParams();
-  const { canWrite } = useAuth();
+  const { canWrite, user } = useAuth();
   const [record, setRecord] = useState<PlantingRecord | null>(null);
   const [events, setEvents] = useState<LifecycleEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -254,11 +259,11 @@ export function PlantingDetail({ mode }: { mode: "tree" | "batch" }) {
       </div>
       <div className="actions">
         {canWrite ? <Link className="primary" href={`/${base}/${record.id}/edit`}>Edit</Link> : null}
-        <Link className="secondary" href={`/sites/${record.site_id}`}>Open site</Link>
+        {user?.role === "viewer" ? null : <Link className="secondary" href={`/sites/${record.site_id}`}>Open site</Link>}
         {record.has_coordinates ? <Link className="secondary" href={`/map?focus=${record.id}`}>Show on map</Link> : <span className="badge muted">No coordinates</span>}
       </div>
       <section className="card">
-        <Facts rows={[
+        <Facts rows={visibleToViewer([
           ["Site", record.site_name ?? "—"],
           ["Farmer", record.farmer_name ?? "—"],
           ["Species", `${record.species_common_name ?? "—"} (${record.species_scientific_name ?? "—"})`],
@@ -270,7 +275,7 @@ export function PlantingDetail({ mode }: { mode: "tree" | "batch" }) {
           ["Registered by", record.registered_by_name ?? "—"],
           ["Registered", formatWhen(record.registered_at)],
           ["Notes", record.notes ?? "—"],
-        ]} />
+        ], user?.role)} />
       </section>
       <EventSection
         events={events}

@@ -381,9 +381,88 @@ class SpeciesTotal(BaseModel):
     harvested_count: float
 
 
+class SpeciesCount(BaseModel):
+    species_common_name: str
+    trees: int
+
+
+class ActivitySlice(BaseModel):
+    species_common_name: str
+    checks: int
+
+
+class ActivityDay(BaseModel):
+    day: date
+    checks: int
+    by_species: list[ActivitySlice]
+
+
+class FarmerPlanting(BaseModel):
+    id: uuid.UUID
+    kind: str
+    species_common_name: str
+    site_name: str | None
+    farmer_name: str | None = None
+    status: str
+    planting_date: date
+    quantity: int
+
+
+class FarmerBadge(BaseModel):
+    key: str
+    title: str
+    sentence: str
+    earned: bool
+
+
+class FarmerOverview(BaseModel):
+    linked: bool
+    farmer_id: uuid.UUID | None
+    farmer_name: str
+    sites: int
+    trees: int
+    batches: int
+    recorded_trees: int
+    surviving_trees: int
+    harvested_kg: float
+    sales_rwf: float
+    species_counts: list[SpeciesCount]
+    plantings: list[FarmerPlanting]
+    district: str | None
+    organization_name: str | None
+    phone: str | None
+    metal: str | None
+
+
+class OfficerOverview(BaseModel):
+    officer_name: str
+    farmers_helped: int
+    sites: int
+    trees: int
+    batches: int
+    recorded_trees: int
+    surviving_trees: int
+    harvested_kg: float
+    sales_rwf: float
+    species_counts: list[SpeciesCount]
+    plantings: list[FarmerPlanting]
+    metal: str | None
+
+
 class DistrictTotal(BaseModel):
     district: str
     sites: int
+
+
+class DistrictTrees(BaseModel):
+    district: str
+    trees: int
+
+
+class CountryOverview(BaseModel):
+    recorded_trees: int
+    species_counts: list[SpeciesCount]
+    districts: list[DistrictTrees]
 
 
 class AnalyticsResponse(BaseModel):
@@ -402,5 +481,13 @@ class AnalyticsResponse(BaseModel):
     advisories: int
     trees: int
     surviving_trees: int
+    recorded_trees: int
+    checked_trees: int
+    survival_percent: int | None
+    sites: int
+    sites_visited: int
+    includes_demonstration: bool
+    species_counts: list[SpeciesCount]
+    activity: list[ActivityDay]
     by_species: list[SpeciesTotal]
     by_district: list[DistrictTotal]

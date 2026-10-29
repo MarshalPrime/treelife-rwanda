@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { FarmerAccount } from "@/components/farmer-account";
 import { ApiError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { readOutbox, removeOutbox } from "@/lib/outbox";
@@ -34,6 +35,7 @@ const adminLinks = [
 ];
 
 const viewerLinks = [
+  ["/dashboard", "Overview"],
   ["/map", "Map"],
   ["/trees", "Trees"],
 ];
@@ -46,7 +48,7 @@ export function linksForRole(role: string | undefined) {
 
 export function pathAllowed(role: string, pathname: string) {
   if (role === "viewer") {
-    return pathname === "/map" || pathname === "/trees" || /^\/trees\/[^/]+$/.test(pathname);
+    return pathname === "/dashboard" || pathname === "/map" || pathname === "/trees" || /^\/trees\/[^/]+$/.test(pathname);
   }
   if (role === "admin") {
     if (pathname.includes("/edit") || pathname.endsWith("/new")) return false;
@@ -88,6 +90,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  const hasAccount = user?.role === "farmer" || user?.role === "field_officer";
+
   function signOut() {
     logout();
     router.replace("/login");
@@ -98,11 +102,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <a className="skip" href="#main">Skip to content</a>
       <header className="mobile-bar">
         <strong>TreeLife</strong>
-        <span>{user?.full_name}</span>
-        <button className="ghost" type="button" onClick={signOut}>Log out</button>
+        {hasAccount ? null : <span>{user?.full_name}</span>}
+        {hasAccount ? null : (
+          <button className="ghost" type="button" onClick={signOut}>Log out</button>
+        )}
       </header>
       <aside className="sidebar">
-        <Link className="brand" href={user?.role === "viewer" ? "/map" : "/dashboard"}>
+        <Link className="brand" href="/dashboard">
           <strong>TreeLife</strong>
           <span>Rwanda registration</span>
         </Link>
@@ -133,6 +139,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
       <div className="content" id="main">
+        {hasAccount ? <FarmerAccount /> : null}
         {pending > 0 ? (
           <Banner tone="warning">
             {pending} submission{pending === 1 ? "" : "s"} saved on this device. They send when the connection returns.
