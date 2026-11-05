@@ -229,6 +229,53 @@ def test_pagination_filter_and_audit(client, accounts):
     assert audit.json()["total"] >= 3
 
 
+def test_map_all_keeps_all_site_districts(client, accounts):
+    species = make_species(client, accounts, "Mangifera indica", "Mango")
+    huye = make_site(
+        client,
+        accounts,
+        name="Huye orchard",
+        district="Huye",
+        latitude=-2.60,
+        longitude=29.74,
+        client_request_id="map-district-huye",
+    ).json()
+    gasabo = make_site(
+        client,
+        accounts,
+        name="Gasabo orchard",
+        district="Gasabo",
+        latitude=-1.90,
+        longitude=30.10,
+        client_request_id="map-district-gasabo",
+    ).json()
+    for site, suffix, latitude, longitude in (
+        (huye, "huye", -2.60, 29.74),
+        (gasabo, "gasabo", -1.90, 30.10),
+    ):
+        tree = client.post(
+            "/api/v1/trees",
+            json={
+                "site_id": site["id"],
+                "species_id": species["id"],
+                "category": "fruit",
+                "planting_date": "2026-02-01",
+                "latitude": latitude,
+                "longitude": longitude,
+                "client_request_id": f"map-district-tree-{suffix}",
+            },
+            headers=auth(accounts),
+        )
+        assert tree.status_code == 201, tree.text
+
+    response = client.get("/api/v1/map", headers=auth(accounts))
+    assert response.status_code == 200, response.text
+    titles = {feature["properties"]["title"] for feature in response.json()["features"]}
+    assert "Huye orchard" in titles
+    assert "Gasabo orchard" in titles
+    assert sum("Mango" in title for title in titles) == 2
+
+
 def test_inspection_updates_status_and_map(client, accounts):
     species = make_species(client, accounts, "Carica papaya", "Papaya")
     site = make_site(client, accounts, client_request_id="site-for-event").json()

@@ -10,11 +10,6 @@ import type { Role } from "@/lib/types";
 
 const roles: { value: Role; title: string; detail: string }[] = [
   {
-    value: "admin",
-    title: "Administrator",
-    detail: "Overview, reports, and the audit log. This account does not register trees.",
-  },
-  {
     value: "field_officer",
     title: "Field officer",
     detail: "Register a tree or batch, and name the smallholder you are helping.",

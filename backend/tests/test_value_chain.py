@@ -198,6 +198,31 @@ def test_value_chain_from_nursery_to_sale(client, accounts):
     assert by_day["2026-06-01"]["by_species"] == [{"species_common_name": "Avocado", "checks": 1}]
     assert by_day["2026-05-01"]["by_species"] == [{"species_common_name": "Site work", "checks": 1}]
 
+    dashboard = client.get("/api/v1/dashboard?range=all", headers=headers)
+    assert dashboard.status_code == 200, dashboard.text
+    chain = dashboard.json()["value_chain"]
+    assert chain["seedlings_remaining"] == 6
+    assert chain["seedlings_distributed"] == 4
+    assert chain["unsold_kg"] == 7
+    assert chain["advisories"] == 1
+    assert chain["harvest_by_species"] == [
+        {"species_common_name": "Avocado", "harvested_kg": 12, "harvested_count": 0}
+    ]
+    assert sum(point["harvested_kg"] for point in dashboard.json()["series"]) == 12
+    assert sum(point["sales_rwf"] for point in dashboard.json()["series"]) == 4000
+
+    ranged = client.get(
+        "/api/v1/analytics?start_date=2026-05-01&end_date=2026-05-03",
+        headers=headers,
+    )
+    assert ranged.status_code == 200, ranged.text
+    assert [row["day"] for row in ranged.json()["activity"]] == [
+        "2026-05-01",
+        "2026-05-02",
+        "2026-05-03",
+    ]
+    assert ranged.json()["activity"][1]["checks"] == 0
+
     mapped = client.get(f"/api/v1/map?farmer_id={farmer_id}", headers=headers)
     assert mapped.status_code == 200
     titles = [feature["properties"]["title"] for feature in mapped.json()["features"]]
@@ -206,6 +231,7 @@ def test_value_chain_from_nursery_to_sale(client, accounts):
 
     country = client.get("/api/v1/overview/country", headers=auth(accounts, "viewer"))
     assert country.status_code == 200, country.text
+    assert client.get("/api/v1/analytics", headers=auth(accounts, "viewer")).status_code == 403
     country_body = country.json()
     assert set(country_body) == {"recorded_trees", "species_counts", "districts"}
     assert country_body["recorded_trees"] == 1
@@ -235,3 +261,69 @@ def test_value_chain_from_nursery_to_sale(client, accounts):
     assert second.status_code == 201, second.text
     again = client.get("/api/v1/overview/officer", headers=headers)
     assert again.json()["farmers_helped"] == 2
+
+
+def test_analytics_is_scoped_to_the_registering_officer(client, accounts):
+    species = make_species(client, accounts, "Mangifera indica", "Mango")
+    first_site = make_site(
+        client, accounts, name="Officer A plot", client_request_id="scope-site-a"
+    )
+    first_tree = client.post(
+        "/api/v1/trees",
+        json={
+            "site_id": first_site.json()["id"],
+            "species_id": species["id"],
+            "category": "fruit",
+            "planting_date": "2026-01-01",
+            "client_request_id": "scope-tree-a",
+        },
+        headers=auth(accounts),
+    )
+    assert first_tree.status_code == 201, first_tree.text
+
+    created = client.post(
+        "/api/v1/auth/register",
+        json={
+            "full_name": "Second Officer",
+            "email": "second-officer@scope.treelife.local",
+            "password": "scope-pass1",
+            "role": "field_officer",
+        },
+    )
+    assert created.status_code == 201, created.text
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"email": "second-officer@scope.treelife.local", "password": "scope-pass1"},
+    )
+    second_headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    second_site = client.post(
+        "/api/v1/sites",
+        json={
+            "name": "Officer B plot",
+            "site_type": "orchard",
+            "client_request_id": "scope-site-b",
+        },
+        headers=second_headers,
+    )
+    assert second_site.status_code == 201, second_site.text
+    second_tree = client.post(
+        "/api/v1/trees",
+        json={
+            "site_id": second_site.json()["id"],
+            "species_id": species["id"],
+            "category": "fruit",
+            "planting_date": "2026-01-02",
+            "client_request_id": "scope-tree-b",
+        },
+        headers=second_headers,
+    )
+    assert second_tree.status_code == 201, second_tree.text
+
+    first_report = client.get("/api/v1/analytics", headers=auth(accounts))
+    assert first_report.status_code == 200, first_report.text
+    assert first_report.json()["trees"] == 1
+    assert first_report.json()["recorded_trees"] == 1
+    second_report = client.get("/api/v1/analytics", headers=second_headers)
+    assert second_report.status_code == 200, second_report.text
+    assert second_report.json()["trees"] == 1
+    assert second_report.json()["recorded_trees"] == 1

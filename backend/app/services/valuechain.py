@@ -33,13 +33,11 @@ from app.models.entities import (
     UserRole,
 )
 from app.schemas.valuechain import (
-    ActivityDay,
-    ActivitySlice,
     AdvisoryCreate,
     AnalyticsResponse,
     CountryOverview,
+    DashboardResponse,
     DistributionCreate,
-    DistrictTotal,
     DistrictTrees,
     FarmerBadge,
     FarmerCreate,
@@ -53,7 +51,6 @@ from app.schemas.valuechain import (
     OfficerOverview,
     SaleCreate,
     SpeciesCount,
-    SpeciesTotal,
 )
 from app.services.common import allocate_code, find_by_request_id, utcnow, write_audit
 from app.services.registration import _commit, require_organization
@@ -468,212 +465,11 @@ def _sum(db: Session, column, *conditions) -> float:
     return float(db.scalar(stmt) or 0)
 
 
-def _count(db: Session, model) -> int:
-    return db.scalar(select(func.count()).select_from(model)) or 0
-
-
-def _report_figures(db: Session) -> dict:
-    """Counts an administrator can put in a report.
-
-    A tree is checked when an individual tree has a field visit or a status
-    other than planted or unknown, or when a batch has a survival count.
-    Survival is the share of those checked trees still marked alive.
-    """
-    recorded_trees = _count(db, IndividualTree) + int(_sum(db, PlantingBatch.quantity))
-    checked_ids = set(
-        db.scalars(select(LifecycleEvent.tree_id).where(LifecycleEvent.tree_id.is_not(None)))
-    )
-    checked_ids.update(
-        db.scalars(
-            select(IndividualTree.id).where(IndividualTree.status.notin_(["planted", "unknown"]))
-        )
-    )
-    alive_individuals = 0
-    if checked_ids:
-        alive_individuals = (
-            db.scalar(
-                select(func.count())
-                .select_from(IndividualTree)
-                .where(
-                    IndividualTree.id.in_(checked_ids),
-                    IndividualTree.status.in_(["surviving", "stressed"]),
-                )
-            )
-            or 0
-        )
-
-    latest: dict[uuid.UUID, tuple[date, int, int, uuid.UUID]] = {}
-
-    def consider(batch_id, quantity, site_id, count, day) -> None:
-        if count is None:
-            return
-        current = latest.get(batch_id)
-        if current is None or day >= current[0]:
-            latest[batch_id] = (day, int(count), int(quantity), site_id)
-
-    for row in db.execute(
-        select(
-            PlantingBatch.id,
-            PlantingBatch.quantity,
-            PlantingBatch.site_id,
-            LifecycleEvent.survival_count,
-            LifecycleEvent.event_date,
-        )
-        .join(LifecycleEvent, LifecycleEvent.batch_id == PlantingBatch.id)
-        .where(LifecycleEvent.survival_count.is_not(None))
-    ):
-        consider(*row)
-    for row in db.execute(
-        select(
-            PlantingBatch.id,
-            PlantingBatch.quantity,
-            PlantingBatch.site_id,
-            GrowthMeasurement.survival_count,
-            GrowthMeasurement.measured_on,
-        )
-        .join(GrowthMeasurement, GrowthMeasurement.batch_id == PlantingBatch.id)
-        .where(GrowthMeasurement.survival_count.is_not(None))
-    ):
-        consider(*row)
-
-    checked_batch = sum(quantity for _, _, quantity, _ in latest.values())
-    alive_batch = sum(min(count, quantity) for _, count, quantity, _ in latest.values())
-    checked_trees = len(checked_ids) + checked_batch
-    alive = alive_individuals + alive_batch
-    survival_percent = round(100 * alive / checked_trees) if checked_trees else None
-
-    counts: dict[str, int] = {}
-    for name, count in db.execute(
-        select(Species.common_name, func.count())
-        .join(IndividualTree, IndividualTree.species_id == Species.id)
-        .group_by(Species.common_name)
-    ):
-        counts[name] = counts.get(name, 0) + int(count)
-    for name, quantity in db.execute(
-        select(Species.common_name, func.coalesce(func.sum(PlantingBatch.quantity), 0))
-        .join(PlantingBatch, PlantingBatch.species_id == Species.id)
-        .group_by(Species.common_name)
-    ):
-        counts[name] = counts.get(name, 0) + int(quantity)
-
-    activity_map: dict[date, dict[str, int]] = {}
-
-    def add_species(rows) -> None:
-        for day, name, count in rows:
-            bucket = activity_map.setdefault(day, {})
-            label = name or "Site work"
-            bucket[label] = bucket.get(label, 0) + int(count)
-
-    add_species(
-        db.execute(
-            select(LifecycleEvent.event_date, Species.common_name, func.count())
-            .outerjoin(IndividualTree, LifecycleEvent.tree_id == IndividualTree.id)
-            .outerjoin(PlantingBatch, LifecycleEvent.batch_id == PlantingBatch.id)
-            .outerjoin(
-                Species,
-                Species.id == func.coalesce(IndividualTree.species_id, PlantingBatch.species_id),
-            )
-            .group_by(LifecycleEvent.event_date, Species.common_name)
-        )
-    )
-    add_species(
-        db.execute(
-            select(GrowthMeasurement.measured_on, Species.common_name, func.count())
-            .outerjoin(IndividualTree, GrowthMeasurement.tree_id == IndividualTree.id)
-            .outerjoin(PlantingBatch, GrowthMeasurement.batch_id == PlantingBatch.id)
-            .outerjoin(
-                Species,
-                Species.id == func.coalesce(IndividualTree.species_id, PlantingBatch.species_id),
-            )
-            .group_by(GrowthMeasurement.measured_on, Species.common_name)
-        )
-    )
-    add_species(
-        db.execute(
-            select(MaintenanceActivity.performed_on, Species.common_name, func.count())
-            .outerjoin(IndividualTree, MaintenanceActivity.tree_id == IndividualTree.id)
-            .outerjoin(PlantingBatch, MaintenanceActivity.batch_id == PlantingBatch.id)
-            .outerjoin(
-                Species,
-                Species.id == func.coalesce(IndividualTree.species_id, PlantingBatch.species_id),
-            )
-            .group_by(MaintenanceActivity.performed_on, Species.common_name)
-        )
-    )
-
-    visited: set[uuid.UUID] = set()
-    visited.update(site_id for _, _, _, site_id in latest.values())
-    visited.update(
-        site_id
-        for site_id in db.scalars(select(MaintenanceActivity.site_id))
-        if site_id is not None
-    )
-    visited.update(
-        db.scalars(select(LifecycleEvent.site_id).where(LifecycleEvent.site_id.is_not(None)))
-    )
-    visited.update(
-        db.scalars(
-            select(IndividualTree.site_id).where(
-                IndividualTree.id.in_(
-                    select(LifecycleEvent.tree_id).where(LifecycleEvent.tree_id.is_not(None))
-                )
-            )
-        )
-    )
-    visited.update(
-        db.scalars(
-            select(IndividualTree.site_id).where(
-                IndividualTree.status.notin_(["planted", "unknown"])
-            )
-        )
-    )
-    visited.update(
-        db.scalars(
-            select(IndividualTree.site_id).join(
-                GrowthMeasurement, GrowthMeasurement.tree_id == IndividualTree.id
-            )
-        )
-    )
-    demonstration = bool(
-        db.scalar(
-            select(IndividualTree.id)
-            .where(IndividualTree.data_origin == DataOrigin.synthetic_demo.value)
-            .limit(1)
-        )
-        or db.scalar(
-            select(PlantingBatch.id)
-            .where(PlantingBatch.data_origin == DataOrigin.synthetic_demo.value)
-            .limit(1)
-        )
-        or db.scalar(
-            select(PlantingSite.id)
-            .where(PlantingSite.data_origin == DataOrigin.synthetic_demo.value)
-            .limit(1)
-        )
-    )
-    return {
-        "recorded_trees": recorded_trees,
-        "checked_trees": checked_trees,
-        "survival_percent": survival_percent,
-        "sites": _count(db, PlantingSite),
-        "sites_visited": len(visited),
-        "includes_demonstration": demonstration,
-        "species_counts": [
-            SpeciesCount(species_common_name=name, trees=total)
-            for name, total in sorted(counts.items(), key=lambda item: (-item[1], item[0]))
-        ],
-        "activity": [
-            ActivityDay(
-                day=day,
-                checks=sum(slices.values()),
-                by_species=[
-                    ActivitySlice(species_common_name=name, checks=count)
-                    for name, count in sorted(slices.items(), key=lambda item: (-item[1], item[0]))
-                ],
-            )
-            for day, slices in sorted(activity_map.items())[-30:]
-        ],
-    }
+def _count(db: Session, model, condition=None) -> int:
+    statement = select(func.count()).select_from(model)
+    if condition is not None:
+        statement = statement.where(condition)
+    return db.scalar(statement) or 0
 
 
 def _owned(model, farmer_id: uuid.UUID):
@@ -1004,6 +800,10 @@ def collect_farmer_overview(db: Session, user: User) -> FarmerOverview:
     )
     recorded = trees + batch_quantity
 
+    from app.services.dashboard import read_inventory, read_outcomes, survival_figures
+
+    inventory = read_inventory(db, user)
+    checked, surviving, survival = survival_figures(inventory, read_outcomes(db, inventory))
     return FarmerOverview(
         linked=True,
         farmer_id=farmer.id,
@@ -1013,6 +813,8 @@ def collect_farmer_overview(db: Session, user: User) -> FarmerOverview:
         batches=batches,
         recorded_trees=recorded,
         surviving_trees=surviving,
+        checked_trees=checked,
+        survival_percent=survival,
         harvested_kg=harvested_kg(IndividualTree, owned_trees)
         + harvested_kg(PlantingBatch, owned_batches),
         sales_rwf=sales_rwf(IndividualTree, owned_trees) + sales_rwf(PlantingBatch, owned_batches),
@@ -1285,6 +1087,10 @@ def collect_officer_overview(db: Session, user: User) -> OfficerOverview:
         or 0
     )
     recorded = trees + batch_quantity
+    from app.services.dashboard import read_inventory, read_outcomes, survival_figures
+
+    inventory = read_inventory(db, user)
+    checked, surviving, survival = survival_figures(inventory, read_outcomes(db, inventory))
     return OfficerOverview(
         officer_name=user.full_name,
         farmers_helped=farmers_helped(db, user.id),
@@ -1293,6 +1099,8 @@ def collect_officer_overview(db: Session, user: User) -> OfficerOverview:
         batches=batches,
         recorded_trees=recorded,
         surviving_trees=surviving,
+        checked_trees=checked,
+        survival_percent=survival,
         harvested_kg=harvested_kg(IndividualTree) + harvested_kg(PlantingBatch),
         sales_rwf=sales_rwf(IndividualTree) + sales_rwf(PlantingBatch),
         species_counts=[
@@ -1356,60 +1164,36 @@ def collect_country_overview(db: Session) -> CountryOverview:
     )
 
 
-def collect_analytics(db: Session) -> AnalyticsResponse:
-    from app.models.entities import TreeStatus
+def collect_analytics(
+    db: Session,
+    user: User | None = None,
+    *,
+    start_date: date | None = None,
+    end_date: date | None = None,
+) -> AnalyticsResponse:
+    from app.services.dashboard import collect_analytics as report
 
-    species_rows = db.execute(
-        select(Species.common_name, Harvest.unit, func.coalesce(func.sum(Harvest.quantity), 0))
-        .join(IndividualTree, Harvest.tree_id == IndividualTree.id, isouter=True)
-        .join(PlantingBatch, Harvest.batch_id == PlantingBatch.id, isouter=True)
-        .join(
-            Species,
-            Species.id == func.coalesce(IndividualTree.species_id, PlantingBatch.species_id),
-        )
-        .group_by(Species.common_name, Harvest.unit)
-    ).all()
-    totals: dict[str, dict[str, float]] = {}
-    for name, unit, amount in species_rows:
-        bucket = totals.setdefault(name, {"kg": 0.0, "count": 0.0})
-        bucket[unit] = float(amount)
-    districts = db.execute(
-        select(PlantingSite.district, func.count())
-        .where(PlantingSite.district.is_not(None))
-        .group_by(PlantingSite.district)
-        .order_by(func.count().desc())
-    ).all()
-    return AnalyticsResponse(
-        farmers=_count(db, Farmer),
-        seedling_lots=_count(db, SeedlingLot),
-        seedlings_remaining=int(_sum(db, SeedlingLot.quantity_remaining)),
-        seedlings_distributed=int(_sum(db, Distribution.quantity)),
-        growth_measurements=_count(db, GrowthMeasurement),
-        maintenance_activities=_count(db, MaintenanceActivity),
-        harvests=_count(db, Harvest),
-        harvested_kg=_sum(db, Harvest.quantity, Harvest.unit == "kg"),
-        harvested_count=_sum(db, Harvest.quantity, Harvest.unit == "count"),
-        unsold_kg=_sum(db, Harvest.quantity_remaining, Harvest.unit == "kg"),
-        sales=_count(db, Sale),
-        sales_rwf=_sum(db, Sale.amount_rwf),
-        advisories=_count(db, Advisory),
-        trees=_count(db, IndividualTree),
-        surviving_trees=db.scalar(
-            select(func.count())
-            .select_from(IndividualTree)
-            .where(IndividualTree.status == TreeStatus.surviving.value)
-        )
-        or 0,
-        **_report_figures(db),
-        by_species=[
-            SpeciesTotal(
-                species_common_name=name,
-                harvested_kg=values["kg"],
-                harvested_count=values["count"],
-            )
-            for name, values in sorted(totals.items())
-        ],
-        by_district=[
-            DistrictTotal(district=district, sites=count) for district, count in districts
-        ],
+    return report(db, user, start_date=start_date, end_date=end_date)
+
+
+def collect_dashboard(
+    db: Session,
+    user: User,
+    *,
+    district: str | None = None,
+    species_id: uuid.UUID | None = None,
+    range_name: str = "90",
+    start_date: date | None = None,
+    end_date: date | None = None,
+) -> DashboardResponse:
+    from app.services.dashboard import collect_dashboard as dashboard
+
+    return dashboard(
+        db,
+        user,
+        district=district,
+        species_id=species_id,
+        range_name=range_name,
+        start_date=start_date,
+        end_date=end_date,
     )

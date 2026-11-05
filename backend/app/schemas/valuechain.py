@@ -424,6 +424,8 @@ class FarmerOverview(BaseModel):
     batches: int
     recorded_trees: int
     surviving_trees: int
+    checked_trees: int = 0
+    survival_percent: int | None = None
     harvested_kg: float
     sales_rwf: float
     species_counts: list[SpeciesCount]
@@ -442,6 +444,8 @@ class OfficerOverview(BaseModel):
     batches: int
     recorded_trees: int
     surviving_trees: int
+    checked_trees: int = 0
+    survival_percent: int | None = None
     harvested_kg: float
     sales_rwf: float
     species_counts: list[SpeciesCount]
@@ -491,3 +495,92 @@ class AnalyticsResponse(BaseModel):
     activity: list[ActivityDay]
     by_species: list[SpeciesTotal]
     by_district: list[DistrictTotal]
+
+
+class DashboardFilters(BaseModel):
+    district: str | None = None
+    species_id: uuid.UUID | None = None
+    range: str
+    start_date: date
+    end_date: date
+
+
+class DashboardOptions(BaseModel):
+    districts: list[str]
+    species: list[dict[str, object]]
+
+
+class DashboardSummary(BaseModel):
+    recorded_trees: int
+    checked_trees: int
+    surviving_trees: int
+    survival_percent: int | None
+    farmers: int
+    sites: int
+    species: int
+    districts: int
+    harvested_kg: float | None = None
+    sales_rwf: float | None = None
+    records_missing_coordinates: int
+
+
+class DashboardSeriesPoint(BaseModel):
+    day: date
+    planted: int
+    activity: int
+    harvested_kg: float | None = None
+    sales_rwf: float | None = None
+
+
+class DashboardSpeciesCount(BaseModel):
+    species_id: uuid.UUID
+    species_common_name: str
+    trees: int
+
+
+class DashboardDistrictCount(BaseModel):
+    district: str
+    trees: int
+
+
+class DashboardRecent(BaseModel):
+    id: uuid.UUID
+    kind: str
+    title: str
+    site_name: str | None
+    status: str
+    planting_date: date
+    quantity: int
+
+
+class DashboardAttention(BaseModel):
+    id: uuid.UUID
+    kind: str
+    title: str
+    reason: str
+
+
+class DashboardValueChain(BaseModel):
+    seedlings_remaining: int
+    seedlings_distributed: int
+    unsold_kg: float
+    advisories: int
+    harvest_by_species: list[SpeciesTotal]
+
+
+class DashboardResponse(BaseModel):
+    role: str
+    scope_label: str
+    linked: bool
+    includes_demonstration: bool
+    generated_at: datetime
+    filters: DashboardFilters
+    options: DashboardOptions
+    summary: DashboardSummary
+    series: list[DashboardSeriesPoint]
+    species_counts: list[DashboardSpeciesCount]
+    districts: list[DashboardDistrictCount]
+    recent: list[DashboardRecent]
+    attention: list[DashboardAttention]
+    map_query: str
+    value_chain: DashboardValueChain | None = None

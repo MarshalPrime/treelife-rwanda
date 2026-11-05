@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.security import OAuth2PasswordRequestForm
@@ -44,6 +45,7 @@ from app.schemas.valuechain import (
     AdvisoryRead,
     AnalyticsResponse,
     CountryOverview,
+    DashboardResponse,
     DistributionCreate,
     DistributionRead,
     FarmerCreate,
@@ -98,6 +100,7 @@ from app.services.serialize import (
 from app.services.valuechain import (
     collect_analytics,
     collect_country_overview,
+    collect_dashboard,
     collect_farmer_overview,
     collect_officer_overview,
     create_advisory,
@@ -201,8 +204,8 @@ def me(db: Session = Depends(get_db), user: User = Depends(get_current_user)) ->
 
 
 @router.get("/stats", response_model=StatsResponse)
-def stats(db: Session = Depends(get_db), _: User = Depends(get_current_user)) -> StatsResponse:
-    return collect_stats(db)
+def stats(db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> StatsResponse:
+    return collect_stats(db, user)
 
 
 @router.get("/organizations", response_model=list[OrganizationRead])
@@ -832,9 +835,69 @@ def country_overview(
 
 @router.get("/analytics", response_model=AnalyticsResponse)
 def analytics(
-    db: Session = Depends(get_db), _: User = Depends(get_current_user)
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ) -> AnalyticsResponse:
-    return collect_analytics(db)
+    return collect_analytics(db, user, start_date=start_date, end_date=end_date)
+
+
+@router.get("/dashboard", response_model=DashboardResponse)
+def dashboard(
+    district: str | None = Query(default=None),
+    species_id: uuid.UUID | None = Query(default=None),
+    range: str = Query(default="90"),
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> DashboardResponse:
+    return collect_dashboard(
+        db,
+        user,
+        district=district,
+        species_id=species_id,
+        range_name=range,
+        start_date=start_date,
+        end_date=end_date,
+    )
+
+
+@router.get("/dashboard/map", response_model=MapResponse)
+def dashboard_map(
+    district: str | None = Query(default=None),
+    species_id: uuid.UUID | None = Query(default=None),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> MapResponse:
+    farmer_id = None
+    entered_by = None
+    if user.role == "field_officer":
+        entered_by = user.id
+    elif user.role == "farmer":
+        farmer_id = db.scalar(select(Farmer.id).where(Farmer.user_id == user.id))
+        if farmer_id is None:
+            return MapResponse(features=[], unlocated=[], truncated=False)
+    result = build_map(
+        db,
+        kind=None,
+        species_id=species_id,
+        category=None,
+        status=None,
+        query=None,
+        district=district,
+        farmer_id=farmer_id,
+        entered_by=entered_by,
+    )
+    if user.role == "viewer":
+        # Public dashboard cards expose species and geography, never household labels.
+        for feature in result.features:
+            feature.properties.title = feature.properties.species_common_name or "Planting site"
+            feature.properties.subtitle = district or "Rwanda"
+        for record in result.unlocated:
+            record.title = "Record without coordinates"
+    return result
 
 
 @router.get("/audit", response_model=Page[AuditRead])

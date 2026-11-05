@@ -77,6 +77,7 @@ export function FarmerAccount() {
       <button
         className={`account-orb${metal ? ` metal-${metal}` : ""}`}
         type="button"
+        aria-label="Open your account"
         aria-expanded={open}
         aria-controls="farmer-account"
         onClick={() => setOpen((current) => !current)}

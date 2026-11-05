@@ -29,7 +29,7 @@ A signed-in user can:
 - see located records on a map, filter them by district or farmer, and see which records have no coordinates
 - keep a failed create on the device and send it again when the connection returns
 
-Anyone can create an account and choose administrator, field officer, farmer, or viewer. An administrator sees the overview, reports, and the audit log, and does not register trees. A field officer registers sites, trees, and batches, and names the farmer they are helping. A farmer registers for their own household, and the record uses their name. A viewer can see the map and the trees, and cannot change them. A field officer can still open a login for an existing farmer from the Farmers page.
+Anyone can create a field officer, farmer, or viewer account. Administrator accounts are provisioned by an existing administrator and are not available through public sign-up. An administrator sees the overview, reports, and the audit log, and does not register trees. A field officer registers sites, trees, and batches, and names the farmer they are helping. A farmer registers for their own household, and the record uses their name. A viewer can see the map and the trees, and cannot change them. A field officer can still open a login for an existing farmer from the Farmers page.
 
 ## Architecture
 
@@ -70,6 +70,10 @@ Open `http://localhost:3000`. The API documentation is at `http://localhost:8000
 
 `python -m app.seed` loads labelled synthetic species, organizations, users, sites, trees, batches, and one nursery-to-sale chain. It refuses to run when `APP_ENV=production`.
 
+The Compose database is published on `localhost:5433` by default so it does not collide with another PostgreSQL service already using `5432`. To use another host port, change both `POSTGRES_HOST_PORT` and the port in `DATABASE_URL` in `.env`. Services inside Compose still connect to `db:5432`.
+
+The web service is published on `localhost:3000` by default. If another local process uses that port, set `WEB_HOST_PORT` and `CORS_ORIGINS` in `.env` (for example, `WEB_HOST_PORT=3100` and `CORS_ORIGINS=http://localhost:3100`) and open that port instead.
+
 More detail is in [docs/development-setup.md](docs/development-setup.md).
 
 ## Configuration
@@ -81,6 +85,7 @@ Copy `.env.example` to `.env` if you need to override the defaults. The checked-
 | `APP_ENV` | `development` or `production` |
 | `SECRET_KEY` | Signs access tokens. Production must use a unique value of at least 32 characters. |
 | `DATABASE_URL` | SQLAlchemy URL for PostgreSQL |
+| `POSTGRES_HOST_PORT` | Host port published for the local PostGIS container (default `5433`) |
 | `CORS_ORIGINS` | Allowed browser origins |
 | `SEED_DEMO_DATA` | When `true`, the API container loads synthetic records |
 | `NEXT_PUBLIC_API_URL` | API origin used by the browser |

@@ -8,7 +8,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 REPO_ROOT = BACKEND_ROOT.parent
-LOCAL_DATABASE_URL = "postgresql+psycopg://treelife:treelife@localhost:5432/treelife"
+LOCAL_DATABASE_URL = "postgresql+psycopg://treelife:treelife@localhost:5433/treelife"
 LOCAL_DATABASE_HOSTS = {"localhost", "127.0.0.1", "db", "postgres", "host.docker.internal"}
 
 

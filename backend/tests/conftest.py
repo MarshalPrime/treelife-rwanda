@@ -1,9 +1,13 @@
+from pathlib import Path
+
 import pytest
 from alembic.config import Config
 from fastapi.testclient import TestClient
 from sqlalchemy import text
+from sqlalchemy.engine import make_url
 
 from alembic import command
+from app.core.config import get_settings
 from app.core.security import hash_password
 from app.db.session import SessionLocal
 from app.main import app
@@ -19,7 +23,16 @@ TRUNCATE = (
 
 @pytest.fixture(scope="session")
 def database():
-    command.upgrade(Config("alembic.ini"), "head")
+    database_name = make_url(get_settings().database_url).database or ""
+    if not database_name.endswith("_test"):
+        pytest.fail(
+            "Refusing to run integration tests against a non-test database. "
+            "Set DATABASE_URL to a database whose name ends in _test."
+        )
+    backend_root = Path(__file__).resolve().parents[1]
+    config = Config(str(backend_root / "alembic.ini"))
+    config.set_main_option("script_location", str(backend_root / "alembic"))
+    command.upgrade(config, "head")
     yield
 
 

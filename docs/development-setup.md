@@ -20,7 +20,9 @@ docker compose up -d db
 
 `.env.example` is committed. `.env` is not. The copy gives every collaborator the same local database URL, demo passwords, and API address. Python libraries come from `backend/requirements-dev.txt`. Web libraries come from `frontend/package-lock.json` through `npm ci`.
 
-The database listens on `localhost:5432`. User, password, and database name are all `treelife`. This password is only for the local container.
+The database listens on `localhost:5433` by default because port `5432` is commonly used by another local PostgreSQL service. User, password, and database name are all `treelife`. This password is only for the local container. Set `POSTGRES_HOST_PORT` in `.env` if you need a different host port; the API container continues to use `db:5432`. When running the API on the host, `DATABASE_URL` must use the matching published host port (for example, `localhost:5433`).
+
+The Compose web service listens on `localhost:3000` by default. If that port is occupied, set `WEB_HOST_PORT` and `CORS_ORIGINS` in `.env` (for example, `WEB_HOST_PORT=3100` and `CORS_ORIGINS=http://localhost:3100`) and use that port in the browser.
 
 ## API
 
@@ -55,11 +57,21 @@ Sign in with `officer@demo.treelife.local` and `demo-officer-pass`, or with `far
 
 The API tests need the database container.
 
+Run them against a separate database so the fixture cleanup cannot touch development data:
+
+Create the isolated database once:
+
+```bash
+docker compose exec db createdb -U treelife treelife_dashboard_test
+```
+
+The test suite refuses to run when the database name does not end in `_test`.
+
 ```bash
 cd backend
 .venv/bin/ruff check .
 .venv/bin/ruff format --check .
-.venv/bin/pytest
+DATABASE_URL=postgresql+psycopg://treelife:treelife@localhost:5433/treelife_dashboard_test .venv/bin/pytest
 ```
 
 ```bash

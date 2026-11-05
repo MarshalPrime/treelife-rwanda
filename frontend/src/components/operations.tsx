@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Banner, Field } from "@/components/AppShell";
+import { DashboardView } from "@/components/dashboard-view";
 import { ApiError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { newRequestId, todayInput } from "@/lib/validation";
@@ -609,59 +610,6 @@ export function AdvicePage() {
     </div>
   );
 }
-
-type Analytics = {
-  farmers: number;
-  seedlings_remaining: number;
-  seedlings_distributed: number;
-  growth_measurements: number;
-  maintenance_activities: number;
-  harvested_kg: number;
-  unsold_kg: number;
-  sales_rwf: number;
-  advisories: number;
-  trees: number;
-  surviving_trees: number;
-  by_species: { species_common_name: string; harvested_kg: number; harvested_count: number }[];
-  by_district: { district: string; sites: number }[];
-};
-
 export function AnalyticsPage() {
-  const [data, setData] = useState<Analytics | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  useEffect(() => {
-    api<Analytics>("/analytics").then(setData).catch((caught: Error) => setError(caught.message));
-  }, []);
-  const survival = data && data.trees > 0 ? Math.round((data.surviving_trees / data.trees) * 100) : 0;
-  return (
-    <div className="page">
-      <h1>Reports</h1>
-      <p className="lede">Counts from the records in this database. They describe what has been entered, not a national survey.</p>
-      {error ? <Banner tone="error">{error}</Banner> : null}
-      {data ? (
-        <>
-          <section className="stats" aria-label="Value chain counts">
-            <div className="stat"><strong>{data.farmers}</strong><span>Farmers</span></div>
-            <div className="stat"><strong>{data.seedlings_remaining}</strong><span>Seedlings still in nursery</span></div>
-            <div className="stat"><strong>{data.seedlings_distributed}</strong><span>Seedlings distributed</span></div>
-            <div className="stat"><strong>{survival}%</strong><span>Individual trees marked surviving</span></div>
-            <div className="stat"><strong>{data.harvested_kg}</strong><span>Kilograms harvested</span></div>
-            <div className="stat"><strong>{data.unsold_kg}</strong><span>Kilograms not yet sold</span></div>
-            <div className="stat"><strong>{data.sales_rwf}</strong><span>Sales in RWF</span></div>
-            <div className="stat"><strong>{data.advisories}</strong><span>Advice notes</span></div>
-          </section>
-          <div className="card">
-            <h2>Harvest by species</h2>
-            {data.by_species.length === 0 ? <p>No harvests yet.</p> : (
-              <ul>{data.by_species.map((row) => <li key={row.species_common_name}>{row.species_common_name}: {row.harvested_kg} kg, {row.harvested_count} fruit</li>)}</ul>
-            )}
-            <h2>Sites by district</h2>
-            {data.by_district.length === 0 ? <p>No district has been entered.</p> : (
-              <ul>{data.by_district.map((row) => <li key={row.district}>{row.district}: {row.sites}</li>)}</ul>
-            )}
-          </div>
-        </>
-      ) : null}
-    </div>
-  );
+  return <DashboardView mode="report" />;
 }

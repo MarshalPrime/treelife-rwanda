@@ -140,8 +140,8 @@ def test_registration_keeps_the_three_experiences(client, accounts):
     assert denied.status_code == 403
 
     admin = register(client, "admin", "gov@trial.treelife.local")
-    assert admin.status_code == 201, admin.text
-    admin_headers = login(client, "gov@trial.treelife.local")
+    assert admin.status_code == 403, admin.text
+    admin_headers = auth(accounts, "admin")
     audit = client.get("/api/v1/audit", headers=admin_headers)
     assert audit.status_code == 200
     admin_tree = client.post(

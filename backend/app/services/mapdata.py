@@ -108,8 +108,8 @@ def build_map(
             if site.latitude is None or site.longitude is None:
                 unlocated.append(_unlocated("site", site, title))
             else:
-                district = site.district or "Location not specified"
-                features.append(_feature("site", site, title, district, None, None))
+                site_district = site.district or "Location not specified"
+                features.append(_feature("site", site, title, site_district, None, None))
 
     def add_planted(model, kind_name: str, label: str) -> None:
         nonlocal truncated

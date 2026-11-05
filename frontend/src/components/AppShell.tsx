@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FarmerAccount } from "@/components/farmer-account";
 import { ApiError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { readOutbox, removeOutbox } from "@/lib/outbox";
+import "./app-shell.css";
 
 const fieldLinks = [
   ["/dashboard", "Overview"],
@@ -48,6 +49,7 @@ export function linksForRole(role: string | undefined) {
 
 export function pathAllowed(role: string, pathname: string) {
   if (role === "viewer") {
+    if (pathname.endsWith("/new") || pathname.includes("/edit")) return false;
     return pathname === "/dashboard" || pathname === "/map" || pathname === "/trees" || /^\/trees\/[^/]+$/.test(pathname);
   }
   if (role === "admin") {
@@ -64,6 +66,39 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
   const [pending, setPending] = useState(0);
   const [syncNote, setSyncNote] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const navigation = useRef<HTMLElement>(null);
+  const closeMenuButton = useRef<HTMLButtonElement>(null);
+  const menuTrigger = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const previousFocus = menuTrigger.current ?? document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    closeMenuButton.current?.focus();
+    function handleKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setMenuOpen(false);
+      if (event.key !== "Tab") return;
+      const items = navigation.current?.querySelectorAll<HTMLElement>("a[href], button:not([disabled])");
+      if (!items?.length) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", handleKey);
+      previousFocus?.focus();
+    };
+  }, [menuOpen]);
 
   useEffect(() => {
     let active = true;
@@ -91,6 +126,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   const hasAccount = user?.role === "farmer" || user?.role === "field_officer";
+  const roleName = user?.role === "farmer" ? "Smallholder farmer" : user?.role === "field_officer" ? "Field officer" : user?.role === "admin" ? "Administrator" : "Viewer";
+  const links = [...linksForRole(user?.role), ...(user?.role === "admin" ? [["/audit", "Audit log"]] : [])];
+  const groups = [
+    { title: "Workspace", paths: ["/dashboard", "/map"] },
+    { title: "Planting & people", paths: ["/sites", "/trees", "/batches", "/farmers", "/species"] },
+    { title: "Care & production", paths: ["/nursery", "/field", "/harvest", "/advice"] },
+    { title: "Insights", paths: ["/analytics", "/audit", "/about"] },
+  ];
+  const currentPage = links.find(([href]) => pathname === href || pathname.startsWith(`${href}/`))?.[1] ?? "TreeLife";
 
   function signOut() {
     logout();
@@ -98,48 +142,47 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="app-shell">
+    <div className="app-shell shell-v2">
       <a className="skip" href="#main">Skip to content</a>
-      <header className="mobile-bar">
-        <strong>TreeLife</strong>
-        {hasAccount ? null : <span>{user?.full_name}</span>}
-        {hasAccount ? null : (
-          <button className="ghost" type="button" onClick={signOut}>Log out</button>
-        )}
-      </header>
-      <aside className="sidebar">
-        <Link className="brand" href="/dashboard">
+      {menuOpen ? <button className="shell-backdrop" type="button" aria-label="Close navigation backdrop" tabIndex={-1} onClick={() => setMenuOpen(false)} /> : null}
+      <aside
+        className={`sidebar${menuOpen ? " shell-menu-open" : ""}`}
+        id="navigation-panel"
+        ref={navigation}
+        role={menuOpen ? "dialog" : undefined}
+        aria-modal={menuOpen ? true : undefined}
+        aria-label={menuOpen ? "Navigation" : undefined}
+      >
+        <button className="shell-close ghost" type="button" ref={closeMenuButton} onClick={() => setMenuOpen(false)} aria-label="Close navigation">Close <span aria-hidden="true">×</span></button>
+        <Link className="brand" href="/dashboard" onClick={() => setMenuOpen(false)}>
           <strong>TreeLife</strong>
-          <span>Rwanda registration</span>
+          <span>Growing Rwanda, together</span>
         </Link>
         <nav className="nav" aria-label="Primary">
-          {linksForRole(user?.role).map(([href, name]) => (
-            <Link key={href} href={href} aria-current={pathname === href || (href !== "/map" && pathname.startsWith(href)) ? "page" : undefined}>
-              {name}
-            </Link>
-          ))}
-          {user?.role === "admin" ? (
-            <Link href="/audit" aria-current={pathname.startsWith("/audit") ? "page" : undefined}>
-              Audit
-            </Link>
-          ) : null}
+          {groups.map((group) => {
+            const items = links.filter(([href]) => group.paths.includes(href));
+            if (!items.length) return null;
+            return <div className="shell-nav-group" key={group.title}>
+              <span className="shell-nav-heading">{group.title}</span>
+              {items.map(([href, name]) => <Link key={href} href={href} onClick={() => setMenuOpen(false)} aria-current={pathname === href || pathname.startsWith(`${href}/`) ? "page" : undefined}>
+                <span className="shell-nav-dot" aria-hidden="true" />{name}
+              </Link>)}
+            </div>;
+          })}
         </nav>
         <div className="sidebar-foot">
           <p>{user?.full_name}</p>
-          <small>
-            {user?.role === "farmer"
-              ? "Smallholder farmer"
-              : user?.role === "field_officer"
-                ? "Field officer"
-                : user?.role === "admin"
-                  ? "Administrator"
-                  : "Viewer"}
-          </small>
+          <small>{roleName}</small>
           <button className="ghost" type="button" onClick={signOut}>Log out</button>
         </div>
       </aside>
-      <div className="content" id="main">
-        {hasAccount ? <FarmerAccount /> : null}
+      <div className="shell-workspace" inert={menuOpen}>
+        <header className="shell-header">
+          <button className="shell-menu-toggle secondary" type="button" ref={menuTrigger} aria-controls="navigation-panel" aria-expanded={menuOpen} onClick={() => setMenuOpen(true)}><span aria-hidden="true">☰</span> Menu</button>
+          <div className="shell-breadcrumb"><span>TreeLife Rwanda</span><strong>{currentPage}</strong></div>
+          <div className="shell-identity"><span>{user?.full_name}<small>{roleName}</small></span>{hasAccount ? <FarmerAccount /> : <span className="shell-initial" aria-hidden="true">{user?.full_name.slice(0, 1).toUpperCase()}</span>}</div>
+        </header>
+        <main className="content" id="main" tabIndex={-1}>
         {pending > 0 ? (
           <Banner tone="warning">
             {pending} submission{pending === 1 ? "" : "s"} saved on this device. They send when the connection returns.
@@ -147,6 +190,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         ) : null}
         {syncNote ? <Banner tone="error">{syncNote}</Banner> : null}
         {children}
+        </main>
       </div>
     </div>
   );

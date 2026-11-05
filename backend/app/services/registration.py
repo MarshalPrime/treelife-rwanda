@@ -170,6 +170,11 @@ def _finish(db: Session, entity_type: str, entity_id: uuid.UUID) -> None:
 
 
 def register_account(db: Session, payload: RegisterRequest) -> User:
+    if payload.role == UserRole.admin:
+        raise DomainError(
+            "Administrator accounts must be created by an existing administrator.",
+            status_code=403,
+        )
     existing = db.scalar(select(User).where(User.email == payload.email))
     if existing is not None:
         raise DomainError(
@@ -833,29 +838,20 @@ def list_audit(db: Session, *, page: int, page_size: int) -> tuple[list[AuditLog
     return list(rows), total
 
 
-def collect_stats(db: Session) -> StatsResponse:
-    def count(model, *conditions) -> int:
-        stmt = select(func.count()).select_from(model)
-        for condition in conditions:
-            stmt = stmt.where(condition)
-        return db.scalar(stmt) or 0
+def collect_stats(db: Session, user: User | None = None) -> StatsResponse:
+    from app.services.dashboard import missing_coordinates, read_inventory, read_outcomes
 
-    missing = (
-        count(PlantingSite, PlantingSite.latitude.is_(None))
-        + count(IndividualTree, IndividualTree.latitude.is_(None))
-        + count(PlantingBatch, PlantingBatch.latitude.is_(None))
-    )
-    synthetic = (
-        count(PlantingSite, PlantingSite.data_origin == DataOrigin.synthetic_demo.value)
-        + count(IndividualTree, IndividualTree.data_origin == DataOrigin.synthetic_demo.value)
-        + count(PlantingBatch, PlantingBatch.data_origin == DataOrigin.synthetic_demo.value)
-        + count(LifecycleEvent, LifecycleEvent.data_origin == DataOrigin.synthetic_demo.value)
-    )
+    inventory = read_inventory(db, user)
+    outcomes = read_outcomes(db, inventory)
+    records = [*inventory.sites, *inventory.trees, *inventory.batches]
     return StatsResponse(
-        sites=count(PlantingSite),
-        trees=count(IndividualTree),
-        batches=count(PlantingBatch),
-        events=count(LifecycleEvent),
-        records_missing_coordinates=missing,
-        synthetic_records=synthetic,
+        sites=len(inventory.sites),
+        trees=len(inventory.trees),
+        batches=len(inventory.batches),
+        events=len(outcomes.events),
+        records_missing_coordinates=sum(missing_coordinates(row) for row in records),
+        synthetic_records=sum(
+            row.data_origin == DataOrigin.synthetic_demo.value
+            for row in [*records, *outcomes.events]
+        ),
     )
