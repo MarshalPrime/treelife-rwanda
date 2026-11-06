@@ -182,7 +182,7 @@ const steps = [
   },
   {
     title: "Follow it after planting",
-    body: "Add care, a harvest, a sale, and a short advice note. Open the same tree from the inventory or from its marker.",
+    body: "Add care, a harvest, and a sale. Ask the assistant about the records on that account. Open the same tree from the inventory or from its marker.",
   },
 ];
 
@@ -230,8 +230,8 @@ const features = [
     body: "Record fruit taken from a tree or batch, then what was sold, to whom, and for how many Rwandan francs.",
   },
   {
-    title: "Advice",
-    body: "Write a short recommendation an officer can keep for a farmer or a site.",
+    title: "Assistant",
+    body: "Ask about the trees this account can see, from planting and watering through harvest and selling.",
   },
   {
     title: "Reports",

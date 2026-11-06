@@ -57,6 +57,11 @@ class Settings(BaseSettings):
     demo_viewer_password: str = "demo-viewer-pass"
     demo_farmer_password: str = "demo-farmer-pass"
     profile_photo_dir: str = str(BACKEND_ROOT / "profile-photos")
+    assistant_api_key: str = ""
+    assistant_api_base_url: str = ""
+    assistant_model: str = ""
+    gemini_api_key: str = ""
+    chat_model: str = ""
 
     @model_validator(mode="after")
     def prefer_hosted_database(self):

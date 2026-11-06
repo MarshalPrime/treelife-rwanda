@@ -47,6 +47,8 @@ from app.schemas.valuechain import (
     AdvisoryCreate,
     AdvisoryRead,
     AnalyticsResponse,
+    AssistantReply,
+    AssistantRequest,
     CountryOverview,
     DashboardResponse,
     DistributionCreate,
@@ -71,6 +73,7 @@ from app.schemas.valuechain import (
     SaleCreate,
     SaleRead,
 )
+from app.services.assistant import reply as assistant_reply
 from app.services.locations import child_places
 from app.services.mapdata import build_map
 from app.services.profile_photo import (
@@ -1094,6 +1097,18 @@ def dashboard_map(
         for record in result.unlocated:
             record.title = "Record without coordinates"
     return result
+
+
+@router.post("/assistant", response_model=AssistantReply)
+def ask_assistant(
+    payload: AssistantRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> AssistantReply:
+    messages = [(item.role, item.content) for item in payload.messages]
+    if not any(role == "user" for role, _ in messages):
+        raise DomainError("Write a message first.")
+    return AssistantReply(reply=assistant_reply(db, user, messages))
 
 
 @router.get("/audit", response_model=Page[AuditRead])

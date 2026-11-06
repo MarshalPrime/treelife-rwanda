@@ -33,6 +33,11 @@ services:
       DEMO_VIEWER_PASSWORD: demo-viewer-pass
       DEMO_FARMER_PASSWORD: demo-farmer-pass
       PROFILE_PHOTO_DIR: /app/profile-photos
+      ASSISTANT_API_KEY: ${ASSISTANT_API_KEY:-}
+      ASSISTANT_API_BASE_URL: ${ASSISTANT_API_BASE_URL:-}
+      ASSISTANT_MODEL: ${ASSISTANT_MODEL:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      CHAT_MODEL: ${CHAT_MODEL:-}
     ports:
       - "8000:8000"
     depends_on:

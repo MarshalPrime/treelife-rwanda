@@ -23,12 +23,15 @@ describe("workspace navigation", () => {
   it("keeps viewer and administrator route permissions", () => {
     expect(linksForRole("viewer").map(([path]) => path)).toEqual(["/dashboard", "/map", "/trees"]);
     expect(pathAllowed("viewer", "/trees/new")).toBe(false);
+    expect(pathAllowed("viewer", "/advice")).toBe(true);
+    expect(pathAllowed("admin", "/advice")).toBe(true);
     expect(pathAllowed("admin", "/sites/new")).toBe(false);
     expect(pathAllowed("field_officer", "/sites/new")).toBe(true);
   });
 
   it("groups links and provides an accessible main landmark", () => {
     render(<AppShell><h1>Planting overview</h1></AppShell>);
+    expect(screen.getByRole("button", { name: /Leaf AI/ })).toBeInTheDocument();
     expect(screen.getByRole("main")).toHaveAttribute("id", "main");
     expect(screen.getByText("Planting & people")).toBeInTheDocument();
     expect(screen.getByText("Care & production")).toBeInTheDocument();

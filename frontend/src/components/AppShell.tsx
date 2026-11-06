@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { AssistantWidget } from "@/components/assistant";
 import { FarmerAccount } from "@/components/farmer-account";
 import { ApiError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -18,7 +19,6 @@ const fieldLinks = [
   ["/nursery", "Nursery"],
   ["/field", "Field"],
   ["/harvest", "Harvest"],
-  ["/advice", "Advice"],
   ["/analytics", "Analytics"],
   ["/map", "Map"],
   ["/species", "Species"],
@@ -54,7 +54,7 @@ export function linksForRole(role: string | undefined) {
 export function pathAllowed(role: string, pathname: string) {
   if (role === "viewer") {
     if (pathname.endsWith("/new") || pathname.includes("/edit")) return false;
-    return pathname === "/dashboard" || pathname === "/map" || pathname === "/trees" || /^\/trees\/[^/]+$/.test(pathname);
+    return pathname === "/dashboard" || pathname === "/map" || pathname === "/trees" || pathname === "/advice" || /^\/trees\/[^/]+$/.test(pathname);
   }
   if (role === "farmer") {
     if (pathname === "/farmers" || pathname.startsWith("/farmers/")) return false;
@@ -62,7 +62,7 @@ export function pathAllowed(role: string, pathname: string) {
   }
   if (role === "admin") {
     if (pathname.includes("/edit") || pathname.endsWith("/new")) return false;
-    const hidden = ["/farmers", "/nursery", "/field", "/harvest", "/advice"];
+    const hidden = ["/farmers", "/nursery", "/field", "/harvest"];
     return !hidden.some((path) => pathname === path || pathname.startsWith(`${path}/`));
   }
   return true;
@@ -139,7 +139,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const groups = [
     { title: "Workspace", paths: ["/dashboard", "/map"] },
     { title: "Planting & people", paths: ["/sites", "/trees", "/batches", "/farmers", "/species"] },
-    { title: "Care & production", paths: ["/nursery", "/field", "/harvest", "/advice"] },
+    { title: "Care & production", paths: ["/nursery", "/field", "/harvest"] },
     { title: "Insights", paths: ["/analytics", "/audit", "/about"] },
   ];
   const currentPage = links.find(([href]) => pathname === href || pathname.startsWith(`${href}/`))?.[1] ?? "TreeLife";
@@ -200,6 +200,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {children}
         </main>
       </div>
+      <AssistantWidget />
     </div>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
-import { AdvicePage } from "@/components/operations";
+import { AssistantPage } from "@/components/assistant";
 
-export default function Page() {
-  return <AdvicePage />;
+export default function AdviceRoute() {
+  return <AssistantPage />;
 }

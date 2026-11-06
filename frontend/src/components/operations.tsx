@@ -865,57 +865,6 @@ export function HarvestPage() {
   );
 }
 
-export function AdvicePage() {
-  const { canWrite } = useAuth();
-  const request = useRequestId();
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
-  const [rows, setRows] = useState<string[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-
-  function load() {
-    api<{ public_code: string; title: string; farmer_name: string | null; issued_on: string }[]>("/advisories")
-      .then((items) => setRows(items.map((item) => `${item.public_code} · ${item.title}${item.farmer_name ? ` · ${item.farmer_name}` : ""}`)))
-      .catch((caught: Error) => setError(caught.message));
-  }
-  useEffect(load, []);
-
-  async function submit(event: React.FormEvent) {
-    event.preventDefault();
-    setError(null);
-    try {
-      const created = await api<{ public_code: string }>("/advisories", {
-        method: "POST",
-        body: JSON.stringify({ title, body, issued_on: todayInput(), client_request_id: request.current() }),
-      });
-      setNotice(`${created.public_code} saved.`);
-      setTitle("");
-      setBody("");
-      request.rotate();
-      load();
-    } catch (caught) {
-      setError(message(caught));
-    }
-  }
-
-  return (
-    <div className="page">
-      <h1>Advice</h1>
-      <p className="lede">Write a short recommendation an officer can show to a farmer or attach to a site later.</p>
-      {notice ? <Banner tone="success">{notice}</Banner> : null}
-      {error ? <Banner tone="error">{error}</Banner> : null}
-      {canWrite ? (
-        <form className="card form" onSubmit={submit}>
-          <Field label="Title" name="title"><input id="title" value={title} onChange={(event) => setTitle(event.target.value)} required /></Field>
-          <Field label="Advice" name="body"><textarea id="body" value={body} onChange={(event) => setBody(event.target.value)} required /></Field>
-          <button className="primary" type="submit">Save advice</button>
-        </form>
-      ) : null}
-      <SavedList rows={rows} />
-    </div>
-  );
-}
 export function AnalyticsPage() {
   return <DashboardView mode="report" />;
 }

@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 import uuid
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -653,3 +654,24 @@ class DashboardResponse(BaseModel):
     attention: list[DashboardAttention]
     map_query: str
     value_chain: DashboardValueChain | None = None
+
+
+class AssistantMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=2000)
+
+    @field_validator("content")
+    @classmethod
+    def clean_content(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("Write a message first.")
+        return cleaned
+
+
+class AssistantRequest(BaseModel):
+    messages: list[AssistantMessage] = Field(min_length=1, max_length=12)
+
+
+class AssistantReply(BaseModel):
+    reply: str
