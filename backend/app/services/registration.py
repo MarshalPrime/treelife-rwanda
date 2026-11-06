@@ -315,7 +315,9 @@ def list_species(db: Session, query: str | None = None, *, approved: bool = Fals
     return list(db.scalars(stmt.order_by(Species.common_name.asc())).unique().all())
 
 
-def update_species(db: Session, user: User, species_id: uuid.UUID, payload: SpeciesUpdate) -> Species:
+def update_species(
+    db: Session, user: User, species_id: uuid.UUID, payload: SpeciesUpdate
+) -> Species:
     species = db.get(Species, species_id)
     if species is None:
         raise DomainError("Species was not found.", status_code=404)
@@ -577,8 +579,13 @@ def _create_planted_record(
         **planting,
         **(extra or {}),
     )
-    if own is not None and model is IndividualTree and not any(
-        getattr(payload, name) for name in ("province", "district", "sector", "cell", "village", "isibo", "household")
+    if (
+        own is not None
+        and model is IndividualTree
+        and not any(
+            getattr(payload, name)
+            for name in ("province", "district", "sector", "cell", "village", "isibo", "household")
+        )
     ):
         record.province = own.province
         record.district = own.district

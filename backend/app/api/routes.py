@@ -609,7 +609,9 @@ def _require_profile_role(user: User) -> None:
 
 
 @router.get("/profile", response_model=ProfileRead)
-def get_profile(db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> ProfileRead:
+def get_profile(
+    db: Session = Depends(get_db), user: User = Depends(get_current_user)
+) -> ProfileRead:
     _require_profile_role(user)
     if user.role == "farmer":
         farmer = _own_farmer(db, user)

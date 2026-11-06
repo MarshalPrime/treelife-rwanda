@@ -63,7 +63,9 @@ def test_officer_sees_trees_recorded_with_their_farmer(client, accounts):
         headers=headers,
     )
     assert farmer.status_code == 201, farmer.text
-    species = make_species(client, accounts, scientific_name="Persea americana", common_name="Avocado")
+    species = make_species(
+        client, accounts, scientific_name="Persea americana", common_name="Avocado"
+    )
     tree = client.post(
         "/api/v1/trees",
         json={

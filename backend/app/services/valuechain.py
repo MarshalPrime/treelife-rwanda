@@ -149,7 +149,9 @@ def _phone_key(value: str | None) -> str | None:
     return value.strip().casefold()
 
 
-def _reject_duplicate_phone(db: Session, phone: str | None, exclude_id: uuid.UUID | None = None) -> None:
+def _reject_duplicate_phone(
+    db: Session, phone: str | None, exclude_id: uuid.UUID | None = None
+) -> None:
     key = _phone_key(phone)
     if key is None:
         return

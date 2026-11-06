@@ -31,7 +31,9 @@ def upgrade() -> None:
         ),
     )
     op.add_column("individual_trees", sa.Column("planting_method", sa.String(40), nullable=True))
-    op.add_column("individual_trees", sa.Column("planting_method_note", sa.String(200), nullable=True))
+    op.add_column(
+        "individual_trees", sa.Column("planting_method_note", sa.String(200), nullable=True)
+    )
     op.add_column("individual_trees", sa.Column("soil_type", sa.String(40), nullable=True))
     op.add_column("individual_trees", sa.Column("terrain", sa.String(40), nullable=True))
     op.add_column("individual_trees", sa.Column("water_availability", sa.String(40), nullable=True))

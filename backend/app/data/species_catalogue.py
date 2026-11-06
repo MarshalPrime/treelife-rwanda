@@ -371,13 +371,17 @@ def _json(value: list[str] | None) -> str | None:
 def apply_species_catalogue(connection: Connection | Session) -> None:
     """Insert missing species and fill only blank profile fields."""
     for item in CATALOGUE:
-        existing = connection.execute(
-            text(
-                "SELECT id, data_source FROM species "
-                "WHERE lower(scientific_name) = lower(:scientific_name)"
-            ),
-            {"scientific_name": item["scientific_name"]},
-        ).mappings().first()
+        existing = (
+            connection.execute(
+                text(
+                    "SELECT id, data_source FROM species "
+                    "WHERE lower(scientific_name) = lower(:scientific_name)"
+                ),
+                {"scientific_name": item["scientific_name"]},
+            )
+            .mappings()
+            .first()
+        )
         if existing is None:
             species_id = uuid.uuid4()
             connection.execute(

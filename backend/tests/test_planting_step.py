@@ -2,7 +2,9 @@ from tests.conftest import auth, make_species
 
 
 def test_tree_can_be_registered_without_a_planting_site(client, accounts):
-    species = make_species(client, accounts, scientific_name="Mangifera indica", common_name="Mango")
+    species = make_species(
+        client, accounts, scientific_name="Mangifera indica", common_name="Mango"
+    )
     created = client.post(
         "/api/v1/trees",
         json={

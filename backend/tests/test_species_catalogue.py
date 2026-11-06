@@ -42,7 +42,10 @@ def test_starter_catalogue_keeps_existing_names_and_adds_varieties(client, accou
     assert by_name["Grevillea robusta"]["primary_uses"] is None
     assert by_name["Grevillea robusta"]["rwanda_suitability"] is None
 
-    approved = {item["scientific_name"] for item in client.get("/api/v1/species?approved=true", headers=auth(accounts)).json()}
+    approved = {
+        item["scientific_name"]
+        for item in client.get("/api/v1/species?approved=true", headers=auth(accounts)).json()
+    }
     assert "Persea americana" in approved
     assert "Grevillea robusta" in approved
     assert "Eucalyptus spp." not in approved
