@@ -21,10 +21,7 @@ from app.services.dashboard import (
 )
 
 LIST_LIMIT = 30
-MISSING_KEY = "Add GEMINI_API_KEY on the API, then try again."
-UNAVAILABLE = (
-    "The assistant is not available right now. Contact the person responsible, or try again later."
-)
+UNAVAILABLE = "Sorry, the assistant is unavailable right now. Contact the person responsible, or try again soon."
 GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/openai"
 logger = logging.getLogger(__name__)
 
@@ -95,7 +92,8 @@ def account_brief(db: Session, user: User) -> str:
 def reply(db: Session, user: User, messages: list[tuple[str, str]]) -> str:
     key, base_url, model = _provider()
     if not key:
-        raise DomainError(MISSING_KEY, status_code=503)
+        logger.warning("Assistant key is not set")
+        raise DomainError(UNAVAILABLE, status_code=503)
     payload = {
         "model": model,
         "temperature": 0.2,

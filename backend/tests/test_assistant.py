@@ -3,7 +3,7 @@ from sqlalchemy import select
 from app.core.config import get_settings
 from app.db.session import SessionLocal
 from app.models.entities import User
-from app.services.assistant import MISSING_KEY, UNAVAILABLE, account_brief, concise_reply
+from app.services.assistant import UNAVAILABLE, account_brief, concise_reply
 from tests.conftest import auth, make_site, make_species
 from tests.test_dashboard import register_user
 
@@ -115,7 +115,9 @@ def test_assistant_waits_for_a_key(client, accounts, monkeypatch):
     )
     get_settings.cache_clear()
     assert response.status_code == 503, response.text
-    assert response.json()["detail"] == MISSING_KEY
+    assert response.json()["detail"] == UNAVAILABLE
+    assert "API" not in response.text
+    assert "GEMINI" not in response.text
 
 
 def test_assistant_sends_the_account_brief_to_the_configured_api(client, accounts, monkeypatch):
