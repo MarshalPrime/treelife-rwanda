@@ -7,7 +7,7 @@ export default function AboutPage() {
       </div>
       <section className="card">
         <h2>What you can record</h2>
-        <p>A field officer or a farmer can register a planting site, an individual tree, or a planting batch, then record nursery stock, distribution, growth, maintenance, harvest, a sale, and a short advice note. An officer names the farmer they are helping. A farmer’s record uses the name on their account. An administrator reviews the overview, reports, and the audit log, and does not register trees. A viewer can see the map and the trees, and cannot change them.</p>
+        <p>A field officer or a farmer can register a planting site, an individual tree, or a planting batch, then record nursery stock, distribution, growth, maintenance, harvest, a sale, and a short advice note. An officer names the farmer they are helping. A farmer’s record uses the name on their account. The trees they record are acknowledged on their account. An administrator reviews the overview, reports, and the audit log, and does not register trees. A viewer sees recorded trees by species and district, and the map, and cannot change records or see farmer and officer names.</p>
       </section>
       <section className="card">
         <h2>Current limits</h2>

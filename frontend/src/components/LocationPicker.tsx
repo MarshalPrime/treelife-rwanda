@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MapContainer, Marker, TileLayer, useMap, useMapEvents } from "react-leaflet";
+import { MapContainer, Marker, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -15,6 +15,7 @@ const pinIcon = L.divIcon({
 });
 
 function readPair(latitude: string, longitude: string): Point | null {
+  if (!latitude.trim() || !longitude.trim()) return null;
   const lat = Number(latitude);
   const lng = Number(longitude);
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
@@ -24,6 +25,33 @@ function readPair(latitude: string, longitude: string): Point | null {
 
 function formatCoordinate(value: number) {
   return value.toFixed(6);
+}
+
+function ImageryLayer({ satellite }: { satellite: boolean }) {
+  const map = useMap();
+
+  useEffect(() => {
+    const center = map.getCenter();
+    const zoom = map.getZoom();
+    const layer = L.tileLayer(
+      satellite
+        ? "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+        : "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+      {
+        attribution: satellite
+          ? 'Imagery &copy; <a href="https://www.esri.com/">Esri</a>, Maxar, Earthstar Geographics, and the GIS User Community'
+          : '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+        maxZoom: 19,
+      },
+    );
+    layer.addTo(map);
+    map.setView(center, zoom, { animate: false });
+    return () => {
+      map.removeLayer(layer);
+    };
+  }, [satellite, map]);
+
+  return null;
 }
 
 function PinLayer({
@@ -80,6 +108,7 @@ export default function LocationPicker({
   const [note, setNote] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
   const [locating, setLocating] = useState(false);
+  const [view, setView] = useState<"map" | "satellite">("map");
 
   function useCurrentLocation() {
     if (!navigator.geolocation) {
@@ -175,18 +204,26 @@ export default function LocationPicker({
           ))}
         </div>
       ) : null}
-      <MapContainer
-        center={[-1.94, 29.87]}
-        zoom={8}
-        className="location-map"
-        scrollWheelZoom
-      >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
-        <PinLayer latitude={latitude} longitude={longitude} onPick={onPick} />
-      </MapContainer>
+      <div className="location-map-wrap">
+        <MapContainer
+          center={[-1.94, 29.87]}
+          zoom={8}
+          className="location-map"
+          scrollWheelZoom
+        >
+          <ImageryLayer satellite={view === "satellite"} />
+          <PinLayer latitude={latitude} longitude={longitude} onPick={onPick} />
+        </MapContainer>
+        <button
+          className="map-layers"
+          type="button"
+          aria-pressed={view === "satellite"}
+          onClick={() => setView((current) => (current === "map" ? "satellite" : "map"))}
+        >
+          <span className={view === "map" ? "map-layers-preview satellite" : "map-layers-preview streets"} />
+          {view === "map" ? "Satellite" : "Map"}
+        </button>
+      </div>
       <p className="help">
         {note ?? "Use current location, search, or click the map. Latitude and longitude below follow that point. The opening view is Rwanda, not a recorded tree."}
       </p>

@@ -5,7 +5,8 @@ from __future__ import annotations
 import uuid
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
+from fastapi.responses import FileResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
@@ -27,12 +28,14 @@ from app.schemas.entities import (
     OrganizationCreate,
     OrganizationRead,
     Page,
+    PlaceList,
     RegisterRequest,
     SiteCreate,
     SiteRead,
     SiteUpdate,
     SpeciesCreate,
     SpeciesRead,
+    SpeciesUpdate,
     StatsResponse,
     TokenResponse,
     TreeCreate,
@@ -52,6 +55,8 @@ from app.schemas.valuechain import (
     FarmerLoginCreate,
     FarmerOverview,
     FarmerRead,
+    FarmerTreeBrief,
+    FarmerUpdate,
     GrowthCreate,
     GrowthRead,
     HarvestCreate,
@@ -61,10 +66,19 @@ from app.schemas.valuechain import (
     MaintenanceCreate,
     MaintenanceRead,
     OfficerOverview,
+    ProfilePhotoRead,
+    ProfileRead,
     SaleCreate,
     SaleRead,
 )
+from app.services.locations import child_places
 from app.services.mapdata import build_map
+from app.services.profile_photo import (
+    MEDIA_TYPES,
+    delete_profile_photo,
+    photo_file,
+    save_profile_photo,
+)
 from app.services.registration import (
     collect_stats,
     create_batch,
@@ -86,6 +100,7 @@ from app.services.registration import (
     register_account,
     update_batch,
     update_site,
+    update_species,
     update_tree,
 )
 from app.services.serialize import (
@@ -111,6 +126,7 @@ from app.services.valuechain import (
     create_lot,
     create_maintenance,
     create_sale,
+    farmer_for_user,
     list_advisories,
     list_distributions,
     list_farmers,
@@ -120,6 +136,7 @@ from app.services.valuechain import (
     list_maintenance,
     list_sales,
     open_farmer_login,
+    update_farmer,
 )
 
 router = APIRouter()
@@ -200,6 +217,7 @@ def me(db: Session = Depends(get_db), user: User = Depends(get_current_user)) ->
         organization_id=user.organization_id,
         is_active=user.is_active,
         farmer_id=farmer_id,
+        profile_photo_at=user.profile_photo_at,
     )
 
 
@@ -228,19 +246,42 @@ def post_organization(
 @router.get("/species", response_model=list[SpeciesRead])
 def get_species(
     q: str | None = Query(default=None, max_length=200),
+    approved: bool = Query(default=False),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ) -> list[SpeciesRead]:
-    return [species_to_read(item) for item in list_species(db, q)]
+    return [species_to_read(item) for item in list_species(db, q, approved=approved)]
 
 
 @router.post("/species", response_model=SpeciesRead, status_code=201)
 def post_species(
     payload: SpeciesCreate,
     db: Session = Depends(get_db),
-    user: User = Depends(require_writer),
+    user: User = Depends(require_admin),
 ) -> SpeciesRead:
     return species_to_read(create_species(db, user, payload))
+
+
+@router.patch("/species/{species_id}", response_model=SpeciesRead)
+def patch_species(
+    species_id: uuid.UUID,
+    payload: SpeciesUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+) -> SpeciesRead:
+    return species_to_read(update_species(db, user, species_id, payload))
+
+
+@router.get("/locations", response_model=PlaceList)
+def get_locations(
+    province: str | None = Query(default=None, max_length=120),
+    district: str | None = Query(default=None, max_length=120),
+    sector: str | None = Query(default=None, max_length=120),
+    cell: str | None = Query(default=None, max_length=120),
+    _: User = Depends(get_current_user),
+) -> PlaceList:
+    level, places = child_places(province, district, sector, cell)
+    return PlaceList(level=level, places=places)
 
 
 @router.get("/sites", response_model=Page[SiteRead])
@@ -508,29 +549,170 @@ def get_map(
     )
 
 
-def _farmer(row) -> FarmerRead:
+def _farmer(row, viewer: User) -> FarmerRead:
+    trees = list(row.trees)
+    if viewer.role == "field_officer":
+        trees = [tree for tree in trees if tree.registered_by == viewer.id]
+    trees.sort(key=lambda tree: tree.planting_date, reverse=True)
     return FarmerRead(
         id=row.id,
         public_code=row.public_code,
         display_name=row.display_name,
         organization_id=row.organization_id,
         organization_name=row.organization.name if row.organization else None,
+        province=row.province,
         district=row.district,
+        sector=row.sector,
+        cell=row.cell,
+        village=row.village,
+        isibo=row.isibo,
+        household=row.household,
         phone=row.phone,
         notes=row.notes,
         data_origin=row.data_origin,
+        registered_by=row.registered_by,
         registered_by_name=row.registrar.full_name if row.registrar else None,
         registered_at=row.registered_at,
         site_count=len(row.sites),
+        tree_count=len(trees),
+        trees=[
+            FarmerTreeBrief(
+                id=tree.id,
+                public_code=tree.public_code,
+                species_common_name=tree.species.common_name if tree.species else None,
+                planting_date=tree.planting_date,
+            )
+            for tree in trees
+        ],
         has_login=row.user_id is not None,
     )
 
 
+def _profile_read(name: str, source, user: User) -> ProfileRead:
+    return ProfileRead(
+        display_name=name,
+        phone=source.phone,
+        province=source.province,
+        district=source.district,
+        sector=source.sector,
+        cell=source.cell,
+        village=source.village,
+        isibo=source.isibo,
+        household=source.household,
+        profile_photo_at=user.profile_photo_at,
+    )
+
+
+def _require_profile_role(user: User) -> None:
+    if user.role not in {"farmer", "field_officer"}:
+        raise DomainError("This profile is for a farmer or field officer.", status_code=403)
+
+
+@router.get("/profile", response_model=ProfileRead)
+def get_profile(db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> ProfileRead:
+    _require_profile_role(user)
+    if user.role == "farmer":
+        farmer = _own_farmer(db, user)
+        return _profile_read(farmer.display_name, farmer, user)
+    return _profile_read(user.full_name, user, user)
+
+
+@router.patch("/profile", response_model=ProfileRead)
+def patch_profile(
+    payload: FarmerUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> ProfileRead:
+    _require_profile_role(user)
+    if user.role == "farmer":
+        farmer = _own_farmer(db, user)
+        update_farmer(db, user, farmer.id, payload)
+        if payload.display_name:
+            user.full_name = payload.display_name
+            db.commit()
+            db.refresh(farmer)
+        return _profile_read(farmer.display_name, farmer, user)
+    data = payload.model_dump(exclude_unset=True)
+    if data.get("display_name"):
+        user.full_name = data.pop("display_name")
+    for key, value in data.items():
+        setattr(user, key, value)
+    db.commit()
+    db.refresh(user)
+    return _profile_read(user.full_name, user, user)
+
+
+@router.post("/profile/photo", response_model=ProfilePhotoRead)
+async def post_profile_photo(
+    file: UploadFile = File(),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> ProfilePhotoRead:
+    _require_profile_role(user)
+    save_profile_photo(user, await file.read(2 * 1024 * 1024 + 1))
+    db.commit()
+    db.refresh(user)
+    return ProfilePhotoRead(profile_photo_at=user.profile_photo_at)
+
+
+@router.delete("/profile/photo", status_code=204)
+def delete_profile_photo_route(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> Response:
+    _require_profile_role(user)
+    delete_profile_photo(user)
+    db.commit()
+    return Response(status_code=204)
+
+
+@router.get("/profile/photo")
+def get_profile_photo(user: User = Depends(get_current_user)) -> FileResponse:
+    _require_profile_role(user)
+    path = photo_file(user)
+    if path is None:
+        raise DomainError("No profile photo is saved.", status_code=404)
+    return FileResponse(path, media_type=MEDIA_TYPES[user.profile_photo_ext])
+
+
+def _own_farmer(db: Session, user: User):
+    if user.role != "farmer":
+        raise DomainError("This profile is for a smallholder account.", status_code=403)
+    farmer = farmer_for_user(db, user.id)
+    if farmer is None:
+        raise DomainError("Your account is not linked to a household record.", status_code=404)
+    return farmer
+
+
+@router.get("/farmers/me", response_model=FarmerRead)
+def get_my_farmer(
+    db: Session = Depends(get_db), user: User = Depends(get_current_user)
+) -> FarmerRead:
+    farmer = _own_farmer(db, user)
+    loaded = next(item for item in list_farmers(db) if item.id == farmer.id)
+    return _farmer(loaded, user)
+
+
+@router.patch("/farmers/me", response_model=FarmerRead)
+def patch_my_farmer(
+    payload: FarmerUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> FarmerRead:
+    farmer = _own_farmer(db, user)
+    update_farmer(db, user, farmer.id, payload)
+    if payload.display_name:
+        user.full_name = payload.display_name
+        db.commit()
+    loaded = next(item for item in list_farmers(db) if item.id == farmer.id)
+    return _farmer(loaded, user)
+
+
 @router.get("/farmers", response_model=list[FarmerRead])
 def get_farmers(
-    db: Session = Depends(get_db), _: User = Depends(get_current_user)
+    db: Session = Depends(get_db), user: User = Depends(get_current_user)
 ) -> list[FarmerRead]:
-    return [_farmer(row) for row in list_farmers(db)]
+    return [_farmer(row, user) for row in list_farmers(db)]
 
 
 @router.post("/farmers", response_model=FarmerRead, status_code=201)
@@ -543,7 +725,19 @@ def post_farmer(
     row, replay = create_farmer(db, user, payload)
     mark_created(response, replay)
     loaded = next(item for item in list_farmers(db) if item.id == row.id)
-    return _farmer(loaded)
+    return _farmer(loaded, user)
+
+
+@router.patch("/farmers/{farmer_id}", response_model=FarmerRead)
+def patch_farmer(
+    farmer_id: uuid.UUID,
+    payload: FarmerUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_writer),
+) -> FarmerRead:
+    update_farmer(db, user, farmer_id, payload)
+    loaded = next(item for item in list_farmers(db) if item.id == farmer_id)
+    return _farmer(loaded, user)
 
 
 @router.post("/farmers/{farmer_id}/login", response_model=UserRead, status_code=201)

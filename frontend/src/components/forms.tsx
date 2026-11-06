@@ -1,8 +1,8 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useRef, useState } from "react";
-import { ApiError } from "@/lib/api";
+import { useEffect, useRef, useState } from "react";
+import { ApiError, api } from "@/lib/api";
 import { categories, label, organizationTypes, siteTypes, treeStatuses } from "@/lib/labels";
 import type { Farmer, Organization, Site, Species } from "@/lib/types";
 import {
@@ -20,6 +20,14 @@ const LocationPicker = dynamic(() => import("@/components/LocationPicker"), {
   ssr: false,
   loading: () => <p className="help">Loading the map…</p>,
 });
+
+const addressLevels = [
+  ["province", "Province (Intara)"],
+  ["district", "District (Akarere)"],
+  ["sector", "Sector (Umurenge)"],
+  ["cell", "Cell (Akagari)"],
+  ["village", "Village (Umudugudu)"],
+] as const;
 
 function useRequestId() {
   const ref = useRef<string>("");
@@ -217,6 +225,108 @@ export function SiteForm({
   );
 }
 
+export function TreePlace({
+  province,
+  district,
+  sector,
+  cell,
+  village,
+  isibo,
+  household,
+  districtError,
+  onChange,
+  help = "Choose from district down to the village. Isibo and household are entered by name. This address belongs to the tree.",
+  legend = "Where the tree is",
+}: {
+  province: string;
+  district: string;
+  sector: string;
+  cell: string;
+  village: string;
+  isibo: string;
+  household: string;
+  districtError?: string;
+  onChange: (field: "province" | "district" | "sector" | "cell" | "village" | "isibo" | "household", value: string) => void;
+  help?: string;
+  legend?: string;
+}) {
+  const address = { province, district, sector, cell, village };
+  const [placeLists, setPlaceLists] = useState<Record<string, string[]> | null>(null);
+  const [useLists, setUseLists] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    api<{ places: string[] }>("/locations")
+      .then((body) => {
+        if (!active) return;
+        setPlaceLists({ province: body.places });
+        setUseLists(true);
+      })
+      .catch(() => { if (active) setUseLists(false); });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!useLists) return;
+    const query = new URLSearchParams();
+    if (province) query.set("province", province);
+    if (district) query.set("district", district);
+    if (sector) query.set("sector", sector);
+    if (cell) query.set("cell", cell);
+    if ([...query.keys()].length === 0) return;
+    let active = true;
+    api<{ level: string; places: string[] }>(`/locations?${query}`)
+      .then((body) => {
+        if (active) setPlaceLists((current) => ({ ...current, [body.level]: body.places }));
+      })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, [useLists, province, district, sector, cell]);
+
+  return (
+    <fieldset className="role-choice">
+      <legend>{legend}</legend>
+      <p className="help">{help}</p>
+      {districtError ? <p className="error-text">{districtError}</p> : null}
+      {useLists && placeLists ? (
+        <div className="row">
+          {addressLevels.map(([level, text], index) => {
+            const parent = index === 0 ? "ready" : address[addressLevels[index - 1][0]];
+            const places = placeLists[level] ?? [];
+            const value = address[level];
+            return (
+              <Field key={level} label={text} name={level}>
+                <select id={level} value={value} disabled={!parent} onChange={(event) => onChange(level, event.target.value)}>
+                  <option value="">{parent ? "Choose" : "Choose the level above"}</option>
+                  {value && !places.includes(value) ? <option value={value}>{value}</option> : null}
+                  {places.map((place) => <option key={place} value={place}>{place}</option>)}
+                </select>
+              </Field>
+            );
+          })}
+        </div>
+      ) : (
+        <>
+          <div className="row">
+            <Field label="Province (Intara)" name="province"><input id="province" value={province} onChange={(event) => onChange("province", event.target.value)} /></Field>
+            <Field label="District (Akarere)" name="district"><input id="district" value={district} onChange={(event) => onChange("district", event.target.value)} /></Field>
+          </div>
+          <div className="row">
+            <Field label="Sector (Umurenge)" name="sector"><input id="sector" value={sector} onChange={(event) => onChange("sector", event.target.value)} /></Field>
+            <Field label="Cell (Akagari)" name="cell"><input id="cell" value={cell} onChange={(event) => onChange("cell", event.target.value)} /></Field>
+          </div>
+          <Field label="Village (Umudugudu)" name="village"><input id="village" value={village} onChange={(event) => onChange("village", event.target.value)} /></Field>
+        </>
+      )}
+      <p className="help">Province through village follow the 2019 national village list.</p>
+      <div className="row">
+        <Field label="Isibo" name="isibo"><input id="isibo" value={isibo} onChange={(event) => onChange("isibo", event.target.value)} /></Field>
+        <Field label="Household (Urugo)" name="household" help="Optional."><input id="household" value={household} onChange={(event) => onChange("household", event.target.value)} /></Field>
+      </div>
+    </fieldset>
+  );
+}
+
 export function PlantingForm({
   mode,
   sites,
@@ -233,7 +343,14 @@ export function PlantingForm({
   farmers?: Farmer[];
   showFarmerHelp?: boolean;
   initial?: Partial<{
-    site_id: string;
+    site_id: string | null;
+    province: string | null;
+    district: string | null;
+    sector: string | null;
+    cell: string | null;
+    village: string | null;
+    isibo: string | null;
+    household: string | null;
     species_id: string;
     category: string;
     planting_date: string;
@@ -248,6 +365,13 @@ export function PlantingForm({
 }) {
   const requestId = useRequestId();
   const [siteId, setSiteId] = useState(initial?.site_id ?? "");
+  const [province, setProvince] = useState(initial?.province ?? "");
+  const [district, setDistrict] = useState(initial?.district ?? "");
+  const [sector, setSector] = useState(initial?.sector ?? "");
+  const [cell, setCell] = useState(initial?.cell ?? "");
+  const [village, setVillage] = useState(initial?.village ?? "");
+  const [isibo, setIsibo] = useState(initial?.isibo ?? "");
+  const [household, setHousehold] = useState(initial?.household ?? "");
   const [speciesId, setSpeciesId] = useState(initial?.species_id ?? "");
   const [category, setCategory] = useState(initial?.category ?? "fruit");
   const [plantingDate, setPlantingDate] = useState(initial?.planting_date ?? todayInput());
@@ -298,10 +422,21 @@ export function PlantingForm({
       setFormError("Enter the name of the farmer you are helping.");
       return;
     }
+    if (!district.trim()) {
+      setErrors({ district: "Choose a district." });
+      return;
+    }
     setSaving(true);
     try {
       const payload: Record<string, unknown> = {
         site_id: siteId,
+        province: province.trim() || null,
+        district: district.trim() || null,
+        sector: sector.trim() || null,
+        cell: cell.trim() || null,
+        village: village.trim() || null,
+        isibo: isibo.trim() || null,
+        household: household.trim() || null,
         species_id: speciesId,
         category,
         planting_date: plantingDate,
@@ -345,9 +480,35 @@ export function PlantingForm({
       <Field label="Planting site" name="site_id" error={errors.site_id}>
         <select id="site_id" value={siteId} onChange={(event) => setSiteId(event.target.value)} aria-invalid={Boolean(errors.site_id)} aria-describedby={describedBy("site_id", errors.site_id)}>
           <option value="">Choose a site</option>
-          {sites.map((site) => <option key={site.id} value={site.id}>{site.name} ({site.public_code})</option>)}
+          {sites.filter((site) => site.site_type !== "nursery_holding").map((site) => <option key={site.id} value={site.id}>{site.name} ({site.public_code})</option>)}
         </select>
       </Field>
+      <TreePlace
+        province={province}
+        district={district}
+        sector={sector}
+        cell={cell}
+        village={village}
+        isibo={isibo}
+        household={household}
+        districtError={errors.district}
+        onChange={(field, value) => {
+          if (field === "isibo") { setIsibo(value); return; }
+          if (field === "household") { setHousehold(value); return; }
+          const order = ["province", "district", "sector", "cell", "village"] as const;
+          const next = { province, district, sector, cell, village, [field]: value };
+          let clear = false;
+          for (const name of order) {
+            if (clear) next[name] = "";
+            if (name === field) clear = true;
+          }
+          setProvince(next.province);
+          setDistrict(next.district);
+          setSector(next.sector);
+          setCell(next.cell);
+          setVillage(next.village);
+        }}
+      />
       <div className="row">
         <Field label="Species" name="species_id" error={errors.species_id}>
           <select id="species_id" value={speciesId} onChange={(event) => {

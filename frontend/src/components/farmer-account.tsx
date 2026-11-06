@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { useProfilePhoto } from "@/lib/profile-photo";
 
 type Account = {
   name: string;
@@ -63,7 +64,8 @@ export function FarmerAccount() {
     };
   }, [open]);
 
-  const name = account?.name || user?.full_name || (officer ? "Officer" : "Farmer");
+  const name = user?.full_name || account?.name || (officer ? "Officer" : "Farmer");
+  const photoUrl = useProfilePhoto(user?.profile_photo_at);
   const facts = account?.facts ?? [];
   const metal = account?.metal ?? null;
 
@@ -82,7 +84,11 @@ export function FarmerAccount() {
         aria-controls="farmer-account"
         onClick={() => setOpen((current) => !current)}
       >
-        <span>{name.slice(0, 1).toUpperCase()}</span>
+        {photoUrl ? (
+          <Image src={photoUrl} alt="" width={48} height={48} unoptimized />
+        ) : (
+          <span>{name.slice(0, 1).toUpperCase()}</span>
+        )}
       </button>
       {open ? (
         <div className="account-panel" id="farmer-account" role="dialog" aria-label="Your account">
@@ -97,6 +103,9 @@ export function FarmerAccount() {
             ) : null}
           </p>
           <p className="account-line">Trees: {account ? account.recorded_trees.toLocaleString("en-GB") : "—"}</p>
+          {user?.role === "farmer" || user?.role === "field_officer" ? (
+            <button className="ghost" type="button" onClick={() => { setOpen(false); router.push("/profile"); }}>Edit your details</button>
+          ) : null}
           <button className="ghost" type="button" onClick={signOut}>Log out</button>
         </div>
       ) : null}

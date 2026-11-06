@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
@@ -24,6 +24,7 @@ from app.models.entities import (
     PlantingSite,
     SiteStatus,
     Species,
+    SpeciesVariety,
     TreeStatus,
     User,
     UserRole,
@@ -37,6 +38,7 @@ from app.schemas.entities import (
     SiteCreate,
     SiteUpdate,
     SpeciesCreate,
+    SpeciesUpdate,
     StatsResponse,
     TreeCreate,
     TreeUpdate,
@@ -63,6 +65,8 @@ SITE_FIELDS = [
     "sector",
     "cell",
     "village",
+    "isibo",
+    "household",
     "area_hectares",
     "notes",
     "status",
@@ -71,6 +75,13 @@ SITE_FIELDS = [
 TREE_FIELDS = [
     "site_id",
     "species_id",
+    "province",
+    "district",
+    "sector",
+    "cell",
+    "village",
+    "isibo",
+    "household",
     "category",
     "planting_date",
     "notes",
@@ -213,7 +224,13 @@ def register_account(db: Session, payload: RegisterRequest) -> User:
                 public_code=allocate_code(db, Farmer, "FARM"),
                 display_name=payload.full_name,
                 organization_id=organization_id,
+                province=payload.province,
                 district=payload.district,
+                sector=payload.sector,
+                cell=payload.cell,
+                village=payload.village,
+                isibo=payload.isibo,
+                household=payload.household,
                 phone=payload.phone,
                 data_origin=DataOrigin.field_entry.value,
                 user_id=account.id,
@@ -269,6 +286,8 @@ def create_species(db: Session, user: User, payload: SpeciesCreate) -> Species:
         common_name=payload.common_name,
         local_name=payload.local_name,
         category=enum_value(payload.category),
+        review_status="draft",
+        taxon_rank="species",
     )
     db.add(species)
     db.flush()
@@ -279,8 +298,10 @@ def create_species(db: Session, user: User, payload: SpeciesCreate) -> Species:
     return db.get(Species, species.id)
 
 
-def list_species(db: Session, query: str | None = None) -> list[Species]:
-    stmt = select(Species)
+def list_species(db: Session, query: str | None = None, *, approved: bool = False) -> list[Species]:
+    stmt = select(Species).options(joinedload(Species.varieties))
+    if approved:
+        stmt = stmt.where(Species.review_status == "verified", Species.taxon_rank == "species")
     if query:
         like = _like(query)
         stmt = stmt.where(
@@ -288,9 +309,53 @@ def list_species(db: Session, query: str | None = None) -> list[Species]:
                 Species.common_name.ilike(like),
                 Species.scientific_name.ilike(like),
                 Species.local_name.ilike(like),
+                cast(Species.other_local_names, String).ilike(like),
             )
         )
-    return list(db.scalars(stmt.order_by(Species.common_name.asc())).all())
+    return list(db.scalars(stmt.order_by(Species.common_name.asc())).unique().all())
+
+
+def update_species(db: Session, user: User, species_id: uuid.UUID, payload: SpeciesUpdate) -> Species:
+    species = db.get(Species, species_id)
+    if species is None:
+        raise DomainError("Species was not found.", status_code=404)
+    changes = payload.model_dump(exclude_unset=True)
+    variety_name = changes.pop("variety_name", None)
+    if "scientific_name" in changes:
+        duplicate = db.scalar(
+            select(Species.id).where(
+                func.lower(Species.scientific_name) == changes["scientific_name"].lower(),
+                Species.id != species.id,
+            )
+        )
+        if duplicate is not None:
+            raise DomainError(
+                "A species with this scientific name already exists.",
+                field="scientific_name",
+                status_code=409,
+            )
+    if "category" in changes and changes["category"] is not None:
+        changes["category"] = enum_value(changes["category"])
+    for field, value in changes.items():
+        setattr(species, field, value)
+    if variety_name:
+        exists = db.scalar(
+            select(SpeciesVariety.id).where(
+                SpeciesVariety.species_id == species.id,
+                func.lower(SpeciesVariety.name) == variety_name.lower(),
+            )
+        )
+        if exists is None:
+            db.add(SpeciesVariety(species_id=species.id, name=variety_name))
+    db.flush()
+    write_audit(db, user, "update", "species", species.id, sorted(payload.model_fields_set))
+    _finish(db, "species", species.id)
+    loaded = db.scalar(
+        select(Species).options(joinedload(Species.varieties)).where(Species.id == species.id)
+    )
+    if loaded is None:
+        raise DomainError("Species was not found.", status_code=404)
+    return loaded
 
 
 def create_site(db: Session, user: User, payload: SiteCreate) -> tuple[PlantingSite, bool]:
@@ -321,6 +386,8 @@ def create_site(db: Session, user: User, payload: SiteCreate) -> tuple[PlantingS
         sector=payload.sector,
         cell=payload.cell,
         village=payload.village,
+        isibo=payload.isibo,
+        household=payload.household,
         area_hectares=payload.area_hectares,
         notes=payload.notes,
         status=SiteStatus.active.value,
@@ -397,6 +464,8 @@ def list_sites(
                 PlantingSite.sector.ilike(like),
                 PlantingSite.cell.ilike(like),
                 PlantingSite.village.ilike(like),
+                PlantingSite.isibo.ilike(like),
+                PlantingSite.household.ilike(like),
             )
         )
     if status:
@@ -452,12 +521,15 @@ def _create_planted_record(
     existing = find_by_request_id(db, model, payload.client_request_id)
     if existing is not None:
         return existing.id, True
-    site = require_site(db, payload.site_id)
+    site = require_site(db, payload.site_id) if payload.site_id is not None else None
+    if site is None and model is not IndividualTree:
+        raise DomainError("Planting site is required.", field="site_id")
     require_species(db, payload.species_id)
     check_historical_date(payload.planting_date, "Planting date")
     from app.services.valuechain import farmer_for_user, require_farmer
 
     farmer_id = payload.farmer_id
+    own = None
     if user.role == UserRole.farmer.value:
         own = farmer_for_user(db, user.id)
         if own is None:
@@ -465,13 +537,34 @@ def _create_planted_record(
         farmer_id = own.id
     elif farmer_id is not None:
         require_farmer(db, farmer_id)
-    if farmer_id is not None and site.farmer_id is None:
+    if farmer_id is not None and site is not None and site.farmer_id is None:
         site.farmer_id = farmer_id
+    planting = {}
+    if model is IndividualTree:
+        planting = {
+            "planting_date_approximate": payload.planting_date_approximate,
+            "planting_method": payload.planting_method,
+            "planting_method_note": payload.planting_method_note,
+            "soil_type": payload.soil_type,
+            "terrain": payload.terrain,
+            "water_availability": payload.water_availability,
+            "spacing": payload.spacing,
+            "fertilizer_applied": payload.fertilizer_applied,
+            "mulching_applied": payload.mulching_applied,
+            "watering_provided": payload.watering_provided,
+        }
     record = model(
         public_code=allocate_code(db, model, prefix),
         site_id=payload.site_id,
         farmer_id=farmer_id,
         species_id=payload.species_id,
+        province=payload.province,
+        district=payload.district,
+        sector=payload.sector,
+        cell=payload.cell,
+        village=payload.village,
+        isibo=payload.isibo,
+        household=payload.household,
         category=enum_value(payload.category),
         planting_date=payload.planting_date,
         status=enum_value(payload.status) or TreeStatus.planted.value,
@@ -481,8 +574,19 @@ def _create_planted_record(
         client_request_id=payload.client_request_id,
         registered_by=user.id,
         registered_at=utcnow(),
+        **planting,
         **(extra or {}),
     )
+    if own is not None and model is IndividualTree and not any(
+        getattr(payload, name) for name in ("province", "district", "sector", "cell", "village", "isibo", "household")
+    ):
+        record.province = own.province
+        record.district = own.district
+        record.sector = own.sector
+        record.cell = own.cell
+        record.village = own.village
+        record.isibo = own.isibo
+        record.household = own.household
     apply_point(record, payload.latitude, payload.longitude)
     db.add(record)
     db.flush()

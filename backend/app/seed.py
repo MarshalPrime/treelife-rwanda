@@ -11,6 +11,7 @@ from sqlalchemy import select
 
 from app.core.config import get_settings
 from app.core.security import hash_password
+from app.data.species_catalogue import apply_species_catalogue
 from app.db.session import SessionLocal
 from app.models.entities import (
     Advisory,
@@ -353,6 +354,7 @@ def seed(allow_production: bool = False) -> None:
         raise SystemExit("Refusing to seed demonstration data when APP_ENV=production.")
     db = SessionLocal()
     try:
+        apply_species_catalogue(db)
         species = _species_by_name(db)
         cooperative = _organization(db, "SYNTHETIC Demo Cooperative", "cooperative")
         greening = _organization(db, "SYNTHETIC City Greening Unit", "public_institution")

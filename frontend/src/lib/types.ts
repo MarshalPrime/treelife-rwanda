@@ -8,6 +8,7 @@ export type User = {
   organization_id: string | null;
   is_active: boolean;
   farmer_id: string | null;
+  profile_photo_at: string | null;
 };
 
 export type TokenResponse = {
@@ -38,7 +39,18 @@ export type Species = {
   scientific_name: string;
   common_name: string;
   local_name: string | null;
+  other_local_names?: string[] | null;
   category: string;
+  growth_form?: string | null;
+  classifications?: string[] | null;
+  primary_uses?: string | null;
+  harvest_potential?: boolean | null;
+  harvest_type?: string | null;
+  rwanda_suitability?: string | null;
+  data_source?: string | null;
+  review_status?: string;
+  taxon_rank?: string;
+  varieties?: { id: string; name: string }[];
 };
 
 export type Farmer = {
@@ -47,13 +59,22 @@ export type Farmer = {
   display_name: string;
   organization_id: string | null;
   organization_name: string | null;
+  province: string | null;
   district: string | null;
+  sector: string | null;
+  cell: string | null;
+  village: string | null;
+  isibo: string | null;
+  household: string | null;
   phone: string | null;
   notes: string | null;
   data_origin: string;
+  registered_by: string | null;
   registered_by_name: string | null;
   registered_at: string;
   site_count: number;
+  tree_count: number;
+  trees: { id: string; public_code: string; species_common_name: string | null; planting_date: string }[];
   has_login: boolean;
 };
 
@@ -71,6 +92,8 @@ export type Site = {
   sector: string | null;
   cell: string | null;
   village: string | null;
+  isibo: string | null;
+  household: string | null;
   latitude: number | null;
   longitude: number | null;
   has_coordinates: boolean;
@@ -89,11 +112,18 @@ export type Site = {
 export type PlantingRecord = {
   id: string;
   public_code: string;
-  site_id: string;
+  site_id: string | null;
   site_name: string | null;
   site_code: string | null;
   farmer_id: string | null;
   farmer_name: string | null;
+  province: string | null;
+  district: string | null;
+  sector: string | null;
+  cell: string | null;
+  village: string | null;
+  isibo: string | null;
+  household: string | null;
   species_id: string;
   species_common_name: string | null;
   species_scientific_name: string | null;

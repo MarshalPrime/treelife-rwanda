@@ -32,6 +32,7 @@ export default function HomePage() {
         <nav aria-label="Page">
           <a href="#scenes">The record</a>
           <a href="#how">How it works</a>
+          <a href="#acknowledgement">Acknowledgement</a>
           <a href="#platform">Features</a>
           <Link className="secondary" href="/login">Sign in</Link>
           <Link className="primary" href="/register">Create an account</Link>
@@ -102,6 +103,23 @@ export default function HomePage() {
         </ol>
       </section>
 
+      <section className="home-badges" id="acknowledgement" aria-labelledby="acknowledgement-heading">
+        <div className="home-section-head">
+          <p className="home-kicker dark">Acknowledgement</p>
+          <h2 id="acknowledgement-heading">Recognizing your contribution to Rwanda&apos;s trees.</h2>
+          <p>Every tree recorded through TreeLife represents a valuable contribution to the environment and the communities that depend on it. This acknowledgement recognizes the efforts of farmers and field officers who help document, monitor, and protect Rwanda&apos;s trees.</p>
+          <p>Your contribution matters, and we appreciate the role you play in growing a greener future.</p>
+        </div>
+        <div className="home-badge-row">
+          {badges.map((badge) => (
+            <article key={badge.metal}>
+              <Image src={badge.src} alt="" width={112} height={112} />
+              <h3>{badge.metal}</h3>
+            </article>
+          ))}
+        </div>
+      </section>
+
       <section className="home-features" id="platform" aria-labelledby="platform-heading">
         <div className="home-section-head">
           <p className="home-kicker dark">Features</p>
@@ -156,7 +174,7 @@ const scenes = [
 const steps = [
   {
     title: "Choose the account",
-    body: "An administrator reviews reports. A field officer or a farmer registers trees. A viewer sees the map and cannot change records.",
+    body: "An administrator reviews reports. A field officer or a farmer registers trees. A viewer sees recorded trees by species and district, then the map and the tree list, and cannot change records.",
   },
   {
     title: "Register the site, then the tree",
@@ -166,6 +184,12 @@ const steps = [
     title: "Follow it after planting",
     body: "Add care, a harvest, a sale, and a short advice note. Open the same tree from the inventory or from its marker.",
   },
+];
+
+const badges = [
+  { metal: "Bronze", src: "/badges/bronze.jpg" },
+  { metal: "Silver", src: "/badges/silver.jpg" },
+  { metal: "Gold", src: "/badges/gold.jpg" },
 ];
 
 const features = [
@@ -215,6 +239,6 @@ const features = [
   },
   {
     title: "Accounts and audit",
-    body: "Administrators review the overview, the reports, and an audit of each change. Viewers see the map and the trees and cannot change them.",
+    body: "Administrators review the overview, the reports, and an audit of each change. Viewers see trees by species and district, and cannot change records or see farmer and officer names.",
   },
 ];

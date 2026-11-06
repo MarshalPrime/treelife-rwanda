@@ -56,6 +56,7 @@ class Settings(BaseSettings):
     demo_officer_password: str = "demo-officer-pass"
     demo_viewer_password: str = "demo-viewer-pass"
     demo_farmer_password: str = "demo-farmer-pass"
+    profile_photo_dir: str = str(BACKEND_ROOT / "profile-photos")
 
     @model_validator(mode="after")
     def prefer_hosted_database(self):

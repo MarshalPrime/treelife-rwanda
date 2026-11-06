@@ -12,17 +12,17 @@ const roles: { value: Role; title: string; detail: string }[] = [
   {
     value: "field_officer",
     title: "Field officer",
-    detail: "Register a tree or batch, and name the smallholder you are helping.",
+    detail: "Register a tree or batch, and name the smallholder you are helping. The trees you record are acknowledged on your account.",
   },
   {
     value: "farmer",
     title: "Farmer",
-    detail: "Register a tree or batch for your household. Your own name is used.",
+    detail: "Register trees for your household and record a nursery. After you sign in, add where you live from your account.",
   },
   {
     value: "viewer",
     title: "Viewer",
-    detail: "See the map and the trees across the country. Records cannot be changed.",
+    detail: "See recorded trees by species and district, and the map. Farmer and officer names stay hidden, and records cannot be changed.",
   },
 ];
 
@@ -44,8 +44,6 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [organizationName, setOrganizationName] = useState("");
-  const [district, setDistrict] = useState("");
-  const [phone, setPhone] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const checks = passwordChecks(password, confirm);
@@ -72,8 +70,6 @@ export default function RegisterPage() {
           password,
           role,
           organization_name: organizationName.trim() || null,
-          district: role === "farmer" ? district.trim() || null : null,
-          phone: role === "farmer" ? phone.trim() || null : null,
         }),
       });
       const account = await login(email, password);
@@ -141,19 +137,7 @@ export default function RegisterPage() {
             <li key={check.text} className={check.ok ? "met" : undefined}>{check.ok ? "Met" : "Needed"}: {check.text}</li>
           ))}
         </ul>
-        {role === "farmer" ? (
-          <>
-            <div className="row">
-              <label htmlFor="district">District
-                <input id="district" value={district} onChange={(event) => setDistrict(event.target.value)} />
-              </label>
-              <label htmlFor="phone">Phone
-                <input id="phone" autoComplete="tel" value={phone} onChange={(event) => setPhone(event.target.value)} />
-              </label>
-            </div>
-            <p className="help">District and phone are optional. A phone number is sensitive. Do not enter a national ID.</p>
-          </>
-        ) : (
+        {role === "farmer" ? null : (
           <label htmlFor="organization_name">Organisation
             <input id="organization_name" value={organizationName} onChange={(event) => setOrganizationName(event.target.value)} />
           </label>

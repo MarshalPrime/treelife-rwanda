@@ -41,6 +41,8 @@ def site_to_read(site: PlantingSite) -> SiteRead:
         sector=site.sector,
         cell=site.cell,
         village=site.village,
+        isibo=site.isibo,
+        household=site.household,
         latitude=site.latitude,
         longitude=site.longitude,
         has_coordinates=has_coordinates(site.latitude, site.longitude),
@@ -66,11 +68,28 @@ def tree_to_read(tree: IndividualTree, quantity: int | None = None) -> TreeRead:
         site_code=tree.site.public_code if tree.site else None,
         farmer_id=tree.farmer_id,
         farmer_name=tree.farmer.display_name if tree.farmer else None,
+        province=tree.province,
+        district=tree.district,
+        sector=tree.sector,
+        cell=tree.cell,
+        village=tree.village,
+        isibo=tree.isibo,
+        household=tree.household,
         species_id=tree.species_id,
         species_common_name=tree.species.common_name if tree.species else None,
         species_scientific_name=tree.species.scientific_name if tree.species else None,
         category=tree.category,
         planting_date=tree.planting_date,
+        planting_date_approximate=getattr(tree, "planting_date_approximate", False),
+        planting_method=getattr(tree, "planting_method", None),
+        planting_method_note=getattr(tree, "planting_method_note", None),
+        soil_type=getattr(tree, "soil_type", None),
+        terrain=getattr(tree, "terrain", None),
+        water_availability=getattr(tree, "water_availability", None),
+        spacing=getattr(tree, "spacing", None),
+        fertilizer_applied=getattr(tree, "fertilizer_applied", None),
+        mulching_applied=getattr(tree, "mulching_applied", None),
+        watering_provided=getattr(tree, "watering_provided", None),
         quantity=1 if quantity is None else quantity,
         latitude=tree.latitude,
         longitude=tree.longitude,
@@ -116,7 +135,9 @@ def organization_to_read(org: Organization) -> OrganizationRead:
 
 
 def species_to_read(species: Species) -> SpeciesRead:
-    return SpeciesRead.model_validate(species)
+    record = SpeciesRead.model_validate(species)
+    record.varieties.sort(key=lambda item: item.name.casefold())
+    return record
 
 
 def audit_to_read(entry: AuditLog) -> AuditRead:

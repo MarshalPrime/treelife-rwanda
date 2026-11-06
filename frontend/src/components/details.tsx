@@ -168,7 +168,7 @@ export function SiteDetail() {
           ["Type", label(site.site_type)],
           ["Organization", site.organization_name ?? "—"],
           ["Farmer", site.farmer_name ?? "—"],
-          ["Location", [site.province, site.district, site.sector, site.cell, site.village].filter(Boolean).join(", ") || "—"],
+          ["Location", [site.province, site.district, site.sector, site.cell, site.village, site.isibo, site.household].filter(Boolean).join(", ") || "—"],
           ["Coordinates", coordinateText(site.latitude, site.longitude)],
           ["Area", site.area_hectares === null ? "—" : `${site.area_hectares} ha`],
           ["Status", label(site.status)],
@@ -259,13 +259,14 @@ export function PlantingDetail({ mode }: { mode: "tree" | "batch" }) {
       </div>
       <div className="actions">
         {canWrite ? <Link className="primary" href={`/${base}/${record.id}/edit`}>Edit</Link> : null}
-        {user?.role === "viewer" ? null : <Link className="secondary" href={`/sites/${record.site_id}`}>Open site</Link>}
+        {user?.role === "viewer" || !record.site_id ? null : <Link className="secondary" href={`/sites/${record.site_id}`}>Open site</Link>}
         {record.has_coordinates ? <Link className="secondary" href={`/map?focus=${record.id}`}>Show on map</Link> : <span className="badge muted">No coordinates</span>}
       </div>
       <section className="card">
         <Facts rows={visibleToViewer([
           ["Site", record.site_name ?? "—"],
           ["Farmer", record.farmer_name ?? "—"],
+          ["Place", [record.province, record.district, record.sector, record.cell, record.village, record.isibo, record.household].filter(Boolean).join(", ") || "—"],
           ["Species", `${record.species_common_name ?? "—"} (${record.species_scientific_name ?? "—"})`],
           ["Category", label(record.category)],
           ["Planting date", record.planting_date],

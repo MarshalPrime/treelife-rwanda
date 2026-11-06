@@ -44,6 +44,7 @@ from app.schemas.valuechain import (
     FarmerLoginCreate,
     FarmerOverview,
     FarmerPlanting,
+    FarmerUpdate,
     GrowthCreate,
     HarvestCreate,
     LotCreate,
@@ -139,16 +140,47 @@ def _save(db: Session, user: User, row, entity_type: str, fields: list[str]):
     return db.get(model, row_id), False
 
 
+def _phone_key(value: str | None) -> str | None:
+    if not value:
+        return None
+    digits = "".join(character for character in value if character.isdigit())
+    if len(digits) >= 8:
+        return digits
+    return value.strip().casefold()
+
+
+def _reject_duplicate_phone(db: Session, phone: str | None, exclude_id: uuid.UUID | None = None) -> None:
+    key = _phone_key(phone)
+    if key is None:
+        return
+    rows = db.scalars(select(Farmer).where(Farmer.phone.is_not(None))).all()
+    for row in rows:
+        if exclude_id is not None and row.id == exclude_id:
+            continue
+        if _phone_key(row.phone) == key:
+            raise DomainError(
+                "A farmer with this phone is already on the list. Select that farmer instead.",
+                field="phone",
+            )
+
+
 def create_farmer(db: Session, user: User, payload: FarmerCreate) -> tuple[Farmer, bool]:
     existing = find_by_request_id(db, Farmer, payload.client_request_id)
     if existing is not None:
         return existing, True
     require_organization(db, payload.organization_id)
+    _reject_duplicate_phone(db, payload.phone)
     farmer = Farmer(
         public_code=allocate_code(db, Farmer, "FARM"),
         display_name=payload.display_name,
         organization_id=payload.organization_id,
+        province=payload.province,
         district=payload.district,
+        sector=payload.sector,
+        cell=payload.cell,
+        village=payload.village,
+        isibo=payload.isibo,
+        household=payload.household,
         phone=payload.phone,
         notes=payload.notes,
         data_origin=DataOrigin.field_entry.value,
@@ -156,14 +188,35 @@ def create_farmer(db: Session, user: User, payload: FarmerCreate) -> tuple[Farme
         registered_by=user.id,
         registered_at=utcnow(),
     )
-    return _save(db, user, farmer, "farmer", ["display_name", "district"])
+    return _save(db, user, farmer, "farmer", ["display_name", "district", "phone"])
+
+
+def update_farmer(db: Session, user: User, farmer_id: uuid.UUID, payload: FarmerUpdate) -> Farmer:
+    farmer = db.get(Farmer, farmer_id)
+    if farmer is None:
+        raise DomainError("Farmer was not found.", status_code=404)
+    if user.role == UserRole.farmer.value and farmer.user_id != user.id:
+        raise DomainError("You can update only your own details.", status_code=403)
+    data = payload.model_dump(exclude_unset=True)
+    if "phone" in data:
+        _reject_duplicate_phone(db, data["phone"], exclude_id=farmer.id)
+    for key, value in data.items():
+        setattr(farmer, key, value)
+    db.flush()
+    write_audit(db, user, "update", "farmer", farmer.id, sorted(data))
+    _commit(db)
+    return farmer
 
 
 def list_farmers(db: Session) -> list[Farmer]:
     return list(
         db.scalars(
             select(Farmer)
-            .options(joinedload(Farmer.organization), joinedload(Farmer.registrar))
+            .options(
+                joinedload(Farmer.organization),
+                joinedload(Farmer.registrar),
+                joinedload(Farmer.trees).joinedload(IndividualTree.species),
+            )
             .order_by(Farmer.created_at.desc())
         )
         .unique()
@@ -667,7 +720,7 @@ def collect_farmer_overview(db: Session, user: User) -> FarmerOverview:
         db.scalar(
             select(func.count())
             .select_from(IndividualTree)
-            .join(PlantingSite, IndividualTree.site_id == PlantingSite.id)
+            .outerjoin(PlantingSite, IndividualTree.site_id == PlantingSite.id)
             .where(owned_trees)
         )
         or 0
@@ -676,7 +729,7 @@ def collect_farmer_overview(db: Session, user: User) -> FarmerOverview:
         db.scalar(
             select(func.count())
             .select_from(PlantingBatch)
-            .join(PlantingSite, PlantingBatch.site_id == PlantingSite.id)
+            .outerjoin(PlantingSite, PlantingBatch.site_id == PlantingSite.id)
             .where(owned_batches)
         )
         or 0
@@ -684,7 +737,7 @@ def collect_farmer_overview(db: Session, user: User) -> FarmerOverview:
     batch_quantity = int(
         db.scalar(
             select(func.coalesce(func.sum(PlantingBatch.quantity), 0))
-            .join(PlantingSite, PlantingBatch.site_id == PlantingSite.id)
+            .outerjoin(PlantingSite, PlantingBatch.site_id == PlantingSite.id)
             .where(owned_batches)
         )
         or 0
@@ -693,7 +746,7 @@ def collect_farmer_overview(db: Session, user: User) -> FarmerOverview:
         db.scalar(
             select(func.count())
             .select_from(IndividualTree)
-            .join(PlantingSite, IndividualTree.site_id == PlantingSite.id)
+            .outerjoin(PlantingSite, IndividualTree.site_id == PlantingSite.id)
             .where(owned_trees, IndividualTree.status == "surviving")
         )
         or 0

@@ -10,6 +10,8 @@ type AuthValue = {
   canWrite: boolean;
   login: (email: string, password: string) => Promise<User>;
   logout: () => void;
+  rename: (fullName: string) => void;
+  setPhoto: (updatedAt: string | null) => void;
 };
 
 const AuthContext = createContext<AuthValue | null>(null);
@@ -57,6 +59,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       logout() {
         clearToken();
         setUser(null);
+      },
+      rename(fullName: string) {
+        setUser((current) => (current ? { ...current, full_name: fullName } : current));
+      },
+      setPhoto(updatedAt: string | null) {
+        setUser((current) => (current ? { ...current, profile_photo_at: updatedAt } : current));
       },
     }),
     [user, loading],

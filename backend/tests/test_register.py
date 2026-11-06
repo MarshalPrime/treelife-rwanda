@@ -160,3 +160,67 @@ def test_registration_keeps_the_three_experiences(client, accounts):
     still = client.get("/api/v1/auth/me", headers=auth(accounts))
     assert still.status_code == 200
     assert still.json()["role"] == "field_officer"
+
+
+def test_officer_profile_saves_name_and_home(client):
+    registered = register(client, "field_officer", "officer-profile@trial.treelife.local")
+    assert registered.status_code == 201, registered.text
+    headers = login(client, "officer-profile@trial.treelife.local")
+    saved = client.patch(
+        "/api/v1/profile",
+        json={
+            "display_name": "Officer Profile",
+            "province": "Kigali",
+            "district": "Gasabo",
+            "sector": "Remera",
+            "cell": "Rukiri I",
+            "village": "Amahoro",
+            "isibo": "Isibo 1",
+            "household": "Household 2",
+            "phone": "0788000000",
+        },
+        headers=headers,
+    )
+    assert saved.status_code == 200, saved.text
+    body = saved.json()
+    assert body["display_name"] == "Officer Profile"
+    assert body["district"] == "Gasabo"
+    assert body["household"] == "Household 2"
+    me = client.get("/api/v1/auth/me", headers=headers)
+    assert me.json()["full_name"] == "Officer Profile"
+
+
+def test_farmer_and_officer_can_save_a_profile_photo(client, accounts):
+    png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 24
+    farmer = register(client, "farmer", "photo-farmer@trial.treelife.local")
+    assert farmer.status_code == 201, farmer.text
+    headers_by_role = {
+        "field_officer": auth(accounts, "field_officer"),
+        "farmer": login(client, "photo-farmer@trial.treelife.local"),
+    }
+    for headers in headers_by_role.values():
+        saved = client.post(
+            "/api/v1/profile/photo",
+            headers=headers,
+            files={"file": ("face.png", png, "image/png")},
+        )
+        assert saved.status_code == 200, saved.text
+        loaded = client.get("/api/v1/profile/photo", headers=headers)
+        assert loaded.status_code == 200
+        assert loaded.content.startswith(b"\x89PNG")
+        assert client.get("/api/v1/auth/me", headers=headers).json()["profile_photo_at"]
+        removed = client.delete("/api/v1/profile/photo", headers=headers)
+        assert removed.status_code == 204
+        assert client.get("/api/v1/profile/photo", headers=headers).status_code == 404
+    rejected = client.post(
+        "/api/v1/profile/photo",
+        headers=auth(accounts, "field_officer"),
+        files={"file": ("note.txt", b"not a photo", "text/plain")},
+    )
+    assert rejected.status_code == 422
+    denied = client.post(
+        "/api/v1/profile/photo",
+        headers=auth(accounts, "viewer"),
+        files={"file": ("face.png", png, "image/png")},
+    )
+    assert denied.status_code == 403

@@ -27,6 +27,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -151,6 +152,16 @@ class User(Base):
     organization_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True
     )
+    province: Mapped[str | None] = mapped_column(String(120))
+    district: Mapped[str | None] = mapped_column(String(120))
+    sector: Mapped[str | None] = mapped_column(String(120))
+    cell: Mapped[str | None] = mapped_column(String(120))
+    village: Mapped[str | None] = mapped_column(String(120))
+    isibo: Mapped[str | None] = mapped_column(String(120))
+    household: Mapped[str | None] = mapped_column(String(120))
+    phone: Mapped[str | None] = mapped_column(String(30))
+    profile_photo_ext: Mapped[str | None] = mapped_column(String(8))
+    profile_photo_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default="true"
     )
@@ -175,16 +186,59 @@ class Species(Base):
             "category IN ('urban', 'fruit', 'agroforestry', 'other')",
             name="ck_species_category",
         ),
+        CheckConstraint(
+            "growth_form IS NULL OR growth_form IN ('tree', 'shrub', 'herb', 'vine')",
+            name="ck_species_growth_form",
+        ),
+        CheckConstraint(
+            "review_status IN ('verified', 'needs_review', 'draft', 'rejected')",
+            name="ck_species_review_status",
+        ),
+        CheckConstraint(
+            "taxon_rank IN ('species', 'genus')",
+            name="ck_species_taxon_rank",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     scientific_name: Mapped[str] = mapped_column(String(200), unique=True, nullable=False)
     common_name: Mapped[str] = mapped_column(String(200), nullable=False)
     local_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    other_local_names: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
     category: Mapped[str] = mapped_column(String(40), nullable=False)
+    growth_form: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    classifications: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
+    primary_uses: Mapped[str | None] = mapped_column(Text, nullable=True)
+    harvest_potential: Mapped[bool | None] = mapped_column(nullable=True)
+    harvest_type: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    rwanda_suitability: Mapped[str | None] = mapped_column(Text, nullable=True)
+    data_source: Mapped[str | None] = mapped_column(Text, nullable=True)
+    review_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="needs_review", server_default="needs_review"
+    )
+    taxon_rank: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="species", server_default="species"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow, server_default=func.now()
     )
+
+    varieties: Mapped[list[SpeciesVariety]] = relationship(back_populates="species")
+
+
+class SpeciesVariety(Base):
+    """A named variety of an approved species. Empty until an administrator records one."""
+
+    __tablename__ = "species_varieties"
+    __table_args__ = (UniqueConstraint("species_id", "name", name="uq_species_varieties_name"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    species_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("species.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+
+    species: Mapped[Species] = relationship(back_populates="varieties")
 
 
 class PlantingSite(Base):
@@ -234,6 +288,8 @@ class PlantingSite(Base):
     sector: Mapped[str | None] = mapped_column(String(120), nullable=True)
     cell: Mapped[str | None] = mapped_column(String(120), nullable=True)
     village: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    isibo: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    household: Mapped[str | None] = mapped_column(String(120), nullable=True)
     latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     location: Mapped[Any | None] = mapped_column(_geography(), nullable=True)
@@ -297,12 +353,43 @@ class IndividualTree(Base):
             "(latitude IS NOT NULL AND longitude IS NOT NULL)",
             name="ck_trees_coordinate_pair",
         ),
+        CheckConstraint(
+            "planting_method IS NULL OR planting_method IN "
+            "('ground', 'transplant', 'direct_seeding', 'natural', 'other')",
+            name="ck_trees_planting_method",
+        ),
+        CheckConstraint(
+            "soil_type IS NULL OR soil_type IN "
+            "('clay', 'sandy', 'loam', 'rocky', 'other', 'unknown')",
+            name="ck_trees_soil",
+        ),
+        CheckConstraint(
+            "terrain IS NULL OR terrain IN ('flat', 'gentle', 'steep', 'other', 'unknown')",
+            name="ck_trees_terrain",
+        ),
+        CheckConstraint(
+            "water_availability IS NULL OR water_availability IN "
+            "('rainfed', 'nearby', 'irrigation', 'limited', 'unknown')",
+            name="ck_trees_water",
+        ),
+        CheckConstraint(
+            "fertilizer_applied IS NULL OR fertilizer_applied IN ('yes', 'no', 'unknown')",
+            name="ck_trees_fertilizer",
+        ),
+        CheckConstraint(
+            "mulching_applied IS NULL OR mulching_applied IN ('yes', 'no', 'unknown')",
+            name="ck_trees_mulching",
+        ),
+        CheckConstraint(
+            "watering_provided IS NULL OR watering_provided IN ('yes', 'no', 'unknown')",
+            name="ck_trees_watering",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     public_code: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
-    site_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("planting_sites.id", ondelete="RESTRICT"), nullable=False
+    site_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("planting_sites.id", ondelete="RESTRICT"), nullable=True
     )
     farmer_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("farmers.id", ondelete="SET NULL"), nullable=True
@@ -310,8 +397,27 @@ class IndividualTree(Base):
     species_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("species.id", ondelete="RESTRICT"), nullable=False
     )
+    province: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    district: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    sector: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    cell: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    village: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    isibo: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    household: Mapped[str | None] = mapped_column(String(120), nullable=True)
     category: Mapped[str] = mapped_column(String(40), nullable=False)
     planting_date: Mapped[date] = mapped_column(Date, nullable=False)
+    planting_date_approximate: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    planting_method: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    planting_method_note: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    soil_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    terrain: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    water_availability: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    spacing: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    fertilizer_applied: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    mulching_applied: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    watering_provided: Mapped[str | None] = mapped_column(String(20), nullable=True)
     latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     location: Mapped[Any | None] = mapped_column(_geography(), nullable=True)
@@ -341,8 +447,8 @@ class IndividualTree(Base):
         onupdate=utcnow,
     )
 
-    site: Mapped[PlantingSite] = relationship(back_populates="trees")
-    farmer: Mapped[Farmer | None] = relationship(foreign_keys=[farmer_id])
+    site: Mapped[PlantingSite | None] = relationship(back_populates="trees")
+    farmer: Mapped[Farmer | None] = relationship(back_populates="trees", foreign_keys=[farmer_id])
     species: Mapped[Species] = relationship()
     registrar: Mapped[User] = relationship(foreign_keys=[registered_by])
 
@@ -389,6 +495,13 @@ class PlantingBatch(Base):
     species_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("species.id", ondelete="RESTRICT"), nullable=False
     )
+    province: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    district: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    sector: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    cell: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    village: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    isibo: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    household: Mapped[str | None] = mapped_column(String(120), nullable=True)
     category: Mapped[str] = mapped_column(String(40), nullable=False)
     planting_date: Mapped[date] = mapped_column(Date, nullable=False)
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -525,7 +638,13 @@ class Farmer(Base):
     organization_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True
     )
+    province: Mapped[str | None] = mapped_column(String(120), nullable=True)
     district: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    sector: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    cell: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    village: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    isibo: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    household: Mapped[str | None] = mapped_column(String(120), nullable=True)
     phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     data_origin: Mapped[str] = mapped_column(
@@ -556,6 +675,9 @@ class Farmer(Base):
     account: Mapped[User | None] = relationship(foreign_keys=[user_id])
     registrar: Mapped[User] = relationship(foreign_keys=[registered_by])
     sites: Mapped[list[PlantingSite]] = relationship(back_populates="farmer")
+    trees: Mapped[list[IndividualTree]] = relationship(
+        back_populates="farmer", foreign_keys="IndividualTree.farmer_id"
+    )
 
 
 class SeedlingLot(Base):

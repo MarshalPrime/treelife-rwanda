@@ -32,11 +32,14 @@ services:
       DEMO_OFFICER_PASSWORD: demo-officer-pass
       DEMO_VIEWER_PASSWORD: demo-viewer-pass
       DEMO_FARMER_PASSWORD: demo-farmer-pass
+      PROFILE_PHOTO_DIR: /app/profile-photos
     ports:
       - "8000:8000"
     depends_on:
       db:
         condition: service_healthy
+    volumes:
+      - treelife_profiles:/app/profile-photos
 
   web:
     build:
@@ -50,3 +53,4 @@ services:
 
 volumes:
   treelife_pg:
+  treelife_profiles:

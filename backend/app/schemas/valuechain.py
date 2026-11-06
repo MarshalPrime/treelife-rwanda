@@ -17,11 +17,19 @@ from app.domain.validation import (
     clean_optional_text,
 )
 
+_PLACE_FIELDS = ("province", "district", "sector", "cell", "village", "isibo", "household")
+
 
 class FarmerCreate(BaseModel):
     display_name: str = Field(min_length=1, max_length=200)
     organization_id: uuid.UUID | None = None
+    province: str | None = Field(default=None, max_length=120)
     district: str | None = Field(default=None, max_length=120)
+    sector: str | None = Field(default=None, max_length=120)
+    cell: str | None = Field(default=None, max_length=120)
+    village: str | None = Field(default=None, max_length=120)
+    isibo: str | None = Field(default=None, max_length=120)
+    household: str | None = Field(default=None, max_length=120)
     phone: str | None = Field(default=None, max_length=30)
     notes: str | None = Field(default=None, max_length=2000)
     client_request_id: str | None = Field(default=None, max_length=80)
@@ -34,7 +42,7 @@ class FarmerCreate(BaseModel):
             raise ValueError("Name is required.")
         return cleaned
 
-    @field_validator("district", "phone", "notes", "client_request_id")
+    @field_validator(*_PLACE_FIELDS, "phone", "notes", "client_request_id")
     @classmethod
     def clean_text(cls, value: str | None) -> str | None:
         return clean_optional_text(value)
@@ -45,19 +53,79 @@ class FarmerCreate(BaseModel):
         return self
 
 
+class FarmerUpdate(BaseModel):
+    display_name: str | None = Field(default=None, max_length=200)
+    province: str | None = Field(default=None, max_length=120)
+    district: str | None = Field(default=None, max_length=120)
+    sector: str | None = Field(default=None, max_length=120)
+    cell: str | None = Field(default=None, max_length=120)
+    village: str | None = Field(default=None, max_length=120)
+    isibo: str | None = Field(default=None, max_length=120)
+    household: str | None = Field(default=None, max_length=120)
+    phone: str | None = Field(default=None, max_length=30)
+
+    @field_validator("display_name")
+    @classmethod
+    def clean_name(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("Name is required.")
+        return cleaned
+
+    @field_validator(*_PLACE_FIELDS, "phone")
+    @classmethod
+    def clean_text(cls, value: str | None) -> str | None:
+        return clean_optional_text(value)
+
+
+class ProfileRead(BaseModel):
+    display_name: str
+    phone: str | None = None
+    province: str | None = None
+    district: str | None = None
+    sector: str | None = None
+    cell: str | None = None
+    village: str | None = None
+    isibo: str | None = None
+    household: str | None = None
+    profile_photo_at: datetime | None = None
+
+
+class ProfilePhotoRead(BaseModel):
+    profile_photo_at: datetime
+
+
+class FarmerTreeBrief(BaseModel):
+    id: uuid.UUID
+    public_code: str
+    species_common_name: str | None
+    planting_date: date
+
+
 class FarmerRead(BaseModel):
     id: uuid.UUID
     public_code: str
     display_name: str
     organization_id: uuid.UUID | None
     organization_name: str | None
+    province: str | None = None
     district: str | None
+    sector: str | None = None
+    cell: str | None = None
+    village: str | None = None
+    isibo: str | None = None
+    household: str | None = None
     phone: str | None
     notes: str | None
     data_origin: str
+    registered_by: uuid.UUID | None = None
     registered_by_name: str | None
     registered_at: datetime
     site_count: int
+    tree_count: int = 0
+    trees: list[FarmerTreeBrief] = []
     has_login: bool = False
 
 

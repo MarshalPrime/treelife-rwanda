@@ -32,8 +32,11 @@ const adminLinks = [
   ["/sites", "Sites"],
   ["/trees", "Trees"],
   ["/batches", "Batches"],
+  ["/species", "Species"],
   ["/about", "About"],
 ];
+
+const farmerLinks = fieldLinks.filter(([href]) => href !== "/farmers");
 
 const viewerLinks = [
   ["/dashboard", "Overview"],
@@ -44,6 +47,7 @@ const viewerLinks = [
 export function linksForRole(role: string | undefined) {
   if (role === "admin") return adminLinks;
   if (role === "viewer") return viewerLinks;
+  if (role === "farmer") return farmerLinks;
   return fieldLinks;
 }
 
@@ -52,9 +56,13 @@ export function pathAllowed(role: string, pathname: string) {
     if (pathname.endsWith("/new") || pathname.includes("/edit")) return false;
     return pathname === "/dashboard" || pathname === "/map" || pathname === "/trees" || /^\/trees\/[^/]+$/.test(pathname);
   }
+  if (role === "farmer") {
+    if (pathname === "/farmers" || pathname.startsWith("/farmers/")) return false;
+    return true;
+  }
   if (role === "admin") {
     if (pathname.includes("/edit") || pathname.endsWith("/new")) return false;
-    const hidden = ["/farmers", "/nursery", "/field", "/harvest", "/advice", "/species"];
+    const hidden = ["/farmers", "/nursery", "/field", "/harvest", "/advice"];
     return !hidden.some((path) => pathname === path || pathname.startsWith(`${path}/`));
   }
   return true;

@@ -39,6 +39,11 @@ class Page(BaseModel, Generic[T]):
     page_size: int
 
 
+class PlaceList(BaseModel):
+    level: str
+    places: list[str]
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
@@ -67,7 +72,13 @@ class RegisterRequest(BaseModel):
     password: str = Field(min_length=8, max_length=200)
     role: UserRole
     organization_name: str | None = Field(default=None, max_length=200)
+    province: str | None = Field(default=None, max_length=120)
     district: str | None = Field(default=None, max_length=120)
+    sector: str | None = Field(default=None, max_length=120)
+    cell: str | None = Field(default=None, max_length=120)
+    village: str | None = Field(default=None, max_length=120)
+    isibo: str | None = Field(default=None, max_length=120)
+    household: str | None = Field(default=None, max_length=120)
     phone: str | None = Field(default=None, max_length=30)
 
     @field_validator("full_name")
@@ -91,7 +102,17 @@ class RegisterRequest(BaseModel):
     def strong_password(cls, value: str) -> str:
         return check_password_strength(value)
 
-    @field_validator("organization_name", "district", "phone")
+    @field_validator(
+        "organization_name",
+        "province",
+        "district",
+        "sector",
+        "cell",
+        "village",
+        "isibo",
+        "household",
+        "phone",
+    )
     @classmethod
     def clean_optional(cls, value: str | None) -> str | None:
         return clean_optional_text(value)
@@ -107,6 +128,7 @@ class UserRead(BaseModel):
     organization_id: uuid.UUID | None
     is_active: bool
     farmer_id: uuid.UUID | None = None
+    profile_photo_at: datetime | None = None
 
 
 class OrganizationCreate(BaseModel):
@@ -141,6 +163,11 @@ class OrganizationRead(BaseModel):
     updated_at: datetime
 
 
+GROWTH_FORMS = {"tree", "shrub", "herb", "vine"}
+SPECIES_CLASSES = {"fruit", "timber", "agroforestry", "ornamental", "indigenous", "multipurpose"}
+REVIEW_STATUSES = {"verified", "needs_review", "draft", "rejected"}
+
+
 class SpeciesCreate(BaseModel):
     scientific_name: str = Field(min_length=1, max_length=200)
     common_name: str = Field(min_length=1, max_length=200)
@@ -161,6 +188,91 @@ class SpeciesCreate(BaseModel):
         return clean_optional_text(value)
 
 
+class SpeciesVarietyRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+
+
+class SpeciesUpdate(BaseModel):
+    scientific_name: str | None = Field(default=None, min_length=1, max_length=200)
+    common_name: str | None = Field(default=None, min_length=1, max_length=200)
+    local_name: str | None = Field(default=None, max_length=200)
+    other_local_names: list[str] | None = None
+    growth_form: str | None = None
+    classifications: list[str] | None = None
+    primary_uses: str | None = Field(default=None, max_length=500)
+    harvest_potential: bool | None = None
+    harvest_type: str | None = Field(default=None, max_length=80)
+    rwanda_suitability: str | None = Field(default=None, max_length=500)
+    data_source: str | None = Field(default=None, max_length=500)
+    review_status: str | None = None
+    category: TreeCategory | None = None
+    variety_name: str | None = Field(default=None, max_length=200)
+
+    @field_validator("scientific_name", "common_name", "variety_name")
+    @classmethod
+    def clean_required_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("This field is required.")
+        return cleaned
+
+    @field_validator(
+        "local_name", "primary_uses", "harvest_type", "rwanda_suitability", "data_source"
+    )
+    @classmethod
+    def clean_optional(cls, value: str | None) -> str | None:
+        return clean_optional_text(value)
+
+    @field_validator("growth_form")
+    @classmethod
+    def clean_growth(cls, value: str | None) -> str | None:
+        if value is None or value == "":
+            return None
+        if value not in GROWTH_FORMS:
+            raise ValueError("Choose a growth form from the list.")
+        return value
+
+    @field_validator("review_status")
+    @classmethod
+    def clean_review(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if value not in REVIEW_STATUSES:
+            raise ValueError("Choose a review status from the list.")
+        return value
+
+    @field_validator("classifications")
+    @classmethod
+    def clean_classes(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return None
+        cleaned = []
+        for item in value:
+            name = item.strip()
+            if name not in SPECIES_CLASSES:
+                raise ValueError("Choose a classification from the list.")
+            if name not in cleaned:
+                cleaned.append(name)
+        return cleaned
+
+    @field_validator("other_local_names")
+    @classmethod
+    def clean_other_names(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return None
+        cleaned = []
+        for item in value:
+            name = item.strip()
+            if name and name not in cleaned:
+                cleaned.append(name)
+        return cleaned
+
+
 class SpeciesRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -168,7 +280,18 @@ class SpeciesRead(BaseModel):
     scientific_name: str
     common_name: str
     local_name: str | None
+    other_local_names: list[str] | None = None
     category: TreeCategory
+    growth_form: str | None = None
+    classifications: list[str] | None = None
+    primary_uses: str | None = None
+    harvest_potential: bool | None = None
+    harvest_type: str | None = None
+    rwanda_suitability: str | None = None
+    data_source: str | None = None
+    review_status: str = "needs_review"
+    taxon_rank: str = "species"
+    varieties: list[SpeciesVarietyRead] = []
     created_at: datetime
 
 
@@ -182,6 +305,8 @@ class SiteCreate(BaseModel):
     sector: str | None = Field(default=None, max_length=120)
     cell: str | None = Field(default=None, max_length=120)
     village: str | None = Field(default=None, max_length=120)
+    isibo: str | None = Field(default=None, max_length=120)
+    household: str | None = Field(default=None, max_length=120)
     latitude: float | None = None
     longitude: float | None = None
     area_hectares: float | None = None
@@ -207,6 +332,8 @@ class SiteCreate(BaseModel):
         "sector",
         "cell",
         "village",
+        "isibo",
+        "household",
         "notes",
         "external_id",
         "client_request_id",
@@ -233,6 +360,8 @@ class SiteUpdate(BaseModel):
     sector: str | None = Field(default=None, max_length=120)
     cell: str | None = Field(default=None, max_length=120)
     village: str | None = Field(default=None, max_length=120)
+    isibo: str | None = Field(default=None, max_length=120)
+    household: str | None = Field(default=None, max_length=120)
     latitude: float | None = None
     longitude: float | None = None
     area_hectares: float | None = None
@@ -250,7 +379,17 @@ class SiteUpdate(BaseModel):
             raise ValueError("Name is required.")
         return cleaned
 
-    @field_validator("province", "district", "sector", "cell", "village", "notes", "external_id")
+    @field_validator(
+        "province",
+        "district",
+        "sector",
+        "cell",
+        "village",
+        "isibo",
+        "household",
+        "notes",
+        "external_id",
+    )
     @classmethod
     def clean_text(cls, value: str | None) -> str | None:
         return clean_optional_text(value)
@@ -281,6 +420,8 @@ class SiteRead(BaseModel):
     sector: str | None
     cell: str | None
     village: str | None
+    isibo: str | None
+    household: str | None
     latitude: float | None
     longitude: float | None
     has_coordinates: bool
@@ -302,21 +443,48 @@ class TreeWriteBase(BaseModel):
     planting_date: date | None = None
     latitude: float | None = None
     longitude: float | None = None
+    province: str | None = Field(default=None, max_length=120)
+    district: str | None = Field(default=None, max_length=120)
+    sector: str | None = Field(default=None, max_length=120)
+    cell: str | None = Field(default=None, max_length=120)
+    village: str | None = Field(default=None, max_length=120)
+    isibo: str | None = Field(default=None, max_length=120)
+    household: str | None = Field(default=None, max_length=120)
     notes: str | None = Field(default=None, max_length=2000)
     status: TreeStatus | None = None
     external_id: str | None = Field(default=None, max_length=120)
 
-    @field_validator("notes", "external_id")
+    @field_validator(
+        "province",
+        "district",
+        "sector",
+        "cell",
+        "village",
+        "isibo",
+        "household",
+        "notes",
+        "external_id",
+    )
     @classmethod
     def clean_text(cls, value: str | None) -> str | None:
         return clean_optional_text(value)
 
 
 class TreeCreate(TreeWriteBase):
-    site_id: uuid.UUID
+    site_id: uuid.UUID | None = None
     species_id: uuid.UUID
     category: TreeCategory
     planting_date: date
+    planting_date_approximate: bool = False
+    planting_method: str | None = Field(default=None, max_length=40)
+    planting_method_note: str | None = Field(default=None, max_length=200)
+    soil_type: str | None = Field(default=None, max_length=40)
+    terrain: str | None = Field(default=None, max_length=40)
+    water_availability: str | None = Field(default=None, max_length=40)
+    spacing: str | None = Field(default=None, max_length=40)
+    fertilizer_applied: str | None = Field(default=None, max_length=20)
+    mulching_applied: str | None = Field(default=None, max_length=20)
+    watering_provided: str | None = Field(default=None, max_length=20)
     farmer_id: uuid.UUID | None = None
     client_request_id: str | None = Field(default=None, max_length=80)
 
@@ -325,11 +493,41 @@ class TreeCreate(TreeWriteBase):
     def clean_request(cls, value: str | None) -> str | None:
         return clean_optional_text(value)
 
+    @field_validator(
+        "planting_method",
+        "planting_method_note",
+        "soil_type",
+        "terrain",
+        "water_availability",
+        "spacing",
+        "fertilizer_applied",
+        "mulching_applied",
+        "watering_provided",
+    )
+    @classmethod
+    def clean_planting(cls, value: str | None) -> str | None:
+        return clean_optional_text(value)
+
     @model_validator(mode="after")
     def validate_tree(self) -> TreeCreate:
         check_coordinate_pair(self.latitude, self.longitude)
         check_historical_date(self.planting_date, "Planting date")
         check_request_id(self.client_request_id)
+        allowed = {
+            "planting_method": {"ground", "transplant", "direct_seeding", "natural", "other"},
+            "soil_type": {"clay", "sandy", "loam", "rocky", "other", "unknown"},
+            "terrain": {"flat", "gentle", "steep", "other", "unknown"},
+            "water_availability": {"rainfed", "nearby", "irrigation", "limited", "unknown"},
+            "fertilizer_applied": {"yes", "no", "unknown"},
+            "mulching_applied": {"yes", "no", "unknown"},
+            "watering_provided": {"yes", "no", "unknown"},
+        }
+        for field, choices in allowed.items():
+            value = getattr(self, field)
+            if value is not None and value not in choices:
+                raise ValueError("Choose one of the listed values.")
+        if self.planting_method != "other":
+            self.planting_method_note = None
         return self
 
 
@@ -353,16 +551,33 @@ class TreeUpdate(TreeWriteBase):
 class TreeRead(BaseModel):
     id: uuid.UUID
     public_code: str
-    site_id: uuid.UUID
+    site_id: uuid.UUID | None
     site_name: str | None
     site_code: str | None
     farmer_id: uuid.UUID | None = None
     farmer_name: str | None = None
+    province: str | None = None
+    district: str | None = None
+    sector: str | None = None
+    cell: str | None = None
+    village: str | None = None
+    isibo: str | None = None
+    household: str | None = None
     species_id: uuid.UUID
     species_common_name: str | None
     species_scientific_name: str | None
     category: TreeCategory
     planting_date: date
+    planting_date_approximate: bool = False
+    planting_method: str | None = None
+    planting_method_note: str | None = None
+    soil_type: str | None = None
+    terrain: str | None = None
+    water_availability: str | None = None
+    spacing: str | None = None
+    fertilizer_applied: str | None = None
+    mulching_applied: str | None = None
+    watering_provided: str | None = None
     quantity: int = 1
     latitude: float | None
     longitude: float | None
@@ -384,6 +599,8 @@ class BatchCreate(TreeCreate):
     @model_validator(mode="after")
     def validate_batch(self) -> BatchCreate:
         check_quantity(self.quantity)
+        if self.site_id is None:
+            raise ValueError("Choose a planting site.")
         return self
 
 

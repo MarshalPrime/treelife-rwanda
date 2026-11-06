@@ -16,7 +16,7 @@ from app.models.entities import User
 TRUNCATE = (
     "TRUNCATE audit_logs, sales, harvests, maintenance_activities, growth_measurements, "
     "distributions, seedling_lots, advisories, lifecycle_events, individual_trees, "
-    "planting_batches, planting_sites, farmers, users, organizations, species "
+    "planting_batches, planting_sites, farmers, users, organizations, species_varieties, species "
     "RESTART IDENTITY CASCADE"
 )
 
@@ -96,7 +96,7 @@ def make_species(client, accounts, scientific_name="Persea americana", common_na
     response = client.post(
         "/api/v1/species",
         json={"scientific_name": scientific_name, "common_name": common_name, "category": "fruit"},
-        headers=auth(accounts),
+        headers=auth(accounts, "admin"),
     )
     assert response.status_code == 201, response.text
     return response.json()
