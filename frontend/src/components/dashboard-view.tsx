@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Banner } from "@/components/AppShell";
 import { BreakdownChart, SeriesChart, harvestLines, plantingLines, salesLines } from "@/components/dashboard-charts";
 import { DashboardEmpty, DashboardKpi, DashboardKpiGrid, DashboardSkeleton } from "@/components/dashboard-ui";
@@ -31,6 +31,85 @@ const dateLabel = (value?: string | null) => {
   return Number.isNaN(parsed.getTime()) ? "Date unavailable" : parsed.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 };
 const recordPath = (kind: "tree" | "batch" | "site", id: string) => `/${kind === "tree" ? "trees" : kind === "batch" ? "batches" : "sites"}/${id}`;
+// The live clock uses this zone. Change both values together when another zone is needed.
+const PROGRAMME_TIME_ZONE = "Africa/Kigali";
+const PROGRAMME_TIME_ZONE_LABEL = "CAT";
+
+function programmeClock(date: Date) {
+  const time = new Intl.DateTimeFormat("en-GB", {
+    timeZone: PROGRAMME_TIME_ZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).format(date);
+  return `${time} ${PROGRAMME_TIME_ZONE_LABEL}`;
+}
+
+function CountingNumber({ value }: { value: number }) {
+  const [shown, setShown] = useState(value);
+  const from = useRef(value);
+  useEffect(() => {
+    const start = from.current;
+    const end = value;
+    from.current = end;
+    if (start === end) {
+      setShown(end);
+      return;
+    }
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setShown(end);
+      return;
+    }
+    const began = performance.now();
+    let frame = 0;
+    const step = (now: number) => {
+      const progress = Math.min(1, (now - began) / 700);
+      const eased = 1 - (1 - progress) ** 3;
+      setShown(Math.round(start + (end - start) * eased));
+      if (progress < 1) frame = requestAnimationFrame(step);
+    };
+    frame = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(frame);
+  }, [value]);
+  return <>{shown.toLocaleString("en-GB")}</>;
+}
+
+function LiveTreeTotal({ value }: { value: number }) {
+  const previous = useRef<number | null>(null);
+  const [delta, setDelta] = useState<number | null>(null);
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  useEffect(() => {
+    if (previous.current == null) {
+      previous.current = value;
+      return;
+    }
+    const change = value - previous.current;
+    previous.current = value;
+    if (change === 0) return;
+    setDelta(change);
+    const timer = window.setTimeout(() => setDelta(null), 4000);
+    return () => window.clearTimeout(timer);
+  }, [value]);
+  return (
+    <div className="dashboard-live-total">
+      <p className="live-mark">Live · updated {programmeClock(now)}</p>
+      <strong><CountingNumber value={value} /></strong>
+      <span>Trees standing</span>
+      {delta != null ? (
+        <p className={`dashboard-live-delta ${delta > 0 ? "up" : "down"}`}>
+          {delta > 0 ? `+${delta.toLocaleString("en-GB")}` : delta.toLocaleString("en-GB")} {Math.abs(delta) === 1 ? "tree" : "trees"}
+        </p>
+      ) : (
+        <p className="help">Living trees across the programme. A dead or removed tree leaves this total.</p>
+      )}
+    </div>
+  );
+}
 
 function filterQuery(filters: DashboardFilters, explicitRange = false) {
   const query = new URLSearchParams();
@@ -68,6 +147,8 @@ export function DashboardView({ mode = "dashboard" }: { mode?: "dashboard" | "re
   const [requestError, setRequestError] = useState<{ path: string; message: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [refresh, setRefresh] = useState(0);
+  const quietNext = useRef(false);
+  const mapQuiet = useRef(false);
   const [mapRefresh, setMapRefresh] = useState(0);
   const [mapResult, setMapResult] = useState<{ path: string; data: MapResponse } | null>(null);
   const [mapError, setMapError] = useState<{ path: string; message: string } | null>(null);
@@ -81,26 +162,54 @@ export function DashboardView({ mode = "dashboard" }: { mode?: "dashboard" | "re
 
   useEffect(() => {
     const controller = new AbortController();
-    setLoading(true);
-    setRequestError(null);
+    const quiet = quietNext.current;
+    quietNext.current = false;
+    if (!quiet) setLoading(true);
+    if (!quiet) setRequestError(null);
     api<DashboardResponse>(dataPath, { signal: controller.signal })
       .then((data) => { if (!controller.signal.aborted) setResult({ path: dataPath, data }); })
-      .catch((caught: Error) => { if (!controller.signal.aborted) setRequestError({ path: dataPath, message: caught.message }); })
+      .catch((caught: Error) => { if (!controller.signal.aborted && !quiet) setRequestError({ path: dataPath, message: caught.message }); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [dataPath, refresh]);
+
+  useEffect(() => {
+    if (user?.role !== "admin" || mode !== "dashboard") return;
+    const pull = () => {
+      if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+      quietNext.current = true;
+      mapQuiet.current = true;
+      setRefresh((value) => value + 1);
+      setMapRefresh((value) => value + 1);
+    };
+    const timer = window.setInterval(pull, 10000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") pull();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("online", pull);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("online", pull);
+    };
+  }, [user?.role, mode]);
 
   const mapPath = response && /^\/dashboard\/map(?:\?|$)/.test(response.map_query) ? response.map_query : "";
   const invalidMapPath = Boolean(response && !mapPath);
   useEffect(() => {
     if (!mapPath) return;
     const controller = new AbortController();
-    setMapLoading(true);
-    setMapError(null);
-    setSelectedId(null);
+    const quiet = mapQuiet.current;
+    mapQuiet.current = false;
+    if (!quiet) {
+      setMapLoading(true);
+      setMapError(null);
+      setSelectedId(null);
+    }
     api<MapResponse>(mapPath, { signal: controller.signal })
       .then((data) => { if (!controller.signal.aborted) setMapResult({ path: mapPath, data }); })
-      .catch((caught: Error) => { if (!controller.signal.aborted) setMapError({ path: mapPath, message: caught.message }); })
+      .catch((caught: Error) => { if (!controller.signal.aborted && !quiet) setMapError({ path: mapPath, message: caught.message }); })
       .finally(() => { if (!controller.signal.aborted) setMapLoading(false); });
     return () => controller.abort();
   }, [mapPath, mapRefresh]);
@@ -131,7 +240,7 @@ export function DashboardView({ mode = "dashboard" }: { mode?: "dashboard" | "re
       <label htmlFor="dashboard-species">Species<select id="dashboard-species" value={filters.species_id} disabled={!options} onChange={(event) => changeFilters({ species_id: event.target.value })}><option value="">All species</option>{options?.species.map((species) => <option key={species.id} value={species.id}>{species.common_name}</option>)}</select></label>
       <button className="ghost" type="button" onClick={reset}>Reset filters</button>
       <button className="ghost" type="button" onClick={() => { setRefresh((value) => value + 1); setMapRefresh((value) => value + 1); }} disabled={loading}>Refresh dashboard</button>
-      <p className="help">District and species apply to all panels. The period applies to trends, harvest, and sales.</p>
+      <p className="help">District and species apply to all panels. The period applies to trends, harvest, and sales.{user?.role === "admin" && mode === "dashboard" ? " The figures, charts, and map update on their own while the connection is up." : ""}</p>
     </section>
     <div className="filter-chips" aria-label="Active filters">
       {filters.district ? <button type="button" aria-label="Clear district filter" onClick={() => changeFilters({ district: "" })}>{filters.district} <span aria-hidden="true">×</span></button> : null}
@@ -144,11 +253,13 @@ export function DashboardView({ mode = "dashboard" }: { mode?: "dashboard" | "re
       {response.includes_demonstration ? <Banner tone="warning">Demonstration data is included in this view.</Banner> : null}
       {role === "farmer" && !response.linked ? <Banner tone="warning">Your login is not linked to a farmer record yet. Ask your field officer to link your household.</Banner> : null}
       <section aria-label="Key figures" className="dashboard-figures">
-        <div className="section-caption"><h2>At a glance</h2><span className="help">Inventory is current · production is for the selected period</span></div>
+        {role === "admin" && mode === "dashboard" ? <LiveTreeTotal value={response.summary.standing_trees ?? response.summary.recorded_trees} /> : null}
+        <div className="section-caption"><h2>At a glance</h2><span className="help">{role === "admin" && mode === "dashboard" ? "Live while the connection is up · production is for the selected period" : "Inventory is current · production is for the selected period"}</span></div>
         <DashboardKpiGrid>
-          <DashboardKpi label="Trees recorded" value={number(response.summary.recorded_trees)} hint="Current individual trees + batch quantities" />
+          {role === "admin" && mode === "dashboard" ? null : <DashboardKpi label="Trees recorded" value={number(response.summary.recorded_trees)} hint="Current individual trees + batch quantities" />}
           {viewer ? <><DashboardKpi label="Species" value={number(response.summary.species)} hint="In this view" /><DashboardKpi label="Districts" value={number(response.summary.districts)} hint="With recorded plantings" /></> : <>
             <DashboardKpi label="Survival rate" value={response.summary.survival_percent == null ? "Not assessed" : `${response.summary.survival_percent}%`} hint={`${number(response.summary.checked_trees)} trees checked · latest assessments`} />
+            <DashboardKpi label="Death rate" value={response.summary.checked_trees === 0 ? "Not assessed" : `${Math.round(100 * (response.summary.checked_trees - response.summary.surviving_trees) / response.summary.checked_trees)}%`} hint={`${number(Math.max(0, response.summary.checked_trees - response.summary.surviving_trees))} not surviving · same checks`} />
             {role !== "farmer" ? <DashboardKpi label={role === "field_officer" ? "Farmers helped" : "Farmers"} value={number(response.summary.farmers)} hint="In your current scope" /> : null}
             <DashboardKpi label="Planting sites" value={number(response.summary.sites)} hint="Current sites" />
             <DashboardKpi label="Harvest" value={`${number(response.summary.harvested_kg ?? 0)} kg`} hint="Selected period" />

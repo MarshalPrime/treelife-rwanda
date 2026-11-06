@@ -18,6 +18,16 @@
 .dashboard-figures { display: grid; gap: 12px; }
 .section-caption { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; }
 .section-caption .help { font-size: .73rem; }
+.dashboard-live-total { display: grid; justify-items: center; text-align: center; gap: 8px; padding: 8px 12px 18px; }
+.dashboard-live-total .live-mark { display: inline-flex; align-items: center; gap: 8px; margin: 0; color: #1f7a43; font-size: .78rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.dashboard-live-total .live-mark::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: #1f9d55; animation: live-pulse 1.8s ease-out infinite; }
+.dashboard-live-total strong { font-family: var(--sans); font-weight: 650; letter-spacing: -.05em; font-size: clamp(4.4rem, 12vw, 8rem); line-height: .85; font-variant-numeric: tabular-nums; }
+.dashboard-live-total > span { font-size: 1.05rem; font-weight: 650; }
+.dashboard-live-delta { margin: 0; font-weight: 700; }
+.dashboard-live-delta.up { color: #1f7a43; }
+.dashboard-live-delta.down { color: #9a3b2f; }
+@keyframes live-pulse { 70% { box-shadow: 0 0 0 8px transparent; } }
+@media (prefers-reduced-motion: reduce) { .dashboard-live-total .live-mark::before { animation: none; } }
 .dashboard-view .dashboard-kpi-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 13px; }
 .dashboard-view .dashboard-kpi { min-width: 0; min-height: 139px; padding: 19px; background: #fffcf8; position: relative; box-shadow: 0 2px 10px #183f3205; }
 .dashboard-view .dashboard-kpi::before { content: ""; height: 3px; width: 28px; background: #7b9d6b; border-radius: 3px; position: absolute; top: 0; left: 20px; }

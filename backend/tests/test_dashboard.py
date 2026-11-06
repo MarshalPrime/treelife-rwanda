@@ -69,6 +69,7 @@ def test_dashboard_role_scope_and_viewer_redaction(client, accounts):
     body = officer.json()
     assert body["role"] == "field_officer"
     assert body["summary"]["recorded_trees"] == 1
+    assert body["summary"]["standing_trees"] == 1
     assert body["filters"]["range"] == "30"
     assert len(body["series"]) == 30
     assert body["map_query"].startswith("/dashboard/map")
@@ -351,3 +352,21 @@ def test_viewer_dashboard_map_has_no_household_names(client, accounts):
     payload = response.json()
     serialized = str(payload)
     assert "Private Household" not in serialized
+
+
+def test_standing_total_drops_when_a_tree_dies(client, accounts):
+    species = make_species(client, accounts, "Mangifera indica", "Mango")
+    site = make_site(client, accounts, client_request_id="standing-site")
+    tree = create_tree(client, auth(accounts), site.json()["id"], species["id"], "standing-tree")
+    living = client.get("/api/v1/dashboard?range=all", headers=auth(accounts, "admin"))
+    assert living.status_code == 200, living.text
+    assert living.json()["summary"]["standing_trees"] == 1
+    died = client.patch(
+        f"/api/v1/trees/{tree['id']}",
+        json={"status": "dead"},
+        headers=auth(accounts),
+    )
+    assert died.status_code == 200, died.text
+    after = client.get("/api/v1/dashboard?range=all", headers=auth(accounts, "admin"))
+    assert after.json()["summary"]["recorded_trees"] == 1
+    assert after.json()["summary"]["standing_trees"] == 0

@@ -228,6 +228,7 @@ export type DashboardResponse = {
   options: { districts: string[]; species: { id: string; common_name: string }[] };
   summary: {
     recorded_trees: number;
+    standing_trees?: number;
     checked_trees: number;
     surviving_trees: number;
     survival_percent: number | null;

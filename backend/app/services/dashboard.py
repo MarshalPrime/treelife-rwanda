@@ -108,11 +108,28 @@ def read_inventory(db: Session, user: User | None) -> Inventory:
     return Inventory(sites, planted[0], planted[1], farmer_id)
 
 
+def row_district(row) -> str | None:
+    site = getattr(row, "site", None)
+    if site is not None and site.district:
+        return site.district
+    return getattr(row, "district", None) or None
+
+
+def planting_amount(row) -> int:
+    return row.quantity if isinstance(row, PlantingBatch) else 1
+
+
+def standing_amount(row) -> int:
+    if row.status in {"dead", "removed"}:
+        return 0
+    return planting_amount(row)
+
+
 def filter_inventory(
     inventory: Inventory, district: str | None, species_id: uuid.UUID | None
 ) -> Inventory:
     def matches(row):
-        return (not district or (row.site.district or "").casefold() == district.casefold()) and (
+        return (not district or (row_district(row) or "").casefold() == district.casefold()) and (
             species_id is None or row.species_id == species_id
         )
 
@@ -299,7 +316,7 @@ def species_totals(inventory: Inventory):
     totals = Counter()
     names = {}
     for row in inventory.plantings:
-        totals[row.species_id] += row.quantity if isinstance(row, PlantingBatch) else 1
+        totals[row.species_id] += planting_amount(row)
         names[row.species_id] = row.species.common_name
     return [
         DashboardSpeciesCount(species_id=key, species_common_name=names[key], trees=value)
@@ -310,8 +327,9 @@ def species_totals(inventory: Inventory):
 def district_totals(inventory: Inventory):
     totals = Counter()
     for row in inventory.plantings:
-        if row.site.district:
-            totals[row.site.district] += row.quantity if isinstance(row, PlantingBatch) else 1
+        district = row_district(row)
+        if district:
+            totals[district] += planting_amount(row)
     return [
         DashboardDistrictCount(district=key, trees=value)
         for key, value in sorted(totals.items(), key=lambda item: (-item[1], item[0]))
@@ -471,7 +489,7 @@ def collect_dashboard(
             id=row.id,
             kind="batch" if isinstance(row, PlantingBatch) else "tree",
             title=row.species.common_name,
-            site_name=None if viewer else row.site.name,
+            site_name=None if viewer or row.site is None else row.site.name,
             status=row.status,
             planting_date=row.planting_date,
             quantity=row.quantity if isinstance(row, PlantingBatch) else 1,
@@ -540,6 +558,7 @@ def collect_dashboard(
         ),
         summary=DashboardSummary(
             recorded_trees=len(inventory.trees) + sum(row.quantity for row in inventory.batches),
+            standing_trees=sum(standing_amount(row) for row in inventory.plantings),
             checked_trees=checked,
             surviving_trees=alive,
             survival_percent=survival,

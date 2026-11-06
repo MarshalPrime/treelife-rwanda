@@ -36,7 +36,7 @@ function response(role: Role = "admin", recorded = 111): DashboardResponse {
     generated_at: "2026-11-05T10:00:00Z",
     filters: { district: null, species_id: null, range: "90", start_date: "2026-08-08", end_date: "2026-11-05" },
     options: { districts: ["Huye", "Gasabo"], species: [{ id: "mango", common_name: "Mango" }] },
-    summary: { recorded_trees: recorded, checked_trees: 0, surviving_trees: 0, survival_percent: null, farmers: 7, sites: 3, species: 1, districts: 2, harvested_kg: role === "viewer" ? null : 15, sales_rwf: role === "viewer" ? null : 4000, records_missing_coordinates: 0 },
+    summary: { recorded_trees: recorded, standing_trees: recorded, checked_trees: 0, surviving_trees: 0, survival_percent: null, farmers: 7, sites: 3, species: 1, districts: 2, harvested_kg: role === "viewer" ? null : 15, sales_rwf: role === "viewer" ? null : 4000, records_missing_coordinates: 0 },
     series: [{ day: "2026-11-01", planted: 1, activity: 0, harvested_kg: role === "viewer" ? null : 15, sales_rwf: role === "viewer" ? null : 4000 }, { day: "2026-11-02", planted: 0, activity: 1, harvested_kg: role === "viewer" ? null : 0, sales_rwf: role === "viewer" ? null : 0 }],
     species_counts: [{ species_id: "mango", species_common_name: "Mango", trees: recorded }],
     districts: [{ district: "Huye", trees: recorded }],
@@ -68,7 +68,7 @@ describe("dashboard requests and role behavior", () => {
   it("uses the default 90-day period, current survival labels, and accessible chart tables", async () => {
     const user = userEvent.setup();
     render(<DashboardView />);
-    expect(await screen.findByText("Not assessed")).toBeInTheDocument();
+    expect(await screen.findAllByText("Not assessed")).toHaveLength(2);
     expect(mocks.api).toHaveBeenCalledWith("/dashboard?range=90", expect.anything());
     expect(screen.getByLabelText("Period")).toHaveValue("90");
     await user.click(screen.getByText("View planting and field activity data table"));
@@ -84,7 +84,8 @@ describe("dashboard requests and role behavior", () => {
     mocks.api.mockImplementation((path: string) => path.startsWith("/dashboard?") ? Promise.resolve(response()) : ++mapCalls === 1 ? Promise.reject(new Error("Map offline")) : Promise.resolve(emptyMap));
     render(<DashboardView />);
     expect(await screen.findByText("Map offline")).toBeInTheDocument();
-    expect(screen.getByText("Trees recorded")).toBeInTheDocument();
+    expect(screen.getByText("Trees standing")).toBeInTheDocument();
+    expect(screen.getByText(/Live · updated/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Retry map" }));
     await waitFor(() => expect(screen.queryByText("Map offline")).not.toBeInTheDocument());
     expect(mapCalls).toBe(2);
@@ -97,7 +98,7 @@ describe("dashboard requests and role behavior", () => {
     render(<DashboardView />);
     expect(await screen.findByText("Server offline")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Retry dashboard" }));
-    expect(await screen.findByText("Not assessed")).toBeInTheDocument();
+    expect(await screen.findAllByText("Not assessed")).toHaveLength(2);
     expect(screen.queryByText("Server offline")).not.toBeInTheDocument();
   });
 
@@ -121,7 +122,7 @@ describe("dashboard requests and role behavior", () => {
     mocks.api.mockImplementation((path: string) => path.includes("/dashboard?range=90") ? old.promise : Promise.resolve(path.startsWith("/dashboard?") ? response() : emptyMap));
     render(<DashboardView />);
     await user.selectOptions(screen.getByLabelText("Period"), "30");
-    expect(await screen.findByText("Not assessed")).toBeInTheDocument();
+    expect(await screen.findAllByText("Not assessed")).toHaveLength(2);
     await act(async () => { old.reject(new Error("Could not reach the server")); });
     expect(screen.queryByText("Could not reach the server")).not.toBeInTheDocument();
   });
@@ -129,7 +130,7 @@ describe("dashboard requests and role behavior", () => {
   it("persists dropdown/bar filters and follows URL history without feedback", async () => {
     const user = userEvent.setup();
     render(<DashboardView />);
-    await screen.findByText("Not assessed");
+    await screen.findAllByText("Not assessed");
     await user.click(screen.getByRole("button", { name: "Filter by Mango, 111 trees" }));
     expect(mocks.search).toContain("species_id=mango");
     await screen.findByRole("button", { name: "Clear species filter" });

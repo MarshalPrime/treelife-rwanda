@@ -580,6 +580,7 @@ class DashboardOptions(BaseModel):
 
 class DashboardSummary(BaseModel):
     recorded_trees: int
+    standing_trees: int = 0
     checked_trees: int
     surviving_trees: int
     survival_percent: int | None
