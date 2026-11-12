@@ -7,11 +7,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Banner } from "@/components/AppShell";
 import { BreakdownChart, SeriesChart, harvestLines, plantingLines, salesLines } from "@/components/dashboard-charts";
 import { DashboardEmpty, DashboardKpi, DashboardKpiGrid, DashboardSkeleton } from "@/components/dashboard-ui";
-import { LocationCard } from "@/components/map-cards";
+import { HarvestNotices, HarvestSummary } from "@/components/harvest-insights";
+import { HealthLegend, MapPopup, TreeCard } from "@/components/tree-card";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { label } from "@/lib/labels";
-import type { DashboardFilters, DashboardRange, DashboardResponse, MapFeature, MapResponse } from "@/lib/types";
+import { markerColor, matchesHealth, plantedAge, type HealthId } from "@/lib/health";
+import type { DashboardFilters, DashboardRange, DashboardResponse, MapResponse } from "@/lib/types";
 import "./dashboard-view.css";
 
 const MapView = dynamic(() => import("@/components/MapView"), {
@@ -31,6 +32,49 @@ const dateLabel = (value?: string | null) => {
   return Number.isNaN(parsed.getTime()) ? "Date unavailable" : parsed.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 };
 const recordPath = (kind: "tree" | "batch" | "site", id: string) => `/${kind === "tree" ? "trees" : kind === "batch" ? "batches" : "sites"}/${id}`;
+
+function healthShares(counts: number[]) {
+  const total = counts.reduce((sum, count) => sum + count, 0);
+  if (!total) return counts.map(() => 0);
+  const exact = counts.map((count) => (count * 100) / total);
+  const shares = exact.map((value) => Math.floor(value));
+  let remainder = 100 - shares.reduce((sum, value) => sum + value, 0);
+  exact
+    .map((value, index) => ({ index, fraction: value - Math.floor(value) }))
+    .sort((left, right) => right.fraction - left.fraction || left.index - right.index)
+    .forEach((item) => {
+      if (remainder <= 0) return;
+      shares[item.index] += 1;
+      remainder -= 1;
+    });
+  return shares;
+}
+
+function TreeHealth({ summary }: { summary: DashboardResponse["summary"] }) {
+  const counts = [summary.healthy_trees ?? 0, summary.moderate_trees ?? 0, summary.critical_trees ?? 0];
+  const shares = healthShares(counts);
+  const rows = [
+    { label: "Healthy", color: "#1f8a4c", count: counts[0], share: shares[0] },
+    { label: "Moderate", color: "#c49212", count: counts[1], share: shares[1] },
+    { label: "Critical", color: "#c44536", count: counts[2], share: shares[2] },
+  ];
+  const total = counts.reduce((sum, count) => sum + count, 0);
+  return <section className="card tree-health" aria-label="Tree health">
+    <h2>Tree health</h2>
+    <ul className="tree-health-list">
+      {rows.map((row) => (
+        <li key={row.label} className="tree-health-row">
+          <span className="tree-health-name"><i style={{ background: row.color }} aria-hidden="true" />{row.label}</span>
+          <strong>{row.share}%</strong>
+          <div className="tree-health-track" role="meter" aria-valuenow={row.share} aria-valuemin={0} aria-valuemax={100} aria-label={`${row.label}, ${number(row.count)} trees`}>
+            <span style={{ width: `${row.share}%`, background: row.color }} />
+          </div>
+        </li>
+      ))}
+    </ul>
+    <p className="help">{total ? `${number(counts[0])} surviving, ${number(counts[1])} stressed, and ${number(counts[2])} dead. The percentages are their share of trees with a recorded condition.` : "No tree has a recorded condition yet. Planted trees stay out of these percentages."}</p>
+  </section>;
+}
 // The live clock uses this zone. Change both values together when another zone is needed.
 const PROGRAMME_TIME_ZONE = "Africa/Kigali";
 const PROGRAMME_TIME_ZONE_LABEL = "CAT";
@@ -119,14 +163,6 @@ function filterQuery(filters: DashboardFilters, explicitRange = false) {
   return query.toString();
 }
 
-function PublicLocationCard({ feature }: { feature: MapFeature }) {
-  return <article className="record-card">
-    <h3>{feature.properties.species_common_name ?? "Recorded location"}</h3>
-    <p>{label(feature.properties.status)}</p>
-    <p>{feature.properties.subtitle}</p>
-  </article>;
-}
-
 export function DashboardView({ mode = "dashboard" }: { mode?: "dashboard" | "report" }) {
   const { user } = useAuth();
   const router = useRouter();
@@ -154,6 +190,7 @@ export function DashboardView({ mode = "dashboard" }: { mode?: "dashboard" | "re
   const [mapError, setMapError] = useState<{ path: string; message: string } | null>(null);
   const [mapLoading, setMapLoading] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [health, setHealth] = useState<HealthId | "">("");
   const response = result?.path === dataPath ? result.data : null;
   const error = requestError?.path === dataPath ? requestError.message : null;
   const role = response?.role ?? user?.role;
@@ -223,6 +260,7 @@ export function DashboardView({ mode = "dashboard" }: { mode?: "dashboard" | "re
   const options = result?.data.options;
   const speciesLabel = options?.species.find((species) => species.id === filters.species_id)?.common_name ?? "Selected species";
   const map = mapResult?.path === mapPath ? mapResult.data : null;
+  const located = map ? map.features.filter((feature) => matchesHealth(feature, health)) : [];
   const activeMapError = invalidMapPath ? "Locations are unavailable for this view." : mapError?.path === mapPath ? mapError.message : null;
   const title = mode === "report" ? "Progress reports" : response?.scope_label ?? "Planting overview";
 
@@ -268,6 +306,8 @@ export function DashboardView({ mode = "dashboard" }: { mode?: "dashboard" | "re
         </DashboardKpiGrid>
       </section>
 
+      <TreeHealth summary={response.summary} />
+
       <div className="dashboard-two-col">
         <section className="card"><div className="page-head"><h2>Planting & field activity</h2><span className="help">{dateLabel(response.filters.start_date)} – {dateLabel(response.filters.end_date)}</span></div><SeriesChart title="Planting and field activity" series={response.series} lines={plantingLines} unit="records" monthly={filters.range === "all"} /></section>
         <section className="card"><div className="page-head"><h2>Species coverage</h2><span className="help">Select a species to explore</span></div><BreakdownChart title="Species coverage" photos rows={response.species_counts.map((row) => ({ id: row.species_id, label: row.species_common_name, value: row.trees }))} selected={filters.species_id} onSelect={(id) => changeFilters({ species_id: id === filters.species_id ? "" : id })} /></section>
@@ -276,6 +316,8 @@ export function DashboardView({ mode = "dashboard" }: { mode?: "dashboard" | "re
         <section className="card"><div className="page-head"><h2>Harvest over time</h2><span className="help">Kilograms harvested</span></div><SeriesChart title="Harvest" series={response.series} lines={harvestLines} unit="kg" monthly={filters.range === "all"} /></section>
         <section className="card"><div className="page-head"><h2>Sales over time</h2><span className="help">Recorded sales in RWF</span></div><SeriesChart title="Sales" series={response.series} lines={salesLines} unit="RWF" monthly={filters.range === "all"} /></section>
       </div> : null}
+      {!viewer ? <HarvestSummary refreshKey={response.generated_at} /> : null}
+      {role === "admin" || role === "field_officer" ? <HarvestNotices refreshKey={response.generated_at} /> : null}
       {mode === "report" && !viewer && response.value_chain ? <section className="card">
         <div className="page-head"><h2>Nursery & production detail</h2><span className="help">Balances are current; distributions and advice use the selected period</span></div>
         <DashboardKpiGrid>
@@ -288,14 +330,55 @@ export function DashboardView({ mode = "dashboard" }: { mode?: "dashboard" | "re
       </section> : null}
       <div className="dashboard-two-col dashboard-equal-columns">
         <section className="card"><div className="page-head"><h2>District coverage</h2><span className="help">Current trees by district</span></div><BreakdownChart title="District coverage" rows={response.districts.map((row) => ({ id: row.district, label: row.district, value: row.trees }))} selected={filters.district} onSelect={(id) => changeFilters({ district: id === filters.district ? "" : id })} /></section>
-        <section className="card"><div className="page-head"><h2>Recent plantings</h2><span className="help">Latest {response.recent.length} records</span></div>{!response.recent.length ? <DashboardEmpty title="No plantings in this view">Try clearing filters to see more records.</DashboardEmpty> : <ul className="planting-list">{response.recent.map((row) => <li key={`${row.kind}-${row.id}`}><div>{viewer ? <strong>{row.title}</strong> : <Link href={recordPath(row.kind, row.id)}>{row.title}</Link>}<p className="help">{row.site_name ? `${row.site_name} · ` : ""}{label(row.status)} · {dateLabel(row.planting_date)}</p></div><strong>{number(row.quantity)} {row.quantity === 1 ? "tree" : "trees"}</strong></li>)}</ul>}</section>
+        <section className="card">
+          <div className="page-head"><h2>Recent plantings</h2><span className="help">Latest {response.recent.length} records</span></div>
+          {!response.recent.length ? <DashboardEmpty title="No plantings in this view">Try clearing filters to see more records.</DashboardEmpty> : (
+            <div className="tree-card-grid">
+              {response.recent.map((row) => (
+                <TreeCard
+                  key={`${row.kind}-${row.id}`}
+                  href={viewer ? undefined : recordPath(row.kind, row.id)}
+                  code={row.public_code}
+                  species={row.title}
+                  status={row.status}
+                  place={row.site_name}
+                  when={dateLabel(row.planting_date)}
+                  age={plantedAge(row.planting_date)}
+                  detail={row.quantity > 1 ? `${number(row.quantity)} trees` : null}
+                  action={row.kind === "batch" ? "View batch" : "View tree"}
+                />
+              ))}
+            </div>
+          )}
+        </section>
       </div>
-      {!viewer ? <section className="card"><div className="page-head"><div><h2>Follow-up</h2><p className="help">{number(response.summary.records_missing_coordinates)} records without coordinates</p></div><span className="help">Stressed trees and location gaps · up to 20 items</span></div>{!response.attention.length ? <DashboardEmpty title="No follow-up flagged">No records need follow-up in the current view.</DashboardEmpty> : <div className="attention-grid">{response.attention.map((row) => <Link className="attention-card" key={`${row.kind}-${row.id}-${row.reason}`} href={recordPath(row.kind, row.id)}><strong>{row.title}</strong><span>{row.reason === "stressed" ? "Stressed planting" : "Missing coordinates"}</span><small>{role === "admin" ? "Review record →" : "Open record →"}</small></Link>)}</div>}</section> : null}
-      <section className="card report-map-card"><div className="page-head"><h2>Recorded locations</h2><span className="help">{map ? `${number(map.features.length)} locations shown` : "Locations in this view"}</span></div>
-        {activeMapError ? <Banner tone="error">{activeMapError} <button className="inline-link" type="button" onClick={() => invalidMapPath ? setRefresh((value) => value + 1) : setMapRefresh((value) => value + 1)}>{invalidMapPath ? "Retry dashboard" : "Retry map"}</button></Banner> : mapLoading || !map ? <p className="loading" role="status">Loading locations…</p> : !map.features.length ? <DashboardEmpty title="No located records">These records do not have coordinates yet.</DashboardEmpty> : <div className="map-frame report-map"><MapView features={map.features} selectedId={selectedId} onSelect={setSelectedId} focusOnSelect={false} popupFor={(feature) => viewer ? <PublicLocationCard feature={feature} /> : <LocationCard feature={feature} />} /></div>}
+      {!viewer ? <section className="card">
+        <div className="page-head"><div><h2>Follow-up</h2><p className="help">{number(response.summary.records_missing_coordinates)} records without coordinates</p></div><span className="help">Stressed trees and location gaps · up to 20 items</span></div>
+        {!response.attention.length ? <DashboardEmpty title="No follow-up flagged">No records need follow-up in the current view.</DashboardEmpty> : (
+          <div className="tree-card-grid">
+            {response.attention.map((row) => (
+              <TreeCard
+                key={`${row.kind}-${row.id}-${row.reason}`}
+                href={recordPath(row.kind, row.id)}
+                code={row.public_code}
+                species={row.title}
+                status={row.reason === "stressed" ? "stressed" : row.status}
+                place={row.place}
+                detail={row.reason === "stressed" ? "Needs a visit" : "Missing coordinates"}
+                action="Open record"
+              />
+            ))}
+          </div>
+        )}
+      </section> : null}
+      <section className="card report-map-card">
+        <div className="page-head"><h2>Recorded locations</h2><span className="help">{map ? `${number(located.length)} locations shown` : "Locations in this view"}</span></div>
+        <p className="help">Shaded areas are forest stands. Dots are trees, batches, and sites.</p>
+        <HealthLegend selected={health} onSelect={setHealth} site />
+        {activeMapError ? <Banner tone="error">{activeMapError} <button className="inline-link" type="button" onClick={() => invalidMapPath ? setRefresh((value) => value + 1) : setMapRefresh((value) => value + 1)}>{invalidMapPath ? "Retry dashboard" : "Retry map"}</button></Banner> : mapLoading || !map ? <p className="loading" role="status">Loading locations…</p> : !located.length ? <DashboardEmpty title="No markers for this health">Choose another health colour, or clear the filter.</DashboardEmpty> : <div className="map-frame report-map"><MapView features={located} selectedId={selectedId} onSelect={setSelectedId} focusOnSelect={false} colorOf={markerColor} popupFor={(feature) => <MapPopup feature={feature} />} /></div>}
         {map?.truncated ? <p className="help">Map results are limited. Dashboard totals include all matching records.</p> : null}
       </section>
-      <details className="card metric-explanation"><summary>How these figures are counted</summary><p>Recorded trees includes individual trees and planting batch quantities. Survival uses checked individual trees and the latest survival count for each assessed batch; stressed trees count as alive. Unassessed trees are excluded from the survival percentage. Field activity records includes lifecycle events, growth measurements, and maintenance. Harvest is measured in kilograms; sales are recorded amounts in RWF.</p></details>
+      <details className="card metric-explanation"><summary>How these figures are counted</summary><p>Recorded trees includes individual trees and planting batch quantities. Survival uses checked individual trees and the latest survival count for each assessed batch; stressed trees count as alive. Unassessed trees are excluded from the survival percentage. Tree health counts surviving trees as healthy, stressed trees as moderate, and dead trees as critical. Planted trees and trees without a condition stay outside that split, and a batch quantity counts as that many trees. Forest stands keep their own estimated tree counts and those estimates are not added to these totals. Field activity records includes lifecycle events, growth measurements, and maintenance. Harvest is measured in kilograms; sales are recorded amounts in RWF.</p></details>
       <p className="help dashboard-updated">Updated {new Date(response.generated_at).toLocaleString("en-GB")} · Recorded data in TreeLife</p>
     </div> : null}
   </div>;

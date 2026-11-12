@@ -192,6 +192,11 @@ function AssistantChat({
           aria-label="Message"
           placeholder="Write a message"
           onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
+            event.preventDefault();
+            ask(draft);
+          }}
           required
         />
         <button className="assistant-send" type="submit" aria-label="Send" disabled={busy}>

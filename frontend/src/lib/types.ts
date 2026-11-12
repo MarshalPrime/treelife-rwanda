@@ -1,3 +1,31 @@
+export type AgentIssueKind = "condition" | "visit" | "coordinates" | "incomplete" | "duplicate";
+
+export type AgentBoardRow = {
+  id: string;
+  name: string;
+  trees_registered: number;
+  checked: number;
+  pending: number;
+  coordinate_percent: number;
+  last_registered_on: string;
+  last_submission_on: string;
+  submissions: number;
+  districts: string[];
+  registrations: { day: string; trees: number }[];
+  places: { district: string; sector: string | null; village: string | null; trees: number }[];
+  issues: { id: string; kind: "tree" | "batch"; code: string | null; title: string; issue: AgentIssueKind; place: string | null }[];
+  incomplete: number;
+  duplicates: number;
+  missing_coordinates: number;
+};
+
+export type AgentBoardResponse = {
+  generated_at: string;
+  districts: string[];
+  species: { id: string; common_name: string }[];
+  agents: AgentBoardRow[];
+};
+
 export type Role = "admin" | "field_officer" | "farmer" | "viewer";
 
 export type User = {
@@ -160,12 +188,16 @@ export type LifecycleEvent = {
   created_at: string;
 };
 
+export type MapGeometry =
+  | { type: "Point"; coordinates: [number, number] }
+  | { type: "Polygon"; coordinates: [number, number][][] };
+
 export type MapFeature = {
   type: "Feature";
-  geometry: { type: "Point"; coordinates: [number, number] };
+  geometry: MapGeometry;
   properties: {
     id: string;
-    kind: "site" | "tree" | "batch";
+    kind: "site" | "tree" | "batch" | "forest";
     public_code: string;
     title: string;
     subtitle: string;
@@ -173,6 +205,9 @@ export type MapFeature = {
     category: string | null;
     data_origin: string;
     species_common_name: string | null;
+    area_hectares?: number | null;
+    estimated_trees?: number | null;
+    distribution?: string | null;
   };
 };
 
@@ -232,6 +267,9 @@ export type DashboardResponse = {
     checked_trees: number;
     surviving_trees: number;
     survival_percent: number | null;
+    healthy_trees?: number;
+    moderate_trees?: number;
+    critical_trees?: number;
     farmers: number;
     sites: number;
     species: number;
@@ -243,8 +281,9 @@ export type DashboardResponse = {
   series: { day: string; planted: number; activity: number; harvested_kg: number | null; sales_rwf: number | null }[];
   species_counts: { species_id: string; species_common_name: string; trees: number }[];
   districts: { district: string; trees: number }[];
-  recent: { id: string; kind: "tree" | "batch"; title: string; site_name: string | null; status: string; planting_date: string; quantity: number }[];
-  attention: { id: string; kind: "site" | "tree" | "batch"; title: string; reason: "stressed" | "missing_coordinates" }[];
+  recent: { id: string; kind: "tree" | "batch"; title: string; site_name: string | null; status: string; planting_date: string; quantity: number; public_code?: string | null }[];
+  attention: { id: string; kind: "site" | "tree" | "batch"; title: string; reason: "stressed" | "missing_coordinates"; public_code?: string | null; status?: string | null; place?: string | null }[];
+  agents?: { id: string; name: string; trees_registered: number; checked: number; pending: number; coordinate_percent: number; last_registered_on: string; districts: string[] }[];
   map_query: string;
   value_chain?: { seedlings_remaining: number; seedlings_distributed: number; unsold_kg: number; advisories: number; harvest_by_species: { species_common_name: string; harvested_kg: number; harvested_count: number }[] } | null;
 };

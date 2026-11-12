@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect } from "react";
-import { CircleMarker, MapContainer, TileLayer, useMap } from "react-leaflet";
+import { useEffect, useState } from "react";
+import { CircleMarker, MapContainer, useMap } from "react-leaflet";
+import { ImageryLayer, MapLayerToggle } from "@/components/map-imagery";
 import { dashboardTrees } from "@/lib/example-tree";
 import "leaflet/dist/leaflet.css";
 
@@ -17,7 +18,9 @@ function Frame() {
 }
 
 export default function ExampleMap() {
+  const [satellite, setSatellite] = useState(false);
   return (
+    <div className="map-stage">
     <MapContainer
       center={[-1.94, 29.87]}
       zoom={7}
@@ -27,10 +30,7 @@ export default function ExampleMap() {
       doubleClickZoom={false}
       style={{ height: "100%", width: "100%" }}
     >
-      <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-        url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
+      <ImageryLayer satellite={satellite} />
       <Frame />
       {dashboardTrees.map((tree) => (
         <CircleMarker
@@ -41,5 +41,7 @@ export default function ExampleMap() {
         />
       ))}
     </MapContainer>
+    <MapLayerToggle satellite={satellite} onToggle={() => setSatellite((current) => !current)} />
+    </div>
   );
 }

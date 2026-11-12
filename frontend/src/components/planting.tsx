@@ -5,9 +5,9 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Banner, Pager } from "@/components/AppShell";
 import { PlantingForm } from "@/components/forms";
+import { HealthBadge } from "@/components/tree-card";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { label } from "@/lib/labels";
 import type { Farmer, Page, PlantingRecord, Site, Species } from "@/lib/types";
 
 export function PlantingList({ mode }: { mode: "tree" | "batch" }) {
@@ -41,7 +41,7 @@ export function PlantingList({ mode }: { mode: "tree" | "batch" }) {
       <div className="page-head">
         <div>
           <h1>{mode === "tree" ? "Individual trees" : "Planting batches"}</h1>
-          <p className="lede">{mode === "tree" ? "One record for one tree." : "One record for a group of trees planted together."}</p>
+          <p className="lede">{mode === "tree" ? "One record for one tree." : <>One record for a group of trees planted together. A whole stand is registered as a <Link href="/forests">forest</Link>.</>}</p>
         </div>
         {canWrite ? <Link className="primary" href={`/${base}/new`}>{mode === "tree" ? "Register a tree" : "Register a batch"}</Link> : null}
       </div>
@@ -57,9 +57,9 @@ export function PlantingList({ mode }: { mode: "tree" | "batch" }) {
         </select>
         <select aria-label="Status" value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }}>
           <option value="">All statuses</option>
-          <option value="planted">Planted</option>
-          <option value="surviving">Surviving</option>
-          <option value="stressed">Stressed</option>
+          <option value="planted">Not assessed</option>
+          <option value="surviving">Healthy</option>
+          <option value="stressed">Needs attention</option>
           <option value="dead">Dead</option>
           <option value="removed">Removed</option>
           <option value="unknown">Unknown</option>
@@ -85,7 +85,7 @@ export function PlantingList({ mode }: { mode: "tree" | "batch" }) {
                     <td data-label="Species">{record.species_common_name}</td>
                     <td data-label="Site">{record.site_name}</td>
                     <td data-label="Quantity">{record.quantity}</td>
-                    <td data-label="Status">{label(record.status)}</td>
+                    <td data-label="Status"><HealthBadge status={record.status} /></td>
                     <td data-label="Map">{record.has_coordinates ? "Located" : "No coordinates"}</td>
                   </tr>
                 ))}

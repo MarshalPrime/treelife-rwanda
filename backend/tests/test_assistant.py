@@ -40,7 +40,8 @@ If you need more detail, let me know.
         "  * **Mango:** 40 trees (Planted in Bugesera)\n"
         "  * **Papaya:** 15 trees (Planted in Bugesera)\n"
         "  * **Avocado:** 1 tree (Surviving)\n"
-        "  * **Grevillea:** 1 tree (Planted)\n"
+        "  * **Grevillea:** 1 tree (Planted)\n",
+        "Which species are recorded?",
     )
     assert "Tree Totals" not in trees
     assert "here is" not in trees.lower()
@@ -52,6 +53,53 @@ If you need more detail, let me know.
         "- Avocado: 1 tree",
         "- Grevillea: 1 tree",
     ]
+    summary = concise_reply(
+        "Based on your access, here is a summary:\n"
+        "* **Total Trees Standing:** 60\n"
+        "* **Mango:** 40\n"
+        "* **Papaya:** 15\n"
+        "* **Total Harvest:** 24 kg\n"
+        "* **Total Sales:** 8,000 RWF\n"
+        "*(Note: 1 avocado has no district).*\n",
+        "Summarise the records I can see.",
+    )
+    assert summary == "Total Trees Standing: 60. Total Harvest: 24 kg. Total Sales: 8,000 RWF."
+    assert "Mango" not in summary
+    assert "Note" not in summary
+    follow = concise_reply(
+        "* **Total Trees Standing:** 60\n* **Mango:** 40\n* **Mulching:** 3 records\n",
+        "what do we have",
+    )
+    assert follow == "Total Trees Standing: 60. Mulching: 3 records."
+    assert "Mango" not in follow
+    categories = concise_reply(
+        "Based on your records, the trees are categorized by species and status "
+        "(health condition) as follows:\n"
+        "* **Fruit:** 70 trees\n"
+        "* **Urban:** 8 trees\n"
+        "* **Agroforestry:** 3 trees\n"
+        "If you would like, I can explain each category in more detail.\n",
+        "which type do we have like categories?",
+    )
+    assert categories.splitlines() == [
+        "- Fruit: 70 trees",
+        "- Urban: 8 trees",
+        "- Agroforestry: 3 trees",
+    ]
+    assert concise_reply(
+        "* **Fruit:** 71 trees\n* **(Other):** 0\n* **Urban:** 3 trees\n",
+        "which categories do we have?",
+    ).splitlines() == ["- Fruit: 71 trees", "- Urban: 3 trees"]
+    total = concise_reply(
+        "Based on your records, there are 81 total trees recorded, "
+        "with 76 trees currently standing.\n"
+        "I can also go through each species one by one if that would help.\n",
+        "how many trees do we have in total?",
+    )
+    assert (
+        total
+        == "Based on your records, there are 81 total trees recorded, with 76 trees currently standing."
+    )
 
 
 def test_brief_stays_inside_the_signed_in_account(client, accounts):

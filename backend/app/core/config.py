@@ -49,7 +49,7 @@ class Settings(BaseSettings):
     database_url: str = LOCAL_DATABASE_URL
     postgres_url: str | None = None
     postgres_url_non_pooling: str | None = None
-    cors_origins: str = "http://localhost:3000"
+    cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
     access_token_expire_minutes: int = 480
     seed_demo_data: bool = False
     demo_admin_password: str = "demo-admin-pass"

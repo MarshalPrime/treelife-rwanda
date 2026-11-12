@@ -359,18 +359,16 @@ class SaleCreate(BaseModel):
     harvest_id: uuid.UUID
     sold_on: date
     quantity: float
-    amount_rwf: float
-    buyer_name: str = Field(min_length=1, max_length=200)
+    purpose: Literal["sold", "personal_consumption", "stored", "given_away", "other"] = "sold"
+    amount_rwf: float = 0
+    buyer_name: str | None = Field(default=None, max_length=200)
     notes: str | None = Field(default=None, max_length=2000)
     client_request_id: str | None = Field(default=None, max_length=80)
 
     @field_validator("buyer_name")
     @classmethod
-    def clean_buyer(cls, value: str) -> str:
-        cleaned = value.strip()
-        if not cleaned:
-            raise ValueError("Buyer name is required.")
-        return cleaned
+    def clean_buyer(cls, value: str | None) -> str | None:
+        return clean_optional_text(value)
 
     @field_validator("notes", "client_request_id")
     @classmethod
@@ -379,6 +377,12 @@ class SaleCreate(BaseModel):
 
     @model_validator(mode="after")
     def validate_sale(self) -> SaleCreate:
+        if self.purpose == "sold":
+            if not self.buyer_name:
+                raise ValueError("Name the market or organization. Do not enter a national ID.")
+        else:
+            self.buyer_name = None
+            self.amount_rwf = 0
         if self.amount_rwf < 0 or self.amount_rwf > 100_000_000_000:
             raise ValueError("Amount must be zero or a positive number of Rwandan francs.")
         check_historical_date(self.sold_on, "Sale date")
@@ -395,9 +399,134 @@ class SaleRead(BaseModel):
     quantity: float
     unit: str
     amount_rwf: float
-    buyer_name: str
+    purpose: str
+    buyer_name: str | None
     notes: str | None
     data_origin: str
+
+
+class HarvestShare(BaseModel):
+    harvest_id: uuid.UUID
+    public_code: str
+    target_code: str | None
+    harvested_on: date
+    quantity: float
+    unit: str
+    sold: float
+    personal_consumption: float
+    stored: float
+    given_away: float
+    other: float
+    unassigned: float
+    balanced: bool
+    recorded_by: str
+
+
+class HarvestHistoryItem(BaseModel):
+    public_code: str
+    kind: Literal["harvest", "destination"]
+    occurred_on: date
+    target_code: str | None
+    quantity: float
+    unit: str
+    purpose: str | None
+    amount_rwf: float | None
+    buyer_name: str | None
+    recorded_by: str
+    harvest_code: str | None
+
+
+class HarvestOverview(BaseModel):
+    harvested_kg: float
+    harvested_count: float
+    sold_kg: float
+    sold_count: float
+    sales_rwf: float
+    personal_kg: float
+    personal_count: float
+    stored_kg: float
+    stored_count: float
+    given_kg: float
+    given_count: float
+    other_kg: float
+    other_count: float
+    unassigned_kg: float
+    unassigned_count: float
+    shares: list[HarvestShare]
+    history: list[HarvestHistoryItem]
+
+
+class HarvestFeedbackCreate(BaseModel):
+    harvest_id: uuid.UUID | None = None
+    kind: Literal[
+        "experience",
+        "challenge",
+        "loss",
+        "suggestion",
+        "observation",
+        "verification",
+        "recommendation",
+    ]
+    body: str = Field(min_length=1, max_length=2000)
+    loss_quantity: float | None = None
+    loss_unit: str | None = None
+    verified_quantity: float | None = None
+    client_request_id: str | None = Field(default=None, max_length=80)
+
+    @field_validator("body")
+    @classmethod
+    def clean_body(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("Write the feedback before saving.")
+        return cleaned
+
+    @field_validator("client_request_id")
+    @classmethod
+    def clean_request(cls, value: str | None) -> str | None:
+        return clean_optional_text(value)
+
+    @model_validator(mode="after")
+    def validate_feedback(self) -> HarvestFeedbackCreate:
+        check_request_id(self.client_request_id)
+        if self.kind == "loss" and self.loss_quantity is not None:
+            if self.loss_unit not in {"kg", "count"}:
+                raise ValueError("Loss unit must be kg or count.")
+            check_measure(self.loss_quantity, self.loss_unit)
+        else:
+            self.loss_quantity = None
+            self.loss_unit = None
+        if self.kind == "verification":
+            if self.harvest_id is None or self.verified_quantity is None:
+                raise ValueError("Choose the harvest and enter the quantity you checked.")
+            if self.verified_quantity < 0 or self.verified_quantity > 1_000_000:
+                raise ValueError("Verified quantity must be zero or a positive number.")
+        else:
+            self.verified_quantity = None
+        return self
+
+
+class HarvestFeedbackRead(BaseModel):
+    id: uuid.UUID
+    public_code: str
+    harvest_id: uuid.UUID | None
+    harvest_code: str | None
+    kind: str
+    body: str
+    loss_quantity: float | None
+    loss_unit: str | None
+    verified_quantity: float | None
+    recorded_by: str
+    created_at: datetime
+
+
+class HarvestNoticeRead(BaseModel):
+    id: uuid.UUID
+    public_code: str
+    kind: str
+    summary: str
+    harvest_code: str | None
+    created_at: datetime
 
 
 class AdvisoryCreate(BaseModel):
@@ -585,6 +714,9 @@ class DashboardSummary(BaseModel):
     checked_trees: int
     surviving_trees: int
     survival_percent: int | None
+    healthy_trees: int = 0
+    moderate_trees: int = 0
+    critical_trees: int = 0
     farmers: int
     sites: int
     species: int
@@ -620,6 +752,7 @@ class DashboardRecent(BaseModel):
     site_name: str | None
     status: str
     planting_date: date
+    public_code: str | None = None
     quantity: int
 
 
@@ -628,6 +761,72 @@ class DashboardAttention(BaseModel):
     kind: str
     title: str
     reason: str
+    public_code: str | None = None
+    status: str | None = None
+    place: str | None = None
+
+
+class DashboardAgent(BaseModel):
+    id: uuid.UUID
+    name: str
+    trees_registered: int
+    checked: int
+    pending: int
+    coordinate_percent: int
+    last_registered_on: date
+    districts: list[str]
+
+
+class AgentRegistration(BaseModel):
+    day: date
+    trees: int
+
+
+class AgentPlaceCount(BaseModel):
+    district: str
+    sector: str | None = None
+    village: str | None = None
+    trees: int
+
+
+class AgentIssue(BaseModel):
+    id: uuid.UUID
+    kind: Literal["tree", "batch"]
+    code: str | None = None
+    title: str
+    issue: Literal["condition", "visit", "coordinates", "incomplete", "duplicate"]
+    place: str | None = None
+
+
+class AgentBoardRow(BaseModel):
+    id: uuid.UUID
+    name: str
+    trees_registered: int
+    checked: int
+    pending: int
+    coordinate_percent: int
+    last_registered_on: date
+    last_submission_on: date
+    submissions: int
+    districts: list[str]
+    registrations: list[AgentRegistration]
+    places: list[AgentPlaceCount]
+    issues: list[AgentIssue]
+    incomplete: int
+    duplicates: int
+    missing_coordinates: int
+
+
+class AgentSpeciesOption(BaseModel):
+    id: uuid.UUID
+    common_name: str
+
+
+class AgentBoardResponse(BaseModel):
+    generated_at: datetime
+    districts: list[str] = []
+    species: list[AgentSpeciesOption] = []
+    agents: list[AgentBoardRow]
 
 
 class DashboardValueChain(BaseModel):
@@ -652,6 +851,7 @@ class DashboardResponse(BaseModel):
     districts: list[DashboardDistrictCount]
     recent: list[DashboardRecent]
     attention: list[DashboardAttention]
+    agents: list[DashboardAgent] = []
     map_query: str
     value_chain: DashboardValueChain | None = None
 

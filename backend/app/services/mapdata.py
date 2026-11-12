@@ -7,7 +7,7 @@ import uuid
 from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session, joinedload
 
-from app.models.entities import IndividualTree, PlantingBatch, PlantingSite, Species
+from app.models.entities import Forest, IndividualTree, PlantingBatch, PlantingSite, Species
 from app.schemas.entities import MapFeature, MapFeatureProperties, MapResponse, UnlocatedRecord
 
 MAX_FEATURES = 2000
@@ -171,4 +171,86 @@ def build_map(
 
     add_planted(IndividualTree, "tree", "Individual tree")
     add_planted(PlantingBatch, "batch", "Planting batch")
+    if _add_forests_into(
+        db,
+        features,
+        selected=selected,
+        species_id=species_id,
+        category=category,
+        status=status,
+        query=query,
+        district=district,
+        entered_by=entered_by,
+    ):
+        truncated = True
     return MapResponse(features=features, unlocated=unlocated, truncated=truncated)
+
+
+def _add_forests_into(
+    db: Session,
+    features: list[MapFeature],
+    *,
+    selected: str,
+    species_id: uuid.UUID | None,
+    category: str | None,
+    status: str | None,
+    query: str | None,
+    district: str | None,
+    entered_by: uuid.UUID | None,
+) -> bool:
+    """Return whether the result was truncated. Forests stay visible for every farmer."""
+
+    if selected not in {"all", "forest"} or category:
+        return False
+    room = MAX_FEATURES - len(features)
+    if room <= 0:
+        return True
+    stmt = select(Forest).options(joinedload(Forest.species))
+    if species_id:
+        stmt = stmt.where(Forest.species_id == species_id)
+    if status:
+        stmt = stmt.where(Forest.status == status)
+    if district:
+        stmt = stmt.where(Forest.district.ilike(district.strip()))
+    if entered_by:
+        stmt = stmt.where(Forest.registered_by == entered_by)
+    if query and query.strip():
+        like = f"%{query.strip()}%"
+        stmt = stmt.where(
+            or_(
+                Forest.name.ilike(like),
+                Forest.public_code.ilike(like),
+                Forest.district.ilike(like),
+                Forest.description.ilike(like),
+            )
+        )
+    rows = db.scalars(stmt.order_by(Forest.created_at.desc()).limit(room + 1)).unique().all()
+    truncated = len(rows) > room
+    for row in rows[:room]:
+        if not row.ring or len(row.ring) < 3:
+            continue
+        ring = [[float(lon), float(lat)] for lon, lat in row.ring]
+        if ring[0] != ring[-1]:
+            ring.append(ring[0])
+        species_name = row.species.common_name if row.species else None
+        place = row.district or row.province or "Forest stand"
+        features.append(
+            MapFeature(
+                geometry={"type": "Polygon", "coordinates": [ring]},
+                properties=MapFeatureProperties(
+                    id=row.id,
+                    kind="forest",
+                    public_code=row.public_code,
+                    title=row.name,
+                    subtitle=place,
+                    status=row.status,
+                    category=None,
+                    data_origin=row.data_origin,
+                    species_common_name=species_name,
+                    area_hectares=row.area_hectares,
+                    estimated_trees=row.estimated_trees,
+                    distribution=row.distribution,
+                ),
+            )
+        )
+    return truncated

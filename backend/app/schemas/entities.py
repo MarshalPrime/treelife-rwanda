@@ -677,6 +677,9 @@ class MapFeatureProperties(BaseModel):
     category: str | None
     data_origin: str
     species_common_name: str | None = None
+    area_hectares: float | None = None
+    estimated_trees: int | None = None
+    distribution: str | None = None
 
 
 class MapFeature(BaseModel):

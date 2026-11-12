@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { Banner, OriginBadge } from "@/components/AppShell";
+import { HealthBadge } from "@/components/tree-card";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { coordinateText, formatWhen, label } from "@/lib/labels";
@@ -271,7 +272,7 @@ export function PlantingDetail({ mode }: { mode: "tree" | "batch" }) {
           ["Category", label(record.category)],
           ["Planting date", record.planting_date],
           ["Quantity", String(record.quantity)],
-          ["Status", label(record.status)],
+          ["Status", <HealthBadge key="status" status={record.status} />],
           ["Coordinates", coordinateText(record.latitude, record.longitude)],
           ["Registered by", record.registered_by_name ?? "—"],
           ["Registered", formatWhen(record.registered_at)],

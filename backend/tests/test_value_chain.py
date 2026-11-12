@@ -154,6 +154,36 @@ def test_value_chain_from_nursery_to_sale(client, accounts):
         headers=headers,
     )
     assert sale.status_code == 201, sale.text
+    assert sale.json()["purpose"] == "sold"
+    household = client.post(
+        "/api/v1/sales",
+        json={
+            "harvest_id": harvest.json()["id"],
+            "sold_on": "2026-08-03",
+            "quantity": 2,
+            "purpose": "personal_consumption",
+            "client_request_id": "use-request-0001",
+        },
+        headers=headers,
+    )
+    assert household.status_code == 201, household.text
+    assert household.json()["purpose"] == "personal_consumption"
+    assert household.json()["amount_rwf"] == 0
+    assert household.json()["buyer_name"] is None
+    assert household.json()["public_code"].startswith("USE-")
+    missing_buyer = client.post(
+        "/api/v1/sales",
+        json={
+            "harvest_id": harvest.json()["id"],
+            "sold_on": "2026-08-03",
+            "quantity": 1,
+            "purpose": "sold",
+            "amount_rwf": 100,
+            "client_request_id": "sale-request-no-buyer",
+        },
+        headers=headers,
+    )
+    assert missing_buyer.status_code == 422
     advice = client.post(
         "/api/v1/advisories",
         json={
@@ -182,7 +212,7 @@ def test_value_chain_from_nursery_to_sale(client, accounts):
     assert body["seedlings_remaining"] == 6
     assert body["seedlings_distributed"] == 4
     assert body["harvested_kg"] == 12
-    assert body["unsold_kg"] == 7
+    assert body["unsold_kg"] == 5
     assert body["sales_rwf"] == 4000
     assert body["advisories"] == 1
     assert body["maintenance_activities"] == 1
@@ -203,7 +233,7 @@ def test_value_chain_from_nursery_to_sale(client, accounts):
     chain = dashboard.json()["value_chain"]
     assert chain["seedlings_remaining"] == 6
     assert chain["seedlings_distributed"] == 4
-    assert chain["unsold_kg"] == 7
+    assert chain["unsold_kg"] == 5
     assert chain["advisories"] == 1
     assert chain["harvest_by_species"] == [
         {"species_common_name": "Avocado", "harvested_kg": 12, "harvested_count": 0}

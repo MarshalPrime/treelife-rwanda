@@ -30,6 +30,14 @@ vi.mock("next/dynamic", () => ({
 }));
 
 const emptyMap: MapResponse = { type: "FeatureCollection", features: [], unlocated: [], truncated: false };
+const quietHarvest = { harvested_kg: 0, harvested_count: 0, sold_kg: 0, sold_count: 0, sales_rwf: 0, personal_kg: 0, personal_count: 0, stored_kg: 0, stored_count: 0, given_kg: 0, given_count: 0, other_kg: 0, other_count: 0, unassigned_kg: 0, unassigned_count: 0, shares: [], history: [] };
+function dashboardApi(path: string, dashboard: unknown, map: unknown = emptyMap) {
+  if (path.startsWith("/harvest-notices")) return Promise.resolve([]);
+  if (path.startsWith("/harvests/")) return Promise.resolve(quietHarvest);
+  if (path.startsWith("/dashboard/map") || path.startsWith("/map")) return Promise.resolve(map);
+  if (path.startsWith("/dashboard")) return Promise.resolve(dashboard);
+  return Promise.resolve(map);
+}
 function response(role: Role = "admin", recorded = 111): DashboardResponse {
   return {
     role, scope_label: "Programme overview", linked: true, includes_demonstration: false,
@@ -60,7 +68,7 @@ beforeEach(() => {
   mocks.search = "";
   mocks.user.role = "admin";
   mocks.push.mockImplementation((url: string) => navigate(url.split("?")[1] ?? ""));
-  mocks.api.mockImplementation((path: string) => Promise.resolve(path.startsWith("/dashboard?") ? response() : emptyMap));
+  mocks.api.mockImplementation((path: string) => dashboardApi(path, response()));
 });
 afterEach(() => { cleanup(); mocks.listeners.clear(); });
 
@@ -68,11 +76,15 @@ describe("dashboard requests and role behavior", () => {
   it("uses the default 90-day period, current survival labels, and accessible chart tables", async () => {
     const user = userEvent.setup();
     render(<DashboardView />);
-    expect(await screen.findAllByText("Not assessed")).toHaveLength(2);
+    expect(await screen.findAllByText("Not assessed")).toHaveLength(3);
     expect(mocks.api).toHaveBeenCalledWith("/dashboard?range=90", expect.anything());
     expect(screen.getByLabelText("Period")).toHaveValue("90");
     await user.click(screen.getByText("View planting and field activity data table"));
     expect(screen.getByRole("table", { name: /Planting and field activity/ })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Agents" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Tree health" })).toBeInTheDocument();
+    expect(screen.getByText("Moderate")).toBeInTheDocument();
+    expect(screen.getByText("Critical")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Harvest over time" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Sales over time" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Register/ })).not.toBeInTheDocument();
@@ -81,7 +93,10 @@ describe("dashboard requests and role behavior", () => {
   it("keeps KPI data when the map fails and retries only the map", async () => {
     const user = userEvent.setup();
     let mapCalls = 0;
-    mocks.api.mockImplementation((path: string) => path.startsWith("/dashboard?") ? Promise.resolve(response()) : ++mapCalls === 1 ? Promise.reject(new Error("Map offline")) : Promise.resolve(emptyMap));
+    mocks.api.mockImplementation((path: string) => {
+      if (path.startsWith("/dashboard/map")) return ++mapCalls === 1 ? Promise.reject(new Error("Map offline")) : Promise.resolve(emptyMap);
+      return dashboardApi(path, response());
+    });
     render(<DashboardView />);
     expect(await screen.findByText("Map offline")).toBeInTheDocument();
     expect(screen.getByText("Trees standing")).toBeInTheDocument();
@@ -98,7 +113,7 @@ describe("dashboard requests and role behavior", () => {
     render(<DashboardView />);
     expect(await screen.findByText("Server offline")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Retry dashboard" }));
-    expect(await screen.findAllByText("Not assessed")).toHaveLength(2);
+    expect(await screen.findAllByText("Not assessed")).toHaveLength(3);
     expect(screen.queryByText("Server offline")).not.toBeInTheDocument();
   });
 
@@ -106,7 +121,7 @@ describe("dashboard requests and role behavior", () => {
     const user = userEvent.setup();
     const old = deferred<DashboardResponse>();
     const current = deferred<DashboardResponse>();
-    mocks.api.mockImplementation((path: string) => path.includes("/dashboard?range=90") ? old.promise : path.includes("/dashboard?range=30") ? current.promise : Promise.resolve(emptyMap));
+    mocks.api.mockImplementation((path: string) => path.includes("/dashboard?range=90") ? old.promise : path.includes("/dashboard?range=30") ? current.promise : dashboardApi(path, response()));
     render(<DashboardView />);
     await user.selectOptions(screen.getByLabelText("Period"), "30");
     await act(async () => { current.resolve(response("admin", 333)); });
@@ -119,10 +134,10 @@ describe("dashboard requests and role behavior", () => {
   it("ignores wrapped errors from an aborted period request", async () => {
     const user = userEvent.setup();
     const old = deferred<DashboardResponse>();
-    mocks.api.mockImplementation((path: string) => path.includes("/dashboard?range=90") ? old.promise : Promise.resolve(path.startsWith("/dashboard?") ? response() : emptyMap));
+    mocks.api.mockImplementation((path: string) => path.includes("/dashboard?range=90") ? old.promise : dashboardApi(path, response()));
     render(<DashboardView />);
     await user.selectOptions(screen.getByLabelText("Period"), "30");
-    expect(await screen.findAllByText("Not assessed")).toHaveLength(2);
+    expect(await screen.findAllByText("Not assessed")).toHaveLength(3);
     await act(async () => { old.reject(new Error("Could not reach the server")); });
     expect(screen.queryByText("Could not reach the server")).not.toBeInTheDocument();
   });
@@ -149,12 +164,13 @@ describe("dashboard requests and role behavior", () => {
     mocks.user.role = "viewer";
     const viewer = response("viewer");
     const map = { ...emptyMap, features: [{ type: "Feature", geometry: { type: "Point", coordinates: [30, -2] }, properties: { id: "public-tree", kind: "tree", public_code: "TREE-1", title: "Mango", subtitle: "Huye", status: "surviving", category: "fruit", data_origin: "field_entry", species_common_name: "Mango" } }] } as MapResponse;
-    mocks.api.mockImplementation((path: string) => Promise.resolve(path.startsWith("/dashboard?") ? viewer : map));
+    mocks.api.mockImplementation((path: string) => dashboardApi(path, viewer, map));
     render(<DashboardView />);
     expect(await screen.findByRole("link", { name: "Browse trees" })).toBeInTheDocument();
     await screen.findByTestId("map-preview");
     expect(screen.queryByRole("heading", { name: "Harvest over time" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Follow-up" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Agents" })).not.toBeInTheDocument();
     expect(screen.queryByText("Farmers")).not.toBeInTheDocument();
     expect(mocks.api.mock.calls.some(([path]) => path.startsWith("/trees/"))).toBe(false);
     expect(screen.queryByText(/not linked/)).not.toBeInTheDocument();
@@ -162,7 +178,7 @@ describe("dashboard requests and role behavior", () => {
 
   it("displays the household-link warning only for an unlinked farmer", async () => {
     mocks.user.role = "farmer";
-    mocks.api.mockImplementation((path: string) => Promise.resolve(path.startsWith("/dashboard?") ? { ...response("farmer"), linked: false } : emptyMap));
+    mocks.api.mockImplementation((path: string) => dashboardApi(path, { ...response("farmer"), linked: false }));
     render(<DashboardView />);
     expect(await screen.findByText(/Your login is not linked/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Register a tree/ })).toBeInTheDocument();
@@ -170,7 +186,7 @@ describe("dashboard requests and role behavior", () => {
 
   it("retains nursery balances and production breakdowns in Reports", async () => {
     const report = { ...response(), value_chain: { seedlings_remaining: 6, seedlings_distributed: 4, unsold_kg: 7, advisories: 1, harvest_by_species: [{ species_common_name: "Mango", harvested_kg: 15, harvested_count: 0 }] } };
-    mocks.api.mockImplementation((path: string) => Promise.resolve(path.startsWith("/dashboard?") ? report : emptyMap));
+    mocks.api.mockImplementation((path: string) => dashboardApi(path, report));
     render(<DashboardView mode="report" />);
     expect(await screen.findByText("Seedlings in nursery")).toBeInTheDocument();
     expect(screen.getByText("Seedlings distributed")).toBeInTheDocument();
@@ -181,7 +197,7 @@ describe("dashboard requests and role behavior", () => {
 
   it("shows a bounded error instead of an endless loader for an invalid map contract", async () => {
     const invalid = { ...response(), map_query: "/map", filters: { ...response().filters, start_date: "invalid", end_date: "" } };
-    mocks.api.mockImplementation((path: string) => Promise.resolve(path.startsWith("/dashboard?") ? invalid : emptyMap));
+    mocks.api.mockImplementation((path: string) => dashboardApi(path, invalid));
     render(<DashboardView />);
     expect(await screen.findByText("Locations are unavailable for this view.")).toBeInTheDocument();
     expect(screen.getByText(/Date unavailable.*Date unavailable/)).toBeInTheDocument();

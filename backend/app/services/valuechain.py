@@ -54,6 +54,7 @@ from app.schemas.valuechain import (
     SpeciesCount,
 )
 from app.services.common import allocate_code, find_by_request_id, utcnow, write_audit
+from app.services.harvest import flag_unusual_harvest, reject_duplicate_destination
 from app.services.registration import _commit, require_organization
 
 
@@ -415,6 +416,9 @@ def create_harvest(db: Session, user: User, payload: HarvestCreate) -> tuple[Har
         client_request_id=payload.client_request_id,
         registered_by=user.id,
     )
+    if row.id is None:
+        row.id = uuid.uuid4()
+    flag_unusual_harvest(db, user, row)
     return _save(db, user, row, "harvest", ["quantity", "unit"])
 
 
@@ -437,6 +441,7 @@ def create_sale(db: Session, user: User, payload: SaleCreate) -> tuple[Sale, boo
     harvest = db.get(Harvest, payload.harvest_id)
     if harvest is None:
         raise DomainError("Harvest was not found.", status_code=422, field="harvest_id")
+    reject_duplicate_destination(db, payload)
     try:
         check_measure(payload.quantity, harvest.unit)
     except ValueError as exc:
@@ -450,19 +455,20 @@ def create_sale(db: Session, user: User, payload: SaleCreate) -> tuple[Sale, boo
     remaining = harvest.quantity_remaining - payload.quantity
     harvest.quantity_remaining = 0 if remaining < 1e-6 else remaining
     row = Sale(
-        public_code=allocate_code(db, Sale, "SALE"),
+        public_code=allocate_code(db, Sale, "SALE" if payload.purpose == "sold" else "USE"),
         harvest_id=harvest.id,
         sold_on=payload.sold_on,
         quantity=payload.quantity,
         unit=harvest.unit,
         amount_rwf=payload.amount_rwf,
+        purpose=payload.purpose,
         buyer_name=payload.buyer_name,
         notes=payload.notes,
         data_origin=DataOrigin.field_entry.value,
         client_request_id=payload.client_request_id,
         registered_by=user.id,
     )
-    return _save(db, user, row, "sale", ["quantity", "amount_rwf"])
+    return _save(db, user, row, "sale", ["quantity", "purpose", "amount_rwf"])
 
 
 def list_sales(db: Session) -> list[Sale]:

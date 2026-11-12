@@ -64,3 +64,21 @@ def require_admin(user: User = Depends(get_current_user)) -> User:
     if user.role != UserRole.admin.value:
         raise HTTPException(status_code=403, detail="This action is limited to administrators.")
     return user
+
+
+def require_forest_writer(user: User = Depends(get_current_user)) -> User:
+    if user.role not in {UserRole.admin.value, UserRole.field_officer.value}:
+        raise HTTPException(
+            status_code=403,
+            detail="Only an administrator or field officer can register a forest.",
+        )
+    return user
+
+
+def require_attention(user: User = Depends(get_current_user)) -> User:
+    if user.role not in {UserRole.admin.value, UserRole.field_officer.value}:
+        raise HTTPException(
+            status_code=403,
+            detail="Only an administrator or field officer can see these notices.",
+        )
+    return user

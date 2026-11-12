@@ -11,7 +11,14 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_user, require_admin, require_staff, require_writer
+from app.core.deps import (
+    get_current_user,
+    require_admin,
+    require_attention,
+    require_forest_writer,
+    require_staff,
+    require_writer,
+)
 from app.core.security import create_access_token, verify_password
 from app.db.session import get_db
 from app.domain.errors import DomainError
@@ -43,9 +50,11 @@ from app.schemas.entities import (
     TreeUpdate,
     UserRead,
 )
+from app.schemas.forests import ForestCreate, ForestRead
 from app.schemas.valuechain import (
     AdvisoryCreate,
     AdvisoryRead,
+    AgentBoardResponse,
     AnalyticsResponse,
     AssistantReply,
     AssistantRequest,
@@ -62,6 +71,10 @@ from app.schemas.valuechain import (
     GrowthCreate,
     GrowthRead,
     HarvestCreate,
+    HarvestFeedbackCreate,
+    HarvestFeedbackRead,
+    HarvestNoticeRead,
+    HarvestOverview,
     HarvestRead,
     LotCreate,
     LotRead,
@@ -74,6 +87,9 @@ from app.schemas.valuechain import (
     SaleRead,
 )
 from app.services.assistant import reply as assistant_reply
+from app.services.dashboard import collect_agent_board
+from app.services.forests import create_forest, get_forest, list_forests, to_read, update_forest
+from app.services.harvest import create_feedback, harvest_overview, list_feedback, list_notices
 from app.services.locations import child_places
 from app.services.mapdata import build_map
 from app.services.profile_photo import (
@@ -526,9 +542,65 @@ def post_event(
     return event_to_read(event)
 
 
+@router.get("/forests", response_model=Page[ForestRead])
+def get_forests(
+    q: str | None = Query(default=None, max_length=200),
+    distribution: str | None = Query(default=None, pattern="^(natural|rows|clusters|mixed)$"),
+    status: str | None = Query(default=None, pattern="^(surviving|stressed|dead|unknown)$"),
+    species_id: uuid.UUID | None = None,
+    district: str | None = Query(default=None, max_length=120),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=10, ge=1, le=50),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> Page[ForestRead]:
+    rows, total = list_forests(
+        db,
+        query=q,
+        distribution=distribution,
+        status=status,
+        species_id=species_id,
+        district=district,
+        page=page,
+        page_size=page_size,
+    )
+    return Page(items=[to_read(row) for row in rows], total=total, page=page, page_size=page_size)
+
+
+@router.post("/forests", response_model=ForestRead, status_code=201)
+def post_forest(
+    payload: ForestCreate,
+    response: Response,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_forest_writer),
+) -> ForestRead:
+    row, replay = create_forest(db, user, payload)
+    mark_created(response, replay)
+    return to_read(row)
+
+
+@router.get("/forests/{forest_id}", response_model=ForestRead)
+def get_one_forest(
+    forest_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> ForestRead:
+    return to_read(get_forest(db, forest_id))
+
+
+@router.put("/forests/{forest_id}", response_model=ForestRead)
+def put_forest(
+    forest_id: uuid.UUID,
+    payload: ForestCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_forest_writer),
+) -> ForestRead:
+    return to_read(update_forest(db, user, forest_id, payload))
+
+
 @router.get("/map", response_model=MapResponse)
 def get_map(
-    kind: str | None = Query(default=None, pattern="^(site|tree|batch|all)$"),
+    kind: str | None = Query(default=None, pattern="^(site|tree|batch|forest|all)$"),
     species_id: uuid.UUID | None = None,
     category: str | None = Query(default=None, max_length=40),
     status: str | None = Query(default=None, max_length=32),
@@ -954,6 +1026,7 @@ def get_sales(db: Session = Depends(get_db), _: User = Depends(get_current_user)
             quantity=row.quantity,
             unit=row.unit,
             amount_rwf=row.amount_rwf,
+            purpose=row.purpose,
             buyer_name=row.buyer_name,
             notes=row.notes,
             data_origin=row.data_origin,
@@ -972,6 +1045,39 @@ def post_sale(
     row, replay = create_sale(db, user, payload)
     mark_created(response, replay)
     return next(item for item in get_sales(db) if item.id == row.id)
+
+
+@router.get("/harvests/overview", response_model=HarvestOverview)
+def get_harvest_overview(
+    db: Session = Depends(get_db), _: User = Depends(get_current_user)
+) -> HarvestOverview:
+    return harvest_overview(db)
+
+
+@router.get("/harvest-feedback", response_model=list[HarvestFeedbackRead])
+def get_harvest_feedback(
+    db: Session = Depends(get_db), _: User = Depends(get_current_user)
+) -> list[HarvestFeedbackRead]:
+    return list_feedback(db)
+
+
+@router.post("/harvest-feedback", response_model=HarvestFeedbackRead, status_code=201)
+def post_harvest_feedback(
+    payload: HarvestFeedbackCreate,
+    response: Response,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_writer),
+) -> HarvestFeedbackRead:
+    row, replay = create_feedback(db, user, payload)
+    mark_created(response, replay)
+    return next(item for item in list_feedback(db) if item.id == row.id)
+
+
+@router.get("/harvest-notices", response_model=list[HarvestNoticeRead])
+def get_harvest_notices(
+    db: Session = Depends(get_db), _: User = Depends(require_attention)
+) -> list[HarvestNoticeRead]:
+    return list_notices(db)
 
 
 @router.get("/advisories", response_model=list[AdvisoryRead])
@@ -1042,6 +1148,16 @@ def analytics(
     return collect_analytics(db, user, start_date=start_date, end_date=end_date)
 
 
+@router.get("/agents/board", response_model=AgentBoardResponse)
+def agent_board(
+    district: str | None = Query(default=None, max_length=120),
+    species_id: uuid.UUID | None = Query(default=None),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+) -> AgentBoardResponse:
+    return collect_agent_board(db, user, district=district, species_id=species_id)
+
+
 @router.get("/dashboard", response_model=DashboardResponse)
 def dashboard(
     district: str | None = Query(default=None),
@@ -1091,7 +1207,10 @@ def dashboard_map(
     )
     if user.role == "viewer":
         # Public dashboard cards expose species and geography, never household labels.
+        # A forest name is a stand name, so it stays.
         for feature in result.features:
+            if feature.properties.kind == "forest":
+                continue
             feature.properties.title = feature.properties.species_common_name or "Planting site"
             feature.properties.subtitle = district or "Rwanda"
         for record in result.unlocated:

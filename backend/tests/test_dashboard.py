@@ -82,6 +82,7 @@ def test_dashboard_role_scope_and_viewer_redaction(client, accounts):
     assert all(point["harvested_kg"] is None for point in viewer_body["series"])
     assert all(point["sales_rwf"] is None for point in viewer_body["series"])
     assert viewer_body["attention"] == []
+    assert viewer_body["agents"] == []
 
 
 def test_dashboard_rejects_invalid_or_oversized_ranges(client, accounts):
@@ -370,3 +371,166 @@ def test_standing_total_drops_when_a_tree_dies(client, accounts):
     after = client.get("/api/v1/dashboard?range=all", headers=auth(accounts, "admin"))
     assert after.json()["summary"]["recorded_trees"] == 1
     assert after.json()["summary"]["standing_trees"] == 0
+
+
+def test_admin_sees_who_registered_trees_and_what_is_still_unchecked(client, accounts):
+    species = make_species(client, accounts, "Mangifera indica", "Mango")
+    site = make_site(client, accounts, client_request_id="agent-board-site")
+    checked = client.post(
+        "/api/v1/trees",
+        json={
+            "site_id": site.json()["id"],
+            "species_id": species["id"],
+            "category": "fruit",
+            "planting_date": "2026-03-01",
+            "status": "surviving",
+            "latitude": -1.95,
+            "longitude": 30.06,
+            "client_request_id": "agent-board-checked",
+        },
+        headers=auth(accounts),
+    )
+    assert checked.status_code == 201, checked.text
+    create_batch(client, auth(accounts), site.json()["id"], species["id"], "agent-board-batch", 10)
+
+    admin = client.get("/api/v1/dashboard?range=all", headers=auth(accounts, "admin"))
+    assert admin.status_code == 200, admin.text
+    agents = admin.json()["agents"]
+    assert len(agents) == 1
+    agent = agents[0]
+    assert agent["name"] == "Test Officer"
+    assert agent["trees_registered"] == 11
+    assert agent["checked"] == 1
+    assert agent["pending"] == 10
+    assert agent["coordinate_percent"] == 50
+    assert agent["districts"] == ["Bugesera"]
+
+    officer = client.get("/api/v1/dashboard?range=all", headers=auth(accounts))
+    assert officer.json()["agents"] == []
+
+
+def test_agent_board_counts_activity_places_follow_up_and_quality(client, accounts):
+    species = make_species(client, accounts, "Mangifera indica", "Mango")
+    site = make_site(client, accounts, client_request_id="agent-detail-site")
+    site_id = site.json()["id"]
+    headers = auth(accounts)
+    shared = {
+        "site_id": site_id,
+        "species_id": species["id"],
+        "category": "fruit",
+        "planting_date": "2026-03-01",
+        "latitude": -1.95,
+        "longitude": 30.06,
+    }
+    first = client.post(
+        "/api/v1/trees",
+        json={**shared, "status": "surviving", "client_request_id": "agent-detail-first"},
+        headers=headers,
+    )
+    assert first.status_code == 201, first.text
+    copy = client.post(
+        "/api/v1/trees",
+        json={**shared, "status": "stressed", "client_request_id": "agent-detail-copy"},
+        headers=headers,
+    )
+    assert copy.status_code == 201, copy.text
+    create_batch(client, headers, site_id, species["id"], "agent-detail-batch", 10)
+    visit = client.post(
+        "/api/v1/events",
+        json={
+            "tree_id": first.json()["id"],
+            "event_type": "inspection",
+            "event_date": "2026-04-02",
+            "client_request_id": "agent-detail-visit",
+        },
+        headers=headers,
+    )
+    assert visit.status_code == 201, visit.text
+
+    denied = client.get("/api/v1/agents/board", headers=headers)
+    assert denied.status_code == 403
+    admin = client.get("/api/v1/agents/board", headers=auth(accounts, "admin"))
+    assert admin.status_code == 200, admin.text
+    agent = admin.json()["agents"][0]
+    assert agent["name"] == "Test Officer"
+    assert agent["trees_registered"] == 12
+    assert agent["checked"] == 2
+    assert agent["pending"] == 10
+    assert agent["places"] == [
+        {"district": "Bugesera", "sector": None, "village": None, "trees": 12}
+    ]
+    assert agent["incomplete"] == 3
+    assert agent["duplicates"] == 1
+    assert agent["missing_coordinates"] == 1
+    assert agent["submissions"] == 4
+    assert sum(point["trees"] for point in agent["registrations"]) == 12
+    issues = {item["issue"] for item in agent["issues"]}
+    assert {"condition", "visit", "coordinates", "incomplete", "duplicate"} <= issues
+
+
+def test_agent_board_filters_district_and_species(client, accounts):
+    mango = make_species(client, accounts, "Mangifera indica", "Mango")
+    avocado = make_species(client, accounts, "Persea americana", "Avocado")
+    bugesera = make_site(
+        client, accounts, client_request_id="filter-agent-bugesera", district="Bugesera"
+    )
+    huye = make_site(
+        client,
+        accounts,
+        client_request_id="filter-agent-huye",
+        district="Huye",
+        name="Huye orchard",
+    )
+    headers = auth(accounts)
+    create_tree(client, headers, bugesera.json()["id"], mango["id"], "filter-agent-mango")
+    create_tree(client, headers, huye.json()["id"], avocado["id"], "filter-agent-avocado")
+    admin = auth(accounts, "admin")
+
+    narrowed = client.get(
+        f"/api/v1/agents/board?district=Bugesera&species_id={mango['id']}",
+        headers=admin,
+    )
+    assert narrowed.status_code == 200, narrowed.text
+    body = narrowed.json()
+    assert len(body["agents"]) == 1
+    assert body["agents"][0]["trees_registered"] == 1
+    assert body["agents"][0]["districts"] == ["Bugesera"]
+    assert {"Bugesera", "Huye"} <= set(body["districts"])
+    assert {item["common_name"] for item in body["species"]} == {"Mango", "Avocado"}
+
+    empty = client.get(
+        f"/api/v1/agents/board?district=Huye&species_id={mango['id']}",
+        headers=admin,
+    )
+    assert empty.json()["agents"] == []
+
+
+def test_tree_health_counts_surviving_stressed_and_dead(client, accounts):
+    species = make_species(client, accounts, "Mangifera indica", "Mango")
+    site = make_site(client, accounts, client_request_id="health-site")
+    headers = auth(accounts)
+    healthy = create_tree(client, headers, site.json()["id"], species["id"], "health-healthy")
+    moderate = create_tree(client, headers, site.json()["id"], species["id"], "health-moderate")
+    critical = create_tree(client, headers, site.json()["id"], species["id"], "health-critical")
+    create_tree(client, headers, site.json()["id"], species["id"], "health-planted")
+    batch = create_batch(client, headers, site.json()["id"], species["id"], "health-batch", quantity=4)
+    for tree, status in ((healthy, "surviving"), (moderate, "stressed"), (critical, "dead")):
+        updated = client.patch(
+            f"/api/v1/trees/{tree['id']}",
+            json={"status": status},
+            headers=headers,
+        )
+        assert updated.status_code == 200, updated.text
+    batch_update = client.patch(
+        f"/api/v1/batches/{batch['id']}",
+        json={"status": "surviving"},
+        headers=headers,
+    )
+    assert batch_update.status_code == 200, batch_update.text
+
+    report = client.get("/api/v1/dashboard?range=all", headers=auth(accounts, "admin"))
+    assert report.status_code == 200, report.text
+    summary = report.json()["summary"]
+    assert summary["healthy_trees"] == 5
+    assert summary["moderate_trees"] == 1
+    assert summary["critical_trees"] == 1

@@ -5,8 +5,10 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Banner, OriginBadge } from "@/components/AppShell";
+import { HealthBadge, HealthLegend, MapPopup } from "@/components/tree-card";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { markerColor, matchesHealth, type HealthId } from "@/lib/health";
 import { label } from "@/lib/labels";
 import type { Farmer, MapFeature, MapResponse, Species } from "@/lib/types";
 
@@ -15,7 +17,7 @@ const MapView = dynamic(() => import("@/components/MapView"), {
   loading: () => <p className="loading">Loading map…</p>,
 });
 
-const paths: Record<string, string> = { site: "sites", tree: "trees", batch: "batches" };
+const paths: Record<string, string> = { site: "sites", tree: "trees", batch: "batches", forest: "forests" };
 
 export default function MapPage() {
   const search = useSearchParams();
@@ -27,6 +29,7 @@ export default function MapPage() {
   const [speciesId, setSpeciesId] = useState("");
   const [category, setCategory] = useState("");
   const [status, setStatus] = useState("");
+  const [health, setHealth] = useState<HealthId | "">("");
   const [district, setDistrict] = useState("");
   const [farmerId, setFarmerId] = useState("");
   const [data, setData] = useState<MapResponse | null>(null);
@@ -57,21 +60,23 @@ export default function MapPage() {
     return () => { active = false; };
   }, [category, district, farmerId, kind, speciesId, status]);
 
-  const selected = data?.features.find((feature) => feature.properties.id === selectedId) ?? null;
-  const nothingLocated = !loading && data && data.features.length === 0;
+  const features = (data?.features ?? []).filter((feature) => matchesHealth(feature, health));
+  const selected = features.find((feature) => feature.properties.id === selectedId) ?? null;
+  const nothingLocated = !loading && data !== null && features.length === 0;
   return (
     <div className="page">
       <div>
         <h1>Map</h1>
-        <p className="lede">Markers use the coordinates stored on each record. The opening view is a map of Rwanda, not a surveyed tree.</p>
+        <p className="lede">Dots are trees, batches, and sites. Shaded areas are forest stands. The opening view is a map of Rwanda, not a surveyed boundary.</p>
       </div>
       {error ? <Banner tone="error">{error}</Banner> : null}
       <div className="filters">
         <select aria-label="Record type" value={kind} onChange={(event) => setKind(event.target.value)}>
-          <option value="all">Sites, trees, and batches</option>
+          <option value="all">Sites, trees, batches, and forests</option>
           <option value="site">Sites</option>
           <option value="tree">Trees</option>
           <option value="batch">Batches</option>
+          <option value="forest">Forests</option>
         </select>
         <select aria-label="Species" value={speciesId} onChange={(event) => setSpeciesId(event.target.value)}>
           <option value="">All species</option>
@@ -91,18 +96,18 @@ export default function MapPage() {
             {farmers.map((farmer) => <option key={farmer.id} value={farmer.id}>{farmer.display_name}</option>)}
           </select>
         )}
-        <select aria-label="Status" value={status} onChange={(event) => setStatus(event.target.value)}>
-          <option value="">All statuses</option>
-          <option value="active">Active sites</option>
-          <option value="planted">Planted</option>
-          <option value="surviving">Surviving</option>
-          <option value="stressed">Stressed</option>
+        <select aria-label="Health" value={status} onChange={(event) => setStatus(event.target.value)}>
+          <option value="">All health</option>
+          <option value="surviving">Healthy</option>
+          <option value="stressed">Needs attention</option>
           <option value="dead">Dead</option>
+          <option value="planted">Not assessed</option>
         </select>
       </div>
+      <HealthLegend selected={health} onSelect={setHealth} site />
       <div className="map-layout">
         <div className="map-frame" aria-label="Registration map">
-          {data ? <MapView features={data.features} selectedId={selectedId} onSelect={setSelectedId} /> : <p className="loading">Loading map…</p>}
+          {data ? <MapView features={features} selectedId={selectedId} onSelect={setSelectedId} colorOf={markerColor} popupFor={(feature) => <MapPopup feature={feature} />} /> : <p className="loading">Loading map…</p>}
         </div>
         <aside className="card">
           {nothingLocated ? (
@@ -111,10 +116,10 @@ export default function MapPage() {
               <p>Register a site, tree, or batch with latitude and longitude to see it here.</p>
             </>
           ) : null}
-          {selected ? <RecordSummary feature={selected} /> : !nothingLocated ? <p>Select a marker or a record to see its summary.</p> : null}
+          {selected ? <RecordSummary feature={selected} /> : !nothingLocated ? <p>Select a marker, a forest, or a record to see its summary.</p> : null}
           <h2>Records on this map</h2>
           <div className="record-list">
-            {data?.features.map((feature) => (
+            {features.map((feature) => (
               <button
                 key={feature.properties.id}
                 className="record-button"
@@ -153,10 +158,13 @@ function RecordSummary({ feature }: { feature: MapFeature }) {
   return (
     <div>
       <OriginBadge origin={feature.properties.data_origin} />
+      {feature.properties.kind === "site" ? null : <HealthBadge status={feature.properties.status} />}
       <h2>{feature.properties.title}</h2>
       <p>{feature.properties.subtitle}</p>
-      <p>{label(feature.properties.status)}{feature.properties.category ? ` · ${label(feature.properties.category)}` : ""}</p>
-      <p className="help">{feature.geometry.coordinates[1].toFixed(5)}, {feature.geometry.coordinates[0].toFixed(5)}</p>
+      <p>{feature.properties.kind === "forest"
+        ? [feature.properties.area_hectares != null ? `${feature.properties.area_hectares.toLocaleString("en-GB")} ha` : null, feature.properties.estimated_trees != null ? `about ${feature.properties.estimated_trees.toLocaleString("en-GB")} trees` : null].filter(Boolean).join(" · ")
+        : <>{label(feature.properties.status)}{feature.properties.category ? ` · ${label(feature.properties.category)}` : ""}</>}</p>
+      {feature.geometry.type === "Point" ? <p className="help">{feature.geometry.coordinates[1].toFixed(5)}, {feature.geometry.coordinates[0].toFixed(5)}</p> : <p className="help">Shaded boundary on the map</p>}
       <Link href={`/${path}/${feature.properties.id}`}>Open record</Link>
     </div>
   );

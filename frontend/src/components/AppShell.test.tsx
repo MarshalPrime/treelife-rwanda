@@ -21,12 +21,16 @@ afterEach(cleanup);
 
 describe("workspace navigation", () => {
   it("keeps viewer and administrator route permissions", () => {
-    expect(linksForRole("viewer").map(([path]) => path)).toEqual(["/dashboard", "/map", "/trees"]);
+    expect(linksForRole("viewer").map(([path]) => path)).toEqual(["/dashboard", "/map", "/trees", "/forests"]);
     expect(pathAllowed("viewer", "/trees/new")).toBe(false);
     expect(pathAllowed("viewer", "/advice")).toBe(true);
     expect(pathAllowed("admin", "/advice")).toBe(true);
     expect(pathAllowed("admin", "/sites/new")).toBe(false);
     expect(pathAllowed("field_officer", "/sites/new")).toBe(true);
+    expect(linksForRole("admin").map(([path]) => path)).toContain("/agents");
+    expect(pathAllowed("admin", "/agents")).toBe(true);
+    expect(pathAllowed("field_officer", "/agents")).toBe(false);
+    expect(pathAllowed("viewer", "/agents")).toBe(false);
   });
 
   it("groups links and provides an accessible main landmark", () => {

@@ -67,6 +67,21 @@ def account_brief(db: Session, user: User) -> str:
         )
     else:
         lines.append("Species counts: none recorded.")
+    categories = Counter()
+    for row in inventory.plantings:
+        label = {
+            "urban": "Urban",
+            "fruit": "Fruit",
+            "agroforestry": "Agroforestry",
+            "other": "Other",
+        }.get(getattr(row, "category", ""))
+        if label:
+            categories[label] += planting_amount(row)
+    if categories:
+        lines.append(
+            "Categories: "
+            + "; ".join(f"{name} {count}" for name, count in categories.most_common())
+        )
 
     standing = sum(
         planting_amount(row) for row in inventory.plantings if row.status not in {"dead", "removed"}
@@ -122,7 +137,8 @@ def reply(db: Session, user: User, messages: list[tuple[str, str]]) -> str:
     except (httpx.HTTPError, KeyError, IndexError, TypeError) as exc:
         logger.warning("Assistant provider call failed for model %s", model)
         raise DomainError(UNAVAILABLE, status_code=502) from exc
-    cleaned = concise_reply(str(text))
+    question = next((content for role, content in reversed(messages) if role == "user"), "")
+    cleaned = concise_reply(str(text), question)
     if not cleaned:
         raise DomainError(UNAVAILABLE, status_code=502)
     return cleaned
@@ -156,16 +172,117 @@ def _message_text(body: dict) -> str:
     return "" if content is None else str(content)
 
 
-def concise_reply(text: str) -> str:
-    """Keep a phone-sized answer: one sentence, or up to three counted records."""
+def concise_reply(text: str, question: str = "") -> str:
+    """Keep a phone-sized answer that follows the question."""
     lines = [cleaned for raw in text.splitlines() if (cleaned := _plain_line(raw))]
-    sentence = next((line for line in lines if _is_sentence(line)), "")
+    sentence = next((line for line in lines if _is_sentence(line) and not _is_aside(line)), "")
     if sentence and _says_nothing_is_scheduled(sentence):
         return sentence
-    facts = [_short_fact(line) for line in lines if _is_fact(line)][:5]
-    if facts:
-        return "\n".join(facts)
-    return sentence
+    asked = question.lower()
+    if _asks(asked, ("visit", "who needs", "which farmer")):
+        return sentence or "The records do not include a visit list."
+    species = [fact for line in lines if _is_species(line) and (fact := _short_fact(line))]
+    if _asks(asked, ("species", "which tree", "what tree")) and species:
+        return "\n".join(species)
+    if _asks(asked, ("categor", "type", "kind")):
+        listed = [fact for line in lines if _is_fact(line) and (fact := _short_fact(line))]
+        if listed:
+            return "\n".join(listed)
+    if _asks(asked, ("where", "district", "location")):
+        places = [
+            fact
+            for line in lines
+            if "district" in line.lower() and _is_fact(line) and (fact := _short_fact(line))
+        ]
+        if places:
+            return "\n".join(places)
+    if _asks(asked, ("harvest", "sale", "sold", "fruit")):
+        production = [
+            part for part in (_fact_value(lines, "harvest"), _fact_value(lines, "sale")) if part
+        ]
+        if production:
+            return ". ".join(part.rstrip(".") for part in production) + "."
+    if _asks(asked, ("care", "water", "mulch")):
+        care = [
+            fact
+            for line in lines
+            if _is_fact(line)
+            and _asks(line.lower(), ("mulch", "water", "care", "prun"))
+            and (fact := _short_fact(line))
+        ]
+        if care:
+            return "\n".join(care)
+    overview = [
+        part
+        for part in (
+            _fact_value(lines, "standing"),
+            _fact_value(lines, "harvest"),
+            _fact_value(lines, "sale"),
+        )
+        if part
+    ]
+    if _asks(asked, ("what do we", "what we have")):
+        care = [
+            _short_fact(line).lstrip("- ")
+            for line in lines
+            if _is_fact(line) and _asks(line.lower(), ("mulch", "water", "prun"))
+        ]
+        parts = overview + care
+        if parts:
+            return ". ".join(part.rstrip(".") for part in parts) + "."
+    if overview and _asks(asked, ("summar", "overview", "records")):
+        return ". ".join(part.rstrip(".") for part in overview) + "."
+    finished = _complete(lines)
+    if finished:
+        return finished
+    if species:
+        return "\n".join(species)
+    if overview:
+        return ". ".join(part.rstrip(".") for part in overview) + "."
+    return ""
+
+
+def _complete(lines: list[str]) -> str:
+    """Keep a short answer, including the list that follows a lead-in."""
+    kept: list[str] = []
+    prose = 0
+    for line in lines:
+        if _is_aside(line) or _blank_label(line) or _is_title(line) or _is_closer(line):
+            continue
+        if line.startswith("- "):
+            fact = _short_fact(line)
+            if fact:
+                kept.append(fact)
+            continue
+        if _is_lead_in(line) or _is_intro(line):
+            continue
+        if prose >= 2:
+            continue
+        kept.append(line)
+        prose += 1
+    return "\n".join(kept)
+
+
+def _asks(text: str, words: tuple[str, ...]) -> bool:
+    return any(word in text for word in words)
+
+
+def _fact_value(lines: list[str], word: str) -> str:
+    for line in lines:
+        if not _is_fact(line):
+            continue
+        label = line.lstrip("- ").split(":", 1)[0].lower()
+        if word in label:
+            return _short_fact(line).lstrip("- ")
+    return ""
+
+
+def _is_species(line: str) -> bool:
+    if not _is_fact(line):
+        return False
+    label = line.lstrip("- ").split(":", 1)[0].lower()
+    blocked = ("total", "tree", "harvest", "sale", "district", "mulch", "water", "care", "record")
+    return not any(word in label for word in blocked)
 
 
 def _plain_line(raw: str) -> str:
@@ -182,7 +299,7 @@ def _plain_line(raw: str) -> str:
 
 
 def _is_sentence(line: str) -> bool:
-    if line.startswith("- ") or _is_title(line):
+    if line.startswith("- ") or _is_title(line) or _is_aside(line):
         return False
     lowered = line.lower()
     return not lowered.startswith(("if you", "let me know")) and " here is" not in f" {lowered}"
@@ -195,16 +312,52 @@ def _is_title(line: str) -> bool:
     return len(line.split()) <= 8
 
 
+def _is_lead_in(line: str) -> bool:
+    """A line that only introduces a list, such as one ending in 'as follows'."""
+    lowered = line.lower().rstrip(" .:")
+    return lowered.endswith(("as follows", "following", "below")) or line.rstrip().endswith(":")
+
+
+def _is_intro(line: str) -> bool:
+    lowered = f" {line.lower()}"
+    return " here is" in lowered
+
+
+def _is_closer(line: str) -> bool:
+    lowered = line.lower()
+    return any(
+        phrase in lowered
+        for phrase in (
+            "if you",
+            "let me know",
+            "i can also",
+            "i can explain",
+            "would you like",
+            "if that would",
+            "more detail",
+        )
+    )
+
+
+def _is_aside(line: str) -> bool:
+    body = line.lstrip("- ").lower()
+    return body.startswith(("(note", "note:"))
+
+
 def _is_fact(line: str) -> bool:
+    if _is_aside(line):
+        return False
     if ":" not in line or not any(char.isdigit() for char in line) or _blank_label(line):
         return False
     label = line.lstrip("- ").split(":", 1)[0].lower()
-    blocked = ("total", "district", "care", "overview", "breakdown", "harvest", "sales", "activity")
+    blocked = ("breakdown", "overview", "activity")
     return not any(word in label for word in blocked)
 
 
 def _short_fact(line: str) -> str:
     body = line.lstrip("- ").split("(", 1)[0].strip().rstrip(" ,")
+    if not body:
+        return ""
     return f"- {body}"
 
 
@@ -234,14 +387,17 @@ def _instructions() -> str:
         "Use only the account brief. Do not invent trees, yields, visits, prices, or partners. "
         "Demonstration records are not field results. "
         "Do not ask for a national ID or a phone number. "
-        "Write for a phone screen. Use at most four short lines. "
-        "No introduction, no closing offer, no headings, and no asterisks. "
-        "Answer only the question. "
+        "Write for a phone screen. Give a complete answer in one or two short sentences. "
+        "When the question asks for species, categories, or places, finish with a short list of every matching item. "
+        "Never stop after 'as follows' or a colon. "
+        "Categories are urban, fruit, agroforestry, and other. Use the category counts in the brief for those questions. "
+        "No introduction, no extra paragraph, no closing offer, no headings, and no asterisks. "
+        "Do not reply with the species list unless the question asks which species or how many of each. "
+        "A summary mentions trees standing, care, harvest, and sales when the brief includes them. "
+        "Do not repeat an earlier species list for a follow-up question. "
         "The records do not include a visit list. "
         "When nothing says who needs a visit, say that in one sentence and stop. "
-        "When asked what to say about the recorded trees, list the species, the count, and the status. "
-        "Do not add a district or a site unless the question asks where the trees are. "
-        "Use a dash list only when naming more than one record that answers the question."
+        "Do not add a district or a site unless the question asks where the trees are."
     )
 
 

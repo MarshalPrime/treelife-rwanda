@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
 import { Banner, Field } from "@/components/AppShell";
 import { DashboardView } from "@/components/dashboard-view";
+import { HarvestFeedback, HarvestNotices, HarvestSummary } from "@/components/harvest-insights";
 import { TreePlace } from "@/components/forms";
 import { ApiError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -731,18 +732,28 @@ export function FieldPage() {
   );
 }
 
+const USES = [
+  { id: "sold", label: "Sold" },
+  { id: "personal_consumption", label: "Personal consumption" },
+  { id: "stored", label: "Stored" },
+  { id: "given_away", label: "Given away" },
+  { id: "other", label: "Other" },
+];
+
 export function HarvestPage() {
-  const { canWrite } = useAuth();
+  const { canWrite, user } = useAuth();
   const [trees, setTrees] = useState<PlantingRecord[]>([]);
   const [target, setTarget] = useState("");
   const [quantity, setQuantity] = useState("10");
   const [unit, setUnit] = useState("kg");
   const [harvests, setHarvests] = useState<{ id: string; label: string }[]>([]);
   const [harvestId, setHarvestId] = useState("");
+  const [purpose, setPurpose] = useState("sold");
   const [saleQuantity, setSaleQuantity] = useState("1");
   const [amount, setAmount] = useState("0");
   const [buyer, setBuyer] = useState("");
-  const [sales, setSales] = useState<string[]>([]);
+  const [useNote, setUseNote] = useState("");
+  const [version, setVersion] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const harvestRequest = useRequestId();
@@ -753,14 +764,12 @@ export function HarvestPage() {
       api<Page<PlantingRecord>>("/trees?page_size=100"),
       api<Page<PlantingRecord>>("/batches?page_size=100"),
       api<{ id: string; public_code: string; target_code: string | null; quantity_remaining: number; unit: string }[]>("/harvests"),
-      api<{ public_code: string; quantity: number; unit: string; amount_rwf: number; buyer_name: string }[]>("/sales"),
-    ]).then(([treePage, batchPage, harvestList, saleList]) => {
+    ]).then(([treePage, batchPage, harvestList]) => {
       const planted = [...treePage.items, ...batchPage.items];
       setTrees(planted);
       setTarget((current) => current || (planted[0] ? `${treePage.items.includes(planted[0]) ? "tree" : "batch"}:${planted[0].id}` : ""));
       setHarvests(harvestList.map((item) => ({ id: item.id, label: `${item.public_code} · ${item.quantity_remaining} ${item.unit} left` })));
       setHarvestId((current) => current || harvestList[0]?.id || "");
-      setSales(saleList.map((item) => `${item.public_code} · ${item.quantity} ${item.unit} · ${item.amount_rwf} RWF · ${item.buyer_name}`));
     }).catch((caught: Error) => setError(caught.message));
   }
   useEffect(load, []);
@@ -787,6 +796,7 @@ export function HarvestPage() {
       });
       setNotice(`${created.public_code} saved.`);
       harvestRequest.rotate();
+      setVersion((value) => value + 1);
       load();
     } catch (caught) {
       setError(message(caught));
@@ -807,13 +817,16 @@ export function HarvestPage() {
           harvest_id: harvestId,
           sold_on: todayInput(),
           quantity: Number(saleQuantity),
-          amount_rwf: Number(amount),
-          buyer_name: buyer,
+          purpose,
+          amount_rwf: purpose === "sold" ? Number(amount) : 0,
+          buyer_name: purpose === "sold" ? buyer : null,
+          notes: purpose === "sold" ? null : useNote || null,
           client_request_id: saleRequest.current(),
         }),
       });
       setNotice(`${created.public_code} saved.`);
       saleRequest.rotate();
+      setVersion((value) => value + 1);
       load();
     } catch (caught) {
       setError(message(caught));
@@ -828,9 +841,11 @@ export function HarvestPage() {
   return (
     <div className="page">
       <h1>Harvest and sales</h1>
-      <p className="lede">Record fruit taken from a tree or batch, then record what was sold and for how many Rwandan francs.</p>
+      <p className="lede">Record fruit taken from a tree or batch, then where it went: sold, eaten at home, stored, given away, or another use. The quantities have to add up.</p>
       {notice ? <Banner tone="success">{notice}</Banner> : null}
       {error ? <Banner tone="error">{error}</Banner> : null}
+      {user?.role === "field_officer" ? <HarvestNotices refreshKey={version} /> : null}
+      <HarvestSummary refreshKey={version} />
       {canWrite ? (
         <div className="row">
           <form className="card form" onSubmit={saveHarvest}>
@@ -848,19 +863,31 @@ export function HarvestPage() {
             <button className="primary" type="submit">Save harvest</button>
           </form>
           <form className="card form" onSubmit={saveSale}>
-            <h2>Sale</h2>
+            <h2>Where it went</h2>
             <SelectField label="Harvest" name="harvest_id" value={harvestId} options={harvests.map((item) => ({ id: item.id, label: item.label }))} onChange={setHarvestId} />
-            <Field label="Quantity sold" name="sale_quantity"><input id="sale_quantity" value={saleQuantity} onChange={(event) => setSaleQuantity(event.target.value)} /></Field>
-            <Field label="Amount in RWF" name="amount_rwf"><input id="amount_rwf" value={amount} onChange={(event) => setAmount(event.target.value)} /></Field>
-            <Field label="Buyer" name="buyer_name" help="Market or organization name. Do not enter a national ID.">
-              <input id="buyer_name" value={buyer} onChange={(event) => setBuyer(event.target.value)} required />
+            <Field label="Use" name="purpose">
+              <select id="purpose" value={purpose} onChange={(event) => setPurpose(event.target.value)}>
+                {USES.map((choice) => <option key={choice.id} value={choice.id}>{choice.label}</option>)}
+              </select>
             </Field>
-            <button className="primary" type="submit">Save sale</button>
+            <Field label="Quantity" name="sale_quantity"><input id="sale_quantity" value={saleQuantity} onChange={(event) => setSaleQuantity(event.target.value)} /></Field>
+            {purpose === "sold" ? (
+              <>
+                <Field label="Amount in RWF" name="amount_rwf"><input id="amount_rwf" value={amount} onChange={(event) => setAmount(event.target.value)} /></Field>
+                <Field label="Buyer" name="buyer_name" help="Market or organization name. Do not enter a national ID.">
+                  <input id="buyer_name" value={buyer} onChange={(event) => setBuyer(event.target.value)} required />
+                </Field>
+              </>
+            ) : (
+              <Field label="Note" name="use_note" help="Optional. Do not enter a national ID.">
+                <input id="use_note" value={useNote} onChange={(event) => setUseNote(event.target.value)} />
+              </Field>
+            )}
+            <button className="primary" type="submit">Save record</button>
           </form>
         </div>
       ) : null}
-      <h2>Sales</h2>
-      <SavedList rows={sales} />
+      <HarvestFeedback refreshKey={version} harvests={harvests} />
     </div>
   );
 }

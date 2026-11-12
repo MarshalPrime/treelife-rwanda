@@ -34,7 +34,14 @@ from app.models.entities import (
 from app.schemas.valuechain import (
     ActivityDay,
     ActivitySlice,
+    AgentBoardResponse,
+    AgentBoardRow,
+    AgentIssue,
+    AgentPlaceCount,
+    AgentRegistration,
+    AgentSpeciesOption,
     AnalyticsResponse,
+    DashboardAgent,
     DashboardAttention,
     DashboardDistrictCount,
     DashboardFilters,
@@ -123,6 +130,19 @@ def standing_amount(row) -> int:
     if row.status in {"dead", "removed"}:
         return 0
     return planting_amount(row)
+
+
+def health_amounts(inventory: Inventory) -> tuple[int, int, int]:
+    """Trees recorded as surviving, stressed, or dead.
+
+    Planted trees and trees with no condition stay out of this split. A batch
+    quantity counts as that many trees, using the condition on the batch.
+    """
+    totals = {"surviving": 0, "stressed": 0, "dead": 0}
+    for row in inventory.plantings:
+        if row.status in totals:
+            totals[row.status] += planting_amount(row)
+    return totals["surviving"], totals["stressed"], totals["dead"]
 
 
 def filter_inventory(
@@ -296,7 +316,10 @@ def series_for(
 
 
 def farmer_count(db: Session, inventory: Inventory, user: User | None, filtered: bool) -> int:
-    ids = {row.farmer_id or row.site.farmer_id for row in inventory.plantings}
+    ids = {
+        row.farmer_id or (row.site.farmer_id if row.site is not None else None)
+        for row in inventory.plantings
+    }
     ids.update(row.farmer_id for row in inventory.sites)
     if not filtered:
         statement = select(Farmer.id)
@@ -338,6 +361,242 @@ def district_totals(inventory: Inventory):
 
 def missing_coordinates(row) -> bool:
     return row.latitude is None or row.longitude is None
+
+
+def agent_leaderboard(db: Session, inventory: Inventory, user: User) -> list[DashboardAgent]:
+    """Field officers who registered trees in this view. Administrators only."""
+    if user.role != "admin":
+        return []
+    grouped: dict[uuid.UUID, list] = defaultdict(list)
+    for row in inventory.plantings:
+        grouped[row.registered_by].append(row)
+    if not grouped:
+        return []
+    names = dict(db.execute(select(User.id, User.full_name).where(User.id.in_(grouped))).all())
+    board = []
+    for agent_id, plantings in grouped.items():
+        registered = sum(planting_amount(row) for row in plantings)
+        checked = sum(
+            planting_amount(row) for row in plantings if row.status not in {"planted", "unknown"}
+        )
+        located = sum(not missing_coordinates(row) for row in plantings)
+        districts = sorted({name for row in plantings if (name := row_district(row))})
+        board.append(
+            DashboardAgent(
+                id=agent_id,
+                name=names.get(agent_id) or "Unnamed agent",
+                trees_registered=registered,
+                checked=checked,
+                pending=registered - checked,
+                coordinate_percent=round(100 * located / len(plantings)),
+                last_registered_on=max(row.registered_at for row in plantings).date(),
+                districts=districts,
+            )
+        )
+    board.sort(key=lambda row: (-row.trees_registered, row.name.casefold()))
+    return board
+
+
+def _place_value(row, name: str) -> str | None:
+    site = getattr(row, "site", None)
+    for source in (site, row):
+        if source is None:
+            continue
+        value = getattr(source, name, None)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def _place_label(*parts: str | None) -> str | None:
+    names = [part for part in parts if part]
+    return " · ".join(names) or None
+
+
+def _remember(counts: Counter, latest: dict[uuid.UUID, date], agent_id: uuid.UUID, when: date):
+    counts[agent_id] += 1
+    current = latest.get(agent_id)
+    if current is None or when > current:
+        latest[agent_id] = when
+
+
+def _care_target(model, tree_ids: set[uuid.UUID] | None, batch_ids: set[uuid.UUID] | None):
+    if tree_ids is None and batch_ids is None:
+        return None
+    clauses = []
+    if tree_ids:
+        clauses.append(model.tree_id.in_(tree_ids))
+    if batch_ids:
+        clauses.append(model.batch_id.in_(batch_ids))
+    return or_(*clauses) if clauses else false()
+
+
+def _care_activity(
+    db: Session,
+    agent_ids: set[uuid.UUID],
+    *,
+    tree_ids: set[uuid.UUID] | None = None,
+    batch_ids: set[uuid.UUID] | None = None,
+):
+    counts: Counter = Counter()
+    latest: dict[uuid.UUID, date] = {}
+    if not agent_ids:
+        return counts, latest
+    statements = (
+        select(LifecycleEvent.recorded_by, LifecycleEvent.event_date).where(
+            LifecycleEvent.recorded_by.in_(agent_ids)
+        ),
+        select(GrowthMeasurement.registered_by, GrowthMeasurement.measured_on).where(
+            GrowthMeasurement.registered_by.in_(agent_ids)
+        ),
+        select(MaintenanceActivity.registered_by, MaintenanceActivity.performed_on).where(
+            MaintenanceActivity.registered_by.in_(agent_ids)
+        ),
+    )
+    limited = (
+        _care_target(LifecycleEvent, tree_ids, batch_ids),
+        _care_target(GrowthMeasurement, tree_ids, batch_ids),
+        _care_target(MaintenanceActivity, tree_ids, batch_ids),
+    )
+    statements = tuple(
+        statement if limit is None else statement.where(limit)
+        for statement, limit in zip(statements, limited, strict=True)
+    )
+    for statement in statements:
+        for agent_id, day in db.execute(statement):
+            _remember(counts, latest, agent_id, day)
+    return counts, latest
+
+
+def _duplicate_ids(rows: list) -> set[uuid.UUID]:
+    """Extra records that repeat a species at the same point, or the same site and day."""
+    groups: dict[tuple, list] = defaultdict(list)
+    for row in rows:
+        if isinstance(row, PlantingBatch):
+            continue
+        if row.latitude is not None and row.longitude is not None:
+            key = ("gps", row.species_id, round(row.latitude, 4), round(row.longitude, 4))
+        else:
+            key = ("place", row.species_id, row.site_id, row.planting_date)
+        groups[key].append(row)
+    flagged: set[uuid.UUID] = set()
+    for group in groups.values():
+        if len(group) > 1:
+            flagged.update(row.id for row in group[1:])
+    return flagged
+
+
+def collect_agent_board(
+    db: Session,
+    user: User,
+    *,
+    district: str | None = None,
+    species_id: uuid.UUID | None = None,
+) -> AgentBoardResponse:
+    """Registration, places, follow-up, quality, and submissions for each field officer."""
+    district = district.strip() if district and district.strip() else None
+    all_inventory = read_inventory(db, user)
+    inventory = filter_inventory(all_inventory, district, species_id)
+    grouped: dict[uuid.UUID, list] = defaultdict(list)
+    for row in inventory.plantings:
+        grouped[row.registered_by].append(row)
+    names = (
+        dict(db.execute(select(User.id, User.full_name).where(User.id.in_(grouped))).all())
+        if grouped
+        else {}
+    )
+    narrowed = district is not None or species_id is not None
+    care_counts, care_latest = _care_activity(
+        db,
+        set(grouped),
+        tree_ids={row.id for row in inventory.trees} if narrowed else None,
+        batch_ids={row.id for row in inventory.batches} if narrowed else None,
+    )
+    board: list[AgentBoardRow] = []
+    for agent_id, plantings in grouped.items():
+        registered = sum(planting_amount(row) for row in plantings)
+        checked = sum(
+            planting_amount(row) for row in plantings if row.status not in {"planted", "unknown"}
+        )
+        located = sum(not missing_coordinates(row) for row in plantings)
+        days: Counter = Counter()
+        places: Counter = Counter()
+        issues: list[AgentIssue] = []
+        duplicates = _duplicate_ids(plantings)
+        incomplete = 0
+        missing = 0
+        for row in plantings:
+            amount = planting_amount(row)
+            registered_on = row.registered_at.date()
+            days[registered_on] += amount
+            district = _place_value(row, "district")
+            sector = _place_value(row, "sector")
+            village = _place_value(row, "village")
+            if district:
+                places[(district, sector, village)] += amount
+            label = _place_label(district, sector, village)
+            title = row.species.common_name
+            kind = "batch" if isinstance(row, PlantingBatch) else "tree"
+            shared = {
+                "id": row.id,
+                "kind": kind,
+                "code": row.public_code,
+                "title": title,
+                "place": label,
+            }
+            if row.status in {"planted", "unknown"}:
+                issues.append(AgentIssue(**shared, issue="condition"))
+            if row.status == "stressed":
+                issues.append(AgentIssue(**shared, issue="visit"))
+            if missing_coordinates(row):
+                missing += 1
+                issues.append(AgentIssue(**shared, issue="coordinates"))
+            if not district or not sector or not village:
+                incomplete += 1
+                issues.append(AgentIssue(**shared, issue="incomplete"))
+            if row.id in duplicates:
+                issues.append(AgentIssue(**shared, issue="duplicate"))
+        last_registered_on = max(row.registered_at for row in plantings).date()
+        last_submission_on = max(last_registered_on, care_latest.get(agent_id, last_registered_on))
+        board.append(
+            AgentBoardRow(
+                id=agent_id,
+                name=names.get(agent_id) or "Unnamed agent",
+                trees_registered=registered,
+                checked=checked,
+                pending=registered - checked,
+                coordinate_percent=round(100 * located / len(plantings)),
+                last_registered_on=last_registered_on,
+                last_submission_on=last_submission_on,
+                submissions=len(plantings) + care_counts[agent_id],
+                districts=sorted({name for row in plantings if (name := row_district(row))}),
+                registrations=[
+                    AgentRegistration(day=day, trees=trees) for day, trees in sorted(days.items())
+                ],
+                places=[
+                    AgentPlaceCount(district=district, sector=sector, village=village, trees=trees)
+                    for (district, sector, village), trees in sorted(
+                        places.items(),
+                        key=lambda item: (-item[1], item[0][0], item[0][1] or "", item[0][2] or ""),
+                    )
+                ],
+                issues=issues,
+                incomplete=incomplete,
+                duplicates=len(duplicates),
+                missing_coordinates=missing,
+            )
+        )
+    board.sort(key=lambda row: (-row.trees_registered, row.name.casefold()))
+    species_names = {row.species_id: row.species.common_name for row in all_inventory.plantings}
+    return AgentBoardResponse(
+        generated_at=utcnow(),
+        districts=sorted({name for row in all_inventory.plantings if (name := row_district(row))}),
+        species=[
+            AgentSpeciesOption(id=key, common_name=name)
+            for key, name in sorted(species_names.items(), key=lambda item: item[1].casefold())
+        ],
+        agents=board,
+    )
 
 
 def auxiliary_records(
@@ -463,6 +722,7 @@ def collect_dashboard(
     )
     start, end, monthly = resolve_period(range_name, start_date, end_date, earliest)
     checked, alive, survival = survival_figures(inventory, outcomes)
+    healthy, moderate, critical = health_amounts(inventory)
     species = species_totals(inventory)
     districts = district_totals(inventory)
     records = [*inventory.sites, *inventory.plantings]
@@ -493,6 +753,7 @@ def collect_dashboard(
             status=row.status,
             planting_date=row.planting_date,
             quantity=row.quantity if isinstance(row, PlantingBatch) else 1,
+            public_code=row.public_code,
         )
         for row in sorted(
             inventory.plantings, key=lambda row: (row.planting_date, str(row.id)), reverse=True
@@ -509,16 +770,27 @@ def collect_dashboard(
                 else "batch"
             )
             title = row.name if kind == "site" else row.species.common_name
+            place = row.district if kind == "site" else None if row.site is None else row.site.name
             for reason in (["stressed"] if row.status == "stressed" else []) + (
                 ["missing_coordinates"] if missing_coordinates(row) else []
             ):
                 attention.append(
-                    DashboardAttention(id=row.id, kind=kind, title=title, reason=reason)
+                    DashboardAttention(
+                        id=row.id,
+                        kind=kind,
+                        title=title,
+                        reason=reason,
+                        public_code=row.public_code,
+                        status=row.status,
+                        place=place,
+                    )
                 )
     options_species = {row.species_id: row.species.common_name for row in all_inventory.plantings}
     options_districts = {row.district for row in all_inventory.sites if row.district}
     options_districts.update(
-        row.site.district for row in all_inventory.plantings if row.site.district
+        row.site.district
+        for row in all_inventory.plantings
+        if row.site is not None and row.site.district
     )
     scope_label = {
         "admin": "Programme overview",
@@ -562,6 +834,9 @@ def collect_dashboard(
             checked_trees=checked,
             surviving_trees=alive,
             survival_percent=survival,
+            healthy_trees=healthy,
+            moderate_trees=moderate,
+            critical_trees=critical,
             farmers=0
             if viewer
             else farmer_count(db, inventory, user, bool(district or species_id)),
@@ -577,6 +852,7 @@ def collect_dashboard(
         districts=districts,
         recent=recent,
         attention=attention[:20],
+        agents=agent_leaderboard(db, inventory, user),
         map_query="/dashboard/map" + (f"?{query}" if query else ""),
         value_chain=production,
     )

@@ -26,6 +26,7 @@ function briefDate(value: string) {
 function recordPath(kind: MapFeature["properties"]["kind"]) {
   if (kind === "site") return "sites";
   if (kind === "tree") return "trees";
+  if (kind === "forest") return "forests";
   return "batches";
 }
 
@@ -33,6 +34,7 @@ const kindLabel: Record<MapFeature["properties"]["kind"], string> = {
   site: "Planting site",
   tree: "Individual tree",
   batch: "Planting batch",
+  forest: "Forest stand",
 };
 
 export function LocationCard({ feature }: { feature: MapFeature }) {
@@ -41,16 +43,19 @@ export function LocationCard({ feature }: { feature: MapFeature }) {
   const path = recordPath(kind);
 
   useEffect(() => {
+    if (kind === "forest") return;
     let active = true;
     api<Site | PlantingRecord>(`/${path}/${feature.properties.id}`)
       .then((row) => { if (active) setDetail(row); })
       .catch(() => { if (active) setDetail(null); });
     return () => { active = false; };
-  }, [feature.properties.id, path]);
+  }, [feature.properties.id, kind, path]);
 
   const planting = detail && "species_common_name" in detail ? detail : null;
   const site = detail && "site_type" in detail ? detail : null;
-  const title = planting?.species_common_name ?? site?.name ?? feature.properties.species_common_name ?? feature.properties.title;
+  const title = kind === "forest"
+    ? feature.properties.title
+    : planting?.species_common_name ?? site?.name ?? feature.properties.species_common_name ?? feature.properties.title;
   const place = site
     ? [site.district, site.sector].filter(Boolean).join(", ")
     : planting?.site_name ?? feature.properties.subtitle;
@@ -65,7 +70,7 @@ export function LocationCard({ feature }: { feature: MapFeature }) {
       {place ? <p>{place}</p> : null}
       {planting?.farmer_name || site?.farmer_name ? <p>Farmer: {planting?.farmer_name ?? site?.farmer_name}</p> : null}
       {planting ? <p>Planted {briefDate(planting.planting_date)}{kind === "batch" ? ` · ${planting.quantity} trees` : ""}</p> : null}
-      {site?.area_hectares ? <p>{site.area_hectares} hectares</p> : null}
+      {kind === "forest" && feature.properties.area_hectares != null ? <p>{feature.properties.area_hectares.toLocaleString("en-GB")} hectares · about {feature.properties.estimated_trees?.toLocaleString("en-GB")} trees</p> : null}
       {notes ? <p className="help">{notes.length > 140 ? `${notes.slice(0, 140)}…` : notes}</p> : null}
       <Link href={`/${path}/${feature.properties.id}`}>Open record</Link>
     </article>

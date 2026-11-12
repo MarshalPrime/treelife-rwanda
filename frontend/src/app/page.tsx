@@ -227,7 +227,7 @@ const features = [
   },
   {
     title: "Harvest and sales",
-    body: "Record fruit taken from a tree or batch, then what was sold, to whom, and for how many Rwandan francs.",
+    body: "Record fruit taken from a tree or batch, then where it went: sold, eaten at home, stored, given away, or another use.",
   },
   {
     title: "Assistant",

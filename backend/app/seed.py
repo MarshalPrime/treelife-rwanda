@@ -5,7 +5,7 @@ Refuses to run when APP_ENV=production. These rows are not field observations.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy import select
 
@@ -125,6 +125,7 @@ def _tree(
         return existing
     latitude = fields.pop("latitude", None)
     longitude = fields.pop("longitude", None)
+    registered_at = fields.pop("registered_at", None) or utcnow()
     tree = IndividualTree(
         public_code=allocate_code(db, IndividualTree, "TREE"),
         site_id=site.id,
@@ -132,7 +133,7 @@ def _tree(
         data_origin=DataOrigin.synthetic_demo.value,
         client_request_id=request_id,
         registered_by=officer.id,
-        registered_at=utcnow(),
+        registered_at=registered_at,
         notes=SYNTHETIC_NOTE,
         status=fields.pop("status", "planted"),
         **fields,
@@ -348,6 +349,281 @@ def _value_chain(
     db.flush()
 
 
+def _sample_health_trees(
+    db, officer: User, organization: Organization, species: dict[str, Species]
+) -> None:
+    """Place labelled demonstration trees so each health colour appears on the map.
+
+    Coordinates are district-centre offsets for the demonstration. They are not surveyed plots.
+    """
+
+    groves = [
+        (
+            "synthetic-demo-site-huye-01",
+            "SYNTHETIC Hill planting — demo Huye",
+            "Southern Province",
+            "Huye",
+            -2.596,
+            29.739,
+        ),
+        (
+            "synthetic-demo-site-musanze-01",
+            "SYNTHETIC Slope planting — demo Musanze",
+            "Northern Province",
+            "Musanze",
+            -1.503,
+            29.634,
+        ),
+        (
+            "synthetic-demo-site-rwamagana-01",
+            "SYNTHETIC Roadside planting — demo Rwamagana",
+            "Eastern Province",
+            "Rwamagana",
+            -1.949,
+            30.435,
+        ),
+        (
+            "synthetic-demo-site-rubavu-01",
+            "SYNTHETIC Lakeside planting — demo Rubavu",
+            "Western Province",
+            "Rubavu",
+            -1.687,
+            29.256,
+        ),
+        (
+            "synthetic-demo-site-nyagatare-01",
+            "SYNTHETIC Open planting — demo Nyagatare",
+            "Eastern Province",
+            "Nyagatare",
+            -1.299,
+            30.327,
+        ),
+    ]
+    sites = [
+        _site(
+            db,
+            officer,
+            organization,
+            request_id,
+            name=name,
+            site_type="orchard",
+            province=province,
+            district=district,
+            sector="Demo sector",
+            latitude=latitude,
+            longitude=longitude,
+        )
+        for request_id, name, province, district, latitude, longitude in groves
+    ]
+    # Offsets are a few kilometres so each health colour stays visible at country scale.
+    # They stay inside the district and inside Rwanda. They are not surveyed plots.
+    samples = [
+        (0, "Mangifera indica", "surviving", date(2024, 11, 4), 0.07, 0.05),
+        (0, "Persea americana", "stressed", date(2025, 2, 18), -0.06, 0.08),
+        (0, "Carica papaya", "dead", date(2025, 6, 9), 0.05, -0.07),
+        (0, "Citrus sinensis", "planted", date(2026, 3, 12), -0.08, -0.05),
+        (1, "Grevillea robusta", "surviving", date(2023, 9, 2), 0.06, 0.07),
+        (1, "Markhamia lutea", "unknown", date(2026, 1, 20), -0.07, 0.05),
+        (1, "Jacaranda mimosifolia", "stressed", date(2025, 8, 7), 0.08, -0.06),
+        (1, "Calliandra calothyrsus", "dead", date(2024, 4, 15), -0.05, -0.08),
+        (2, "Citrus sinensis", "surviving", date(2024, 7, 11), 0.07, -0.06),
+        (2, "Mangifera indica", "stressed", date(2025, 5, 3), -0.08, 0.05),
+        (2, "Persea americana", "dead", date(2025, 10, 1), 0.05, 0.08),
+        (2, "Carica papaya", "planted", date(2026, 4, 8), -0.06, -0.07),
+        (3, "Jacaranda mimosifolia", "surviving", date(2024, 1, 16), 0.08, 0.05),
+        (3, "Grevillea robusta", "stressed", date(2025, 9, 19), -0.05, -0.07),
+        (3, "Markhamia lutea", "dead", date(2023, 12, 5), 0.06, -0.08),
+        (3, "Calliandra calothyrsus", "unknown", date(2026, 2, 2), -0.07, 0.06),
+        (4, "Persea americana", "surviving", date(2024, 8, 22), 0.05, 0.08),
+        (4, "Mangifera indica", "planted", date(2026, 5, 6), -0.08, 0.06),
+        (4, "Citrus sinensis", "stressed", date(2025, 3, 14), 0.07, -0.05),
+        (4, "Carica papaya", "dead", date(2024, 6, 28), -0.06, -0.07),
+    ]
+    for index, (grove, scientific_name, status, planted, dlat, dlon) in enumerate(samples):
+        chosen = species[scientific_name]
+        site = sites[grove]
+        _, _, _, _, base_lat, base_lon = groves[grove]
+        category = (
+            chosen.category
+            if chosen.category in {"urban", "fruit", "agroforestry", "other"}
+            else "other"
+        )
+        tree = _tree(
+            db,
+            officer,
+            site,
+            chosen,
+            f"synthetic-demo-health-{index:02d}",
+            category=category,
+            planting_date=planted,
+            latitude=base_lat + dlat,
+            longitude=base_lon + dlon,
+            status=status,
+        )
+        apply_point(tree, base_lat + dlat, base_lon + dlon)
+
+
+def _sample_forests(db, officer: User, species: dict[str, Species]) -> None:
+    """Demonstration stands. The outlines are district-scale sketches, not surveyed forests."""
+
+    from app.schemas.forests import ForestCreate, ForestPoint
+    from app.services.forests import create_forest
+
+    stands = [
+        (
+            "synthetic-demo-forest-huye-01",
+            "SYNTHETIC Hill stand — demo Huye",
+            "Grevillea robusta",
+            2400,
+            "mixed",
+            "surviving",
+            "Southern Province",
+            "Huye",
+            [
+                (29.55, -2.78),
+                (29.62, -2.77),
+                (29.63, -2.72),
+                (29.56, -2.71),
+            ],
+        ),
+        (
+            "synthetic-demo-forest-musanze-01",
+            "SYNTHETIC Slope stand — demo Musanze",
+            "Markhamia lutea",
+            1800,
+            "rows",
+            "stressed",
+            "Northern Province",
+            "Musanze",
+            [
+                (29.42, -1.58),
+                (29.50, -1.57),
+                (29.51, -1.51),
+                (29.43, -1.52),
+            ],
+        ),
+        (
+            "synthetic-demo-forest-nyagatare-01",
+            "SYNTHETIC Open stand — demo Nyagatare",
+            "Calliandra calothyrsus",
+            900,
+            "natural",
+            "unknown",
+            "Eastern Province",
+            "Nyagatare",
+            [
+                (30.45, -1.24),
+                (30.53, -1.23),
+                (30.54, -1.17),
+                (30.46, -1.18),
+            ],
+        ),
+    ]
+    for (
+        request_id,
+        name,
+        scientific_name,
+        trees,
+        distribution,
+        status,
+        province,
+        district,
+        ring,
+    ) in stands:
+        create_forest(
+            db,
+            officer,
+            ForestCreate(
+                name=name,
+                species_id=species[scientific_name].id,
+                estimated_trees=trees,
+                distribution=distribution,
+                status=status,
+                description=SYNTHETIC_NOTE,
+                province=province,
+                district=district,
+                boundary=[ForestPoint(longitude=lon, latitude=lat) for lon, lat in ring],
+                client_request_id=request_id,
+            ),
+            origin="synthetic_demo",
+            commit=False,
+        )
+
+
+def _sample_agents(
+    db, officer: User, organization: Organization, species: dict[str, Species], password: str
+) -> None:
+    """Fifty labelled field officers so the overview list can be shown before real staff join.
+
+    Names are numbered examples. Coordinates are district-centre offsets, not surveyed plots.
+    """
+
+    districts = [
+        ("Kigali City", "Nyarugenge", -1.950, 30.060),
+        ("Eastern Province", "Bugesera", -2.050, 30.120),
+        ("Southern Province", "Huye", -2.596, 29.739),
+        ("Northern Province", "Musanze", -1.503, 29.634),
+        ("Eastern Province", "Rwamagana", -1.949, 30.435),
+        ("Western Province", "Rubavu", -1.687, 29.256),
+        ("Eastern Province", "Nyagatare", -1.299, 30.327),
+    ]
+    sites = {
+        district: _site(
+            db,
+            officer,
+            organization,
+            f"synthetic-demo-agent-site-{district.casefold()}",
+            name=f"SYNTHETIC Agent showcase — demo {district}",
+            site_type="orchard",
+            province=province,
+            district=district,
+            sector="Demo sector",
+            latitude=latitude,
+            longitude=longitude,
+        )
+        for province, district, latitude, longitude in districts
+    }
+    kinds = list(species)
+    conditions = ("surviving", "planted", "stressed", "unknown", "surviving", "planted")
+    for number in range(1, 51):
+        agent = _get_or_create_user(
+            db,
+            f"synthetic-agent-{number:02d}@demo.treelife.local",
+            f"SYNTHETIC Agent {number:02d}",
+            "field_officer",
+            password,
+        )
+        _, district, latitude, longitude = districts[number % len(districts)]
+        records = 2 + (number % 5)
+        for slot in range(records):
+            scientific_name = kinds[(number + slot) % len(kinds)]
+            chosen = species[scientific_name]
+            category = (
+                chosen.category
+                if chosen.category in {"urban", "fruit", "agroforestry", "other"}
+                else "other"
+            )
+            point = None
+            if slot < 1 + (number % 3):
+                point = (
+                    latitude + ((number % 6) - 2) * 0.02 + slot * 0.004,
+                    longitude + ((number % 5) - 2) * 0.02 - slot * 0.003,
+                )
+            _tree(
+                db,
+                agent,
+                sites[district],
+                chosen,
+                f"synthetic-demo-agent-{number:02d}-tree-{slot}",
+                category=category,
+                planting_date=date(2026, 1, 1) + timedelta(days=number * 3 + slot),
+                status=conditions[slot],
+                latitude=None if point is None else point[0],
+                longitude=None if point is None else point[1],
+                registered_at=datetime(2026, 3, 1, tzinfo=UTC) + timedelta(days=number * 4 + slot),
+            )
+
+
 def seed(allow_production: bool = False) -> None:
     settings = get_settings()
     if settings.is_production and not allow_production and not settings.seed_demo_data:
@@ -492,9 +768,13 @@ def seed(allow_production: bool = False) -> None:
             survival_count=36,
         )
         _value_chain(db, officer, cooperative, species, orchard, avocado, mango_batch, smallholder)
+        _sample_health_trees(db, officer, cooperative, species)
+        _sample_forests(db, officer, species)
+        _sample_agents(db, officer, cooperative, species, settings.demo_officer_password)
         db.commit()
         print("Synthetic demonstration data is ready.")
         print("These accounts and coordinates are not real field records.")
+        print("Fifty SYNTHETIC Agent accounts fill the overview list for the showcase.")
         print(f"Admin   {admin.email}")
         print(f"Officer {officer.email}")
         print(f"Viewer  {viewer.email}")

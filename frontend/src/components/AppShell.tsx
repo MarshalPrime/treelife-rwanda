@@ -15,6 +15,7 @@ const fieldLinks = [
   ["/sites", "Sites"],
   ["/trees", "Trees"],
   ["/batches", "Batches"],
+  ["/forests", "Forests"],
   ["/farmers", "Farmers"],
   ["/nursery", "Nursery"],
   ["/field", "Field"],
@@ -29,9 +30,11 @@ const adminLinks = [
   ["/dashboard", "Overview"],
   ["/analytics", "Reports"],
   ["/map", "Map"],
+  ["/agents", "Agents"],
   ["/sites", "Sites"],
   ["/trees", "Trees"],
   ["/batches", "Batches"],
+  ["/forests", "Forests"],
   ["/species", "Species"],
   ["/about", "About"],
 ];
@@ -42,6 +45,7 @@ const viewerLinks = [
   ["/dashboard", "Overview"],
   ["/map", "Map"],
   ["/trees", "Trees"],
+  ["/forests", "Forests"],
 ];
 
 export function linksForRole(role: string | undefined) {
@@ -52,15 +56,18 @@ export function linksForRole(role: string | undefined) {
 }
 
 export function pathAllowed(role: string, pathname: string) {
+  if (pathname === "/agents" || pathname.startsWith("/agents/")) return role === "admin";
   if (role === "viewer") {
     if (pathname.endsWith("/new") || pathname.includes("/edit")) return false;
-    return pathname === "/dashboard" || pathname === "/map" || pathname === "/trees" || pathname === "/advice" || /^\/trees\/[^/]+$/.test(pathname);
+    return pathname === "/dashboard" || pathname === "/map" || pathname === "/trees" || pathname === "/forests" || pathname === "/advice" || /^\/trees\/[^/]+$/.test(pathname) || /^\/forests\/[^/]+$/.test(pathname);
   }
   if (role === "farmer") {
     if (pathname === "/farmers" || pathname.startsWith("/farmers/")) return false;
+    if (pathname === "/forests/new" || /^\/forests\/[^/]+\/edit$/.test(pathname)) return false;
     return true;
   }
   if (role === "admin") {
+    if (pathname === "/forests/new" || /^\/forests\/[^/]+\/edit$/.test(pathname)) return true;
     if (pathname.includes("/edit") || pathname.endsWith("/new")) return false;
     const hidden = ["/farmers", "/nursery", "/field", "/harvest"];
     return !hidden.some((path) => pathname === path || pathname.startsWith(`${path}/`));
@@ -138,7 +145,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const links = [...linksForRole(user?.role), ...(user?.role === "admin" ? [["/audit", "Audit log"]] : [])];
   const groups = [
     { title: "Workspace", paths: ["/dashboard", "/map"] },
-    { title: "Planting & people", paths: ["/sites", "/trees", "/batches", "/farmers", "/species"] },
+    { title: "Planting & people", paths: ["/agents", "/sites", "/trees", "/batches", "/forests", "/farmers", "/species"] },
     { title: "Care & production", paths: ["/nursery", "/field", "/harvest"] },
     { title: "Insights", paths: ["/analytics", "/audit", "/about"] },
   ];
