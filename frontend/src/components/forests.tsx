@@ -9,6 +9,7 @@ import type { Corner } from "@/components/boundary-draw";
 import { HealthBadge } from "@/components/tree-card";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { formatCoordinates, polygonCenter } from "@/lib/coordinates";
 import type { MapFeature, Page, Species } from "@/lib/types";
 import { newRequestId } from "@/lib/validation";
 
@@ -61,6 +62,10 @@ export function distributionName(value: string) {
 
 function canRegister(role: string | undefined) {
   return role === "admin" || role === "field_officer";
+}
+
+function forestCenter(boundary: { latitude: number; longitude: number }[]) {
+  return polygonCenter(boundary.map((point) => [point.latitude, point.longitude]));
 }
 
 export function ForestList() {
@@ -131,10 +136,13 @@ export function ForestList() {
                   <th>Distribution</th>
                   <th>Condition</th>
                   <th>District</th>
+                  <th>Center</th>
                 </tr>
               </thead>
               <tbody>
-                {data.items.map((forest) => (
+                {data.items.map((forest) => {
+                  const center = forestCenter(forest.boundary);
+                  return (
                   <tr key={forest.id}>
                     <td data-label="Code"><Link href={`/forests/${forest.id}`}>{forest.public_code}</Link></td>
                     <td data-label="Name">{forest.name}</td>
@@ -144,8 +152,10 @@ export function ForestList() {
                     <td data-label="Distribution">{distributionName(forest.distribution)}</td>
                     <td data-label="Condition"><HealthBadge status={forest.status} /></td>
                     <td data-label="District">{forest.district ?? "—"}</td>
+                    <td data-label="Center">{center ? formatCoordinates(center[0], center[1]) : "—"}</td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -308,6 +318,7 @@ export function ForestDetail() {
   if (error) return <Banner tone="error">{error}</Banner>;
   if (!forest) return <p className="loading">Loading forest…</p>;
   const closed = forest.boundary.map((point) => [point.longitude, point.latitude] as [number, number]);
+  const center = forestCenter(forest.boundary);
   if (closed.length > 0) closed.push(closed[0]);
   const feature: MapFeature = {
     type: "Feature",
@@ -348,6 +359,7 @@ export function ForestDetail() {
           <dt>Main species</dt><dd>{forest.species_common_name ?? "—"}</dd>
           <dt>Distribution</dt><dd>{distributionName(forest.distribution)}</dd>
           <dt>Place</dt><dd>{[forest.province, forest.district].filter(Boolean).join(", ") || "—"}</dd>
+          <dt>Center</dt><dd>{center ? formatCoordinates(center[0], center[1]) : "—"}</dd>
           <dt>Description</dt><dd>{forest.description ?? "—"}</dd>
           <dt>Registered by</dt><dd>{forest.registered_by_name ?? "—"}</dd>
         </dl>

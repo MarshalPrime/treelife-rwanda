@@ -83,8 +83,21 @@ export default function HomePage() {
               </div>
             </article>
           ))}
+          <article className="home-scene-feature">
+            <Image
+              src="/Forestry /Forestry Worker Measuring Tree Diameter.png"
+              alt="A forestry worker measuring the diameter of a tree trunk"
+              width={1200}
+              height={800}
+            />
+            <div>
+              <p>04 · Carbon</p>
+              <h3>Measure a tree, then see its estimated carbon stock</h3>
+              <p>An authorized officer records the species, the diameter, the height, and the health. TreeLife stores the estimate for that tree. The project total uses accepted measurements.</p>
+            </div>
+          </article>
         </div>
-        <p className="home-note">The photographs show the kind of planting TreeLife is built to record.</p>
+        <p className="home-note">The photographs show the kind of work TreeLife is built to record.</p>
       </section>
 
       <section className="home-how" id="how" aria-labelledby="how-heading">
@@ -224,6 +237,10 @@ const features = [
   {
     title: "Care in the field",
     body: "Measure height, and record pruning, watering, mulching, pest control, or staking.",
+  },
+  {
+    title: "Carbon monitoring",
+    body: "An approved field officer measures a registered tree. The stored estimate uses that species when a published wood density is on record, and the project total counts accepted measurements.",
   },
   {
     title: "Harvest and sales",

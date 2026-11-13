@@ -39,6 +39,7 @@ yarn-error.log*
 # Local data
 pgdata/
 backend/profile-photos/
+backend/carbon-documents/
 *.sqlite
 *.sqlite3
 .docker-data/

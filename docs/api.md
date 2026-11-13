@@ -115,6 +115,29 @@ A species or category filter applies to trees and batches. Sites are omitted fro
 
 The coordinate order in GeoJSON is longitude, then latitude. The response also includes separate latitude and longitude fields on the registration resources.
 
+## Carbon monitoring
+
+Carbon monitoring is a permission on an existing field officer, not a new role. `GET /auth/me` includes `carbon_monitoring` for a field officer: `not_requested`, `pending`, `approved`, `rejected`, or `revoked`.
+
+| Method | Path | Who |
+| --- | --- | --- |
+| GET, POST | `/carbon/authorization` | Field officer. Read status or submit experience, training, and qualifications. |
+| POST | `/carbon/authorization/{id}/documents` | The officer, while the request is pending. JPEG, PNG, WebP, or PDF. |
+| GET | `/carbon/documents/{id}` | The officer who owns it, or an administrator. |
+| GET | `/carbon/authorizations` | Administrator. All requests. |
+| GET | `/carbon/authorizations/{id}` | Administrator. Profile details, evidence, and history. |
+| POST | `/carbon/authorizations/{id}/decision` | Administrator. `approve`, `reject`, or `revoke`. Reject and revoke require `reason`. |
+| GET | `/carbon/overview` | Administrator or viewer. Project stock in tCO₂e from the latest accepted measurement of each tree, plus distinct trees, species, agents, and pending or correction counts. |
+| GET | `/carbon/measurements` | Approved field officer, for their own records, or an administrator. |
+| POST | `/carbon/measurements` | Approved field officer. |
+| GET | `/carbon/measurements/{id}` | The officer who collected it, or an administrator. |
+| PUT | `/carbon/measurements/{id}` | The officer who collected it. An edit stores a new estimate and returns the record to pending review. |
+| POST | `/carbon/measurements/{id}/review` | Administrator. `accept` or `correction`. Correction requires `reason`. |
+| POST | `/carbon/measurements/{id}/photo` | The officer who collected it. |
+| GET | `/carbon/measurements/{id}/photo` | The officer who collected it, or an administrator. |
+
+A measurement stores who collected it, the time, the review status, and earlier versions after an edit. `estimate` is stored when the species has a published basic wood specific gravity and a height. It is labelled `Estimate`, names the methodology and version, and is not a certified carbon credit. A species without that parameter is saved with `estimate` null and an `estimate_note`. Only accepted measurements enter the overview total, and a later accepted visit replaces the earlier stock for the same tree.
+
 Updates cannot change the public code, the registrar, the data origin, or the client request id. Sending both coordinates as `null` clears the point.
 
 An individual tree response includes `"quantity": 1`. That value is not stored as an editable quantity.

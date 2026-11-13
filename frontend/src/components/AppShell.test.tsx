@@ -30,7 +30,19 @@ describe("workspace navigation", () => {
     expect(linksForRole("admin").map(([path]) => path)).toContain("/agents");
     expect(pathAllowed("admin", "/agents")).toBe(true);
     expect(pathAllowed("field_officer", "/agents")).toBe(false);
+    const officerPaths = linksForRole("field_officer").map(([path]) => path);
+    expect(officerPaths.indexOf("/farmers")).toBeLessThan(officerPaths.indexOf("/sites"));
     expect(pathAllowed("viewer", "/agents")).toBe(false);
+    expect(pathAllowed("field_officer", "/carbon")).toBe(true);
+    expect(pathAllowed("field_officer", "/carbon", "approved")).toBe(true);
+    expect(pathAllowed("farmer", "/carbon", "approved")).toBe(false);
+    expect(pathAllowed("viewer", "/carbon")).toBe(false);
+    expect(pathAllowed("admin", "/carbon")).toBe(true);
+    const officerLinks = linksForRole("field_officer").map(([path]) => path);
+    expect(officerLinks).toContain("/carbon");
+    expect(officerLinks.indexOf("/harvest")).toBeLessThan(officerLinks.indexOf("/carbon"));
+    expect(linksForRole("farmer").map(([path]) => path)).not.toContain("/carbon");
+    expect(linksForRole("admin").map(([path]) => path)).toContain("/carbon");
   });
 
   it("groups links and provides an accessible main landmark", () => {

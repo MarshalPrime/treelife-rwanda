@@ -12,6 +12,7 @@ type AuthValue = {
   logout: () => void;
   rename: (fullName: string) => void;
   setPhoto: (updatedAt: string | null) => void;
+  setCarbonMonitoring: (status: User["carbon_monitoring"]) => void;
 };
 
 const AuthContext = createContext<AuthValue | null>(null);
@@ -65,6 +66,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       },
       setPhoto(updatedAt: string | null) {
         setUser((current) => (current ? { ...current, profile_photo_at: updatedAt } : current));
+      },
+      setCarbonMonitoring(status) {
+        setUser((current) => (current ? { ...current, carbon_monitoring: status } : current));
       },
     }),
     [user, loading],

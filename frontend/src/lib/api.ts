@@ -72,6 +72,15 @@ export async function apiUpload<T>(path: string, body: FormData): Promise<T> {
   return api<T>(path, { method: "POST", body });
 }
 
+export async function apiFile(path: string): Promise<Blob> {
+  const headers = new Headers();
+  const token = getToken();
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const response = await fetch(`${API_URL}/api/v1${path}`, { headers });
+  if (!response.ok) throw new ApiError("The file could not be loaded.", response.status);
+  return response.blob();
+}
+
 export async function apiBlob(path: string): Promise<Blob> {
   const headers = new Headers({ Accept: "image/*" });
   const token = getToken();

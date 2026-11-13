@@ -8,6 +8,7 @@ import { Banner, OriginBadge } from "@/components/AppShell";
 import { HealthBadge, HealthLegend, MapPopup } from "@/components/tree-card";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { featureCenter, formatCoordinates } from "@/lib/coordinates";
 import { markerColor, matchesHealth, type HealthId } from "@/lib/health";
 import { label } from "@/lib/labels";
 import type { Farmer, MapFeature, MapResponse, Species } from "@/lib/types";
@@ -67,7 +68,7 @@ export default function MapPage() {
     <div className="page">
       <div>
         <h1>Map</h1>
-        <p className="lede">Dots are trees, batches, and sites. Shaded areas are forest stands. The opening view is a map of Rwanda, not a surveyed boundary.</p>
+        <p className="lede">Dots are trees, batches, and sites. Shaded areas are forest stands, with a pin at the center. The opening view is a map of Rwanda, not a surveyed boundary.</p>
       </div>
       {error ? <Banner tone="error">{error}</Banner> : null}
       <div className="filters">
@@ -155,6 +156,7 @@ export default function MapPage() {
 
 function RecordSummary({ feature }: { feature: MapFeature }) {
   const path = paths[feature.properties.kind];
+  const center = featureCenter(feature);
   return (
     <div>
       <OriginBadge origin={feature.properties.data_origin} />
@@ -164,7 +166,7 @@ function RecordSummary({ feature }: { feature: MapFeature }) {
       <p>{feature.properties.kind === "forest"
         ? [feature.properties.area_hectares != null ? `${feature.properties.area_hectares.toLocaleString("en-GB")} ha` : null, feature.properties.estimated_trees != null ? `about ${feature.properties.estimated_trees.toLocaleString("en-GB")} trees` : null].filter(Boolean).join(" · ")
         : <>{label(feature.properties.status)}{feature.properties.category ? ` · ${label(feature.properties.category)}` : ""}</>}</p>
-      {feature.geometry.type === "Point" ? <p className="help">{feature.geometry.coordinates[1].toFixed(5)}, {feature.geometry.coordinates[0].toFixed(5)}</p> : <p className="help">Shaded boundary on the map</p>}
+      {center ? <p className="help">{formatCoordinates(center[0], center[1])}</p> : <p className="help">Shaded boundary on the map</p>}
       <Link href={`/${path}/${feature.properties.id}`}>Open record</Link>
     </div>
   );

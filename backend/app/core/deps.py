@@ -75,6 +75,43 @@ def require_forest_writer(user: User = Depends(get_current_user)) -> User:
     return user
 
 
+def require_carbon_agent(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> User:
+    from app.services.carbon import is_carbon_agent
+
+    if is_carbon_agent(db, user):
+        return user
+    raise HTTPException(
+        status_code=403,
+        detail="Carbon monitoring is limited to an approved field officer or an administrator.",
+    )
+
+
+def require_carbon_writer(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> User:
+    from app.services.carbon import carbon_status
+
+    if user.role == UserRole.field_officer.value and carbon_status(db, user.id) == "approved":
+        return user
+    raise HTTPException(
+        status_code=403,
+        detail="Only an approved field officer can record a carbon measurement.",
+    )
+
+
+def require_monitoring_reader(user: User = Depends(get_current_user)) -> User:
+    if user.role in {UserRole.admin.value, UserRole.viewer.value}:
+        return user
+    raise HTTPException(
+        status_code=403,
+        detail="The carbon monitoring dashboard is for administrators and viewers.",
+    )
+
+
 def require_attention(user: User = Depends(get_current_user)) -> User:
     if user.role not in {UserRole.admin.value, UserRole.field_officer.value}:
         raise HTTPException(

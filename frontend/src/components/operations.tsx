@@ -3,6 +3,8 @@
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
 import { Banner, Field } from "@/components/AppShell";
+import { FarmerBoard } from "@/components/farmer-board";
+import { RegistrationProgress } from "@/components/registration-progress";
 import { DashboardView } from "@/components/dashboard-view";
 import { HarvestFeedback, HarvestNotices, HarvestSummary } from "@/components/harvest-insights";
 import { TreePlace } from "@/components/forms";
@@ -111,6 +113,7 @@ export function FarmersPage() {
   const [selectedId, setSelectedId] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
 
   function load() {
     api<Farmer[]>("/farmers")
@@ -182,6 +185,7 @@ export function FarmersPage() {
       });
       setNotice(`${created.display_name} is saved.`);
       setForm(emptyFarmerForm);
+      setAdding(false);
       setSelectedId(created.id);
       request.rotate();
       load();
@@ -193,19 +197,10 @@ export function FarmersPage() {
   const mine = (user?.role === "field_officer" ? farmers.filter((item) => item.registered_by === user.id) : farmers)
     .slice()
     .sort((left, right) => left.display_name.localeCompare(right.display_name));
-  const selected = mine.find((item) => item.id === selectedId) ?? null;
-  const address = selected
-    ? [selected.province, selected.district, selected.sector, selected.cell, selected.village, selected.isibo, selected.household].filter(Boolean)
-    : [];
 
-  return (
-    <div className="page">
-      <h1>Farmers</h1>
-      <p className="lede">Farmers you registered. Select a name to see the address and the trees you recorded with them. Do not enter a national ID.</p>
-      {notice ? <Banner tone="success">{notice}</Banner> : null}
-      {error ? <Banner tone="error">{error}</Banner> : null}
-      {canWrite ? (
+  const addForm = (
         <form className="card form" onSubmit={submit}>
+          <h2 className="farmer-add-title">Farmer information</h2>
           <Field label="Name" name="display_name">
             <input id="display_name" value={form.display_name} onChange={(event) => setForm((current) => ({ ...current, display_name: event.target.value }))} required />
           </Field>
@@ -246,42 +241,44 @@ export function FarmersPage() {
             <Field label="Isibo" name="isibo"><input id="isibo" value={form.isibo} onChange={(event) => setForm((current) => ({ ...current, isibo: event.target.value }))} /></Field>
             <Field label="Household (Urugo)" name="household"><input id="household" value={form.household} onChange={(event) => setForm((current) => ({ ...current, household: event.target.value }))} /></Field>
           </div>
-          <button className="primary" type="submit">Save farmer</button>
+          <div className="actions">
+            <button className="primary" type="submit">Save farmer</button>
+            <button className="secondary" type="button" onClick={() => setAdding(false)}>Cancel</button>
+          </div>
         </form>
-      ) : null}
-      <section className="card">
-        <h2>Farmers you registered</h2>
-        {mine.length === 0 ? <p>No farmers yet.</p> : (
-          <div className="record-list">
-            {mine.map((farmer) => (
-              <button
-                key={farmer.id}
-                className="record-button"
-                type="button"
-                aria-current={farmer.id === selectedId}
-                onClick={() => setSelectedId(farmer.id)}
-              >
-                {farmer.display_name}
-              </button>
-            ))}
-          </div>
-        )}
-        {selected ? (
-          <div className="farmer-detail">
-            <h3>{selected.display_name}</h3>
-            <p>{address.length ? address.join(", ") : "No address recorded."}</p>
-            {selected.phone ? <p className="help">Phone: {selected.phone}. Treat this as sensitive contact information.</p> : null}
-            <p>{selected.tree_count === 1 ? "1 tree recorded with this farmer." : `${selected.tree_count} trees recorded with this farmer.`}</p>
-            {selected.trees.length === 0 ? null : (
-              <ul>
-                {selected.trees.map((tree) => (
-                  <li key={tree.id}>{tree.public_code} · {tree.species_common_name ?? "Species"} · {tree.planting_date}</li>
-                ))}
-              </ul>
-            )}
-          </div>
+  );
+
+  return (
+    <div className="page">
+      <div className="page-head">
+        <div>
+          <h1>Farmers</h1>
+          <p className="lede">Farmers you registered. Choose a name to see their place, trees, health, and follow-up. Do not enter a national ID.</p>
+        </div>
+        {canWrite ? (
+          <button
+            className="primary"
+            type="button"
+            aria-expanded={adding}
+            onClick={() => {
+              setAdding((open) => !open);
+              document.getElementById("main")?.scrollIntoView({ block: "start" });
+            }}
+          >
+            + Add a farmer
+          </button>
         ) : null}
-      </section>
+      </div>
+      {notice ? <Banner tone="success">{notice}</Banner> : null}
+      {error ? <Banner tone="error">{error}</Banner> : null}
+      {canWrite && adding ? (
+        <div className="farmer-add">
+          <RegistrationProgress step={1} steps={["Farmer Information"]} heading="h2" />
+          {addForm}
+        </div>
+      ) : (
+        <FarmerBoard farmers={mine} selectedId={selectedId} onSelect={setSelectedId} />
+      )}
     </div>
   );
 }
@@ -740,6 +737,8 @@ const USES = [
   { id: "other", label: "Other" },
 ];
 
+const HARVEST_STEPS = ["Harvest", "Where it went", "Review and submit"] as const;
+
 export function HarvestPage() {
   const { canWrite, user } = useAuth();
   const [trees, setTrees] = useState<PlantingRecord[]>([]);
@@ -747,12 +746,14 @@ export function HarvestPage() {
   const [quantity, setQuantity] = useState("10");
   const [unit, setUnit] = useState("kg");
   const [harvests, setHarvests] = useState<{ id: string; label: string }[]>([]);
-  const [harvestId, setHarvestId] = useState("");
   const [purpose, setPurpose] = useState("sold");
   const [saleQuantity, setSaleQuantity] = useState("1");
   const [amount, setAmount] = useState("0");
   const [buyer, setBuyer] = useState("");
   const [useNote, setUseNote] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [saving, setSaving] = useState(false);
   const [version, setVersion] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -769,21 +770,55 @@ export function HarvestPage() {
       setTrees(planted);
       setTarget((current) => current || (planted[0] ? `${treePage.items.includes(planted[0]) ? "tree" : "batch"}:${planted[0].id}` : ""));
       setHarvests(harvestList.map((item) => ({ id: item.id, label: `${item.public_code} · ${item.quantity_remaining} ${item.unit} left` })));
-      setHarvestId((current) => current || harvestList[0]?.id || "");
     }).catch((caught: Error) => setError(caught.message));
   }
   useEffect(load, []);
 
-  async function saveHarvest(event: React.FormEvent) {
-    event.preventDefault();
-    const [kind, id] = target.split(":");
-    if (kind !== "tree" && kind !== "batch") {
-      setError("Choose a tree or a batch before saving a harvest.");
+  function harvestProblem() {
+    const [kind] = target.split(":");
+    const value = Number(quantity);
+    if (kind !== "tree" && kind !== "batch") return "Choose a tree or a batch before saving a harvest.";
+    if (!Number.isFinite(value) || value <= 0) return "Quantity must be greater than zero.";
+    if (unit === "count" && !Number.isInteger(value)) return "Fruit count must be a whole number.";
+    return null;
+  }
+
+  function destinationProblem() {
+    const value = Number(saleQuantity);
+    const harvested = Number(quantity);
+    if (!Number.isFinite(value) || value <= 0) return "Quantity must be greater than zero.";
+    if (unit === "count" && !Number.isInteger(value)) return "Fruit count must be a whole number.";
+    if (value > harvested) return `Only ${harvested} ${unit} remain from this harvest.`;
+    if (purpose === "sold" && !buyer.trim()) return "Name the market or organization. Do not enter a national ID.";
+    const money = Number(amount);
+    if (purpose === "sold" && (!Number.isFinite(money) || money < 0)) return "Amount must be zero or a positive number of Rwandan francs.";
+    return null;
+  }
+
+  function closeForm() {
+    setAdding(false);
+    setStep(1);
+    setError(null);
+    document.getElementById("main")?.scrollIntoView({ block: "start" });
+  }
+
+  function goTo(next: 1 | 2 | 3) {
+    setStep(next);
+    setError(null);
+    document.getElementById("main")?.scrollIntoView({ block: "start" });
+  }
+
+  async function submit() {
+    const problem = harvestProblem() ?? destinationProblem();
+    if (problem) {
+      setError(problem);
       return;
     }
+    const [kind, id] = target.split(":");
+    setSaving(true);
     setError(null);
     try {
-      const created = await api<{ public_code: string }>("/harvests", {
+      const created = await api<{ id: string; public_code: string }>("/harvests", {
         method: "POST",
         body: JSON.stringify({
           tree_id: kind === "tree" ? id : null,
@@ -794,42 +829,37 @@ export function HarvestPage() {
           client_request_id: harvestRequest.current(),
         }),
       });
-      setNotice(`${created.public_code} saved.`);
-      harvestRequest.rotate();
-      setVersion((value) => value + 1);
-      load();
-    } catch (caught) {
-      setError(message(caught));
-    }
-  }
-
-  async function saveSale(event: React.FormEvent) {
-    event.preventDefault();
-    setError(null);
-    if (!harvestId) {
-      setError("Record a harvest before recording a sale.");
-      return;
-    }
-    try {
-      const created = await api<{ public_code: string }>("/sales", {
+      const useRecord = await api<{ public_code: string }>("/sales", {
         method: "POST",
         body: JSON.stringify({
-          harvest_id: harvestId,
+          harvest_id: created.id,
           sold_on: todayInput(),
           quantity: Number(saleQuantity),
           purpose,
           amount_rwf: purpose === "sold" ? Number(amount) : 0,
-          buyer_name: purpose === "sold" ? buyer : null,
-          notes: purpose === "sold" ? null : useNote || null,
+          buyer_name: purpose === "sold" ? buyer.trim() : null,
+          notes: purpose === "sold" ? null : useNote.trim() || null,
           client_request_id: saleRequest.current(),
         }),
       });
-      setNotice(`${created.public_code} saved.`);
+      setNotice(`${created.public_code} and ${useRecord.public_code} are saved.`);
+      harvestRequest.rotate();
       saleRequest.rotate();
+      setQuantity("10");
+      setUnit("kg");
+      setPurpose("sold");
+      setSaleQuantity("1");
+      setAmount("0");
+      setBuyer("");
+      setUseNote("");
+      setAdding(false);
+      setStep(1);
       setVersion((value) => value + 1);
       load();
     } catch (caught) {
       setError(message(caught));
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -837,57 +867,127 @@ export function HarvestPage() {
     id: `${item.public_code.startsWith("BATCH") ? "batch" : "tree"}:${item.id}`,
     label: `${item.public_code} · ${item.species_common_name}`,
   }));
+  const targetLabel = choices.find((item) => item.id === target)?.label ?? "Not chosen";
+  const useLabel = USES.find((item) => item.id === purpose)?.label ?? purpose;
+  const unitLabel = unit === "kg" ? "Kilograms" : "Fruit count";
 
   return (
     <div className="page">
-      <h1>Harvest and sales</h1>
-      <p className="lede">Record fruit taken from a tree or batch, then where it went: sold, eaten at home, stored, given away, or another use. The quantities have to add up.</p>
+      <div className="page-head">
+        <div>
+          <h1>Harvest and sales</h1>
+          <p className="lede">Record fruit taken from a tree or batch, then where it went: sold, eaten at home, stored, given away, or another use. The quantities have to add up.</p>
+        </div>
+        {canWrite ? (
+          <button
+            className="primary"
+            type="button"
+            aria-expanded={adding}
+            onClick={() => {
+              if (adding) closeForm();
+              else {
+                setAdding(true);
+                goTo(1);
+              }
+            }}
+          >
+            + Harvest
+          </button>
+        ) : null}
+      </div>
       {notice ? <Banner tone="success">{notice}</Banner> : null}
       {error ? <Banner tone="error">{error}</Banner> : null}
-      {user?.role === "field_officer" ? <HarvestNotices refreshKey={version} /> : null}
-      <HarvestSummary refreshKey={version} />
-      {canWrite ? (
-        <div className="row">
-          <form className="card form" onSubmit={saveHarvest}>
-            <h2>Harvest</h2>
-            <SelectField label="Tree or batch" name="harvest_target" value={target} options={choices} onChange={setTarget} />
-            <div className="row">
-              <Field label="Quantity" name="harvest_quantity"><input id="harvest_quantity" value={quantity} onChange={(event) => setQuantity(event.target.value)} /></Field>
-              <Field label="Unit" name="unit">
-                <select id="unit" value={unit} onChange={(event) => setUnit(event.target.value)}>
-                  <option value="kg">Kilograms</option>
-                  <option value="count">Fruit count</option>
+      {canWrite && adding ? (
+        <div className="farmer-add">
+          <RegistrationProgress step={step} steps={HARVEST_STEPS} heading="h2" />
+          {step === 1 ? (
+            <form className="card form" onSubmit={(event) => { event.preventDefault(); const problem = harvestProblem(); setError(problem); if (!problem) goTo(2); }}>
+              <h2 className="farmer-add-title">Harvest</h2>
+              <SelectField label="Tree or batch" name="harvest_target" value={target} options={choices} onChange={setTarget} />
+              <div className="row">
+                <Field label="Quantity" name="harvest_quantity"><input id="harvest_quantity" value={quantity} onChange={(event) => setQuantity(event.target.value)} /></Field>
+                <Field label="Unit" name="unit">
+                  <select id="unit" value={unit} onChange={(event) => setUnit(event.target.value)}>
+                    <option value="kg">Kilograms</option>
+                    <option value="count">Fruit count</option>
+                  </select>
+                </Field>
+              </div>
+              <div className="actions">
+                <button className="primary" type="submit">Continue</button>
+                <button className="secondary" type="button" onClick={closeForm}>Cancel</button>
+              </div>
+            </form>
+          ) : null}
+          {step === 2 ? (
+            <form className="card form" onSubmit={(event) => { event.preventDefault(); const problem = destinationProblem(); setError(problem); if (!problem) goTo(3); }}>
+              <h2 className="farmer-add-title">Where it went</h2>
+              <Field label="Harvest" name="harvest_preview">
+                <input id="harvest_preview" value={`${targetLabel} · ${quantity} ${unit}`} readOnly />
+              </Field>
+              <Field label="Use" name="purpose">
+                <select id="purpose" value={purpose} onChange={(event) => setPurpose(event.target.value)}>
+                  {USES.map((choice) => <option key={choice.id} value={choice.id}>{choice.label}</option>)}
                 </select>
               </Field>
-            </div>
-            <button className="primary" type="submit">Save harvest</button>
-          </form>
-          <form className="card form" onSubmit={saveSale}>
-            <h2>Where it went</h2>
-            <SelectField label="Harvest" name="harvest_id" value={harvestId} options={harvests.map((item) => ({ id: item.id, label: item.label }))} onChange={setHarvestId} />
-            <Field label="Use" name="purpose">
-              <select id="purpose" value={purpose} onChange={(event) => setPurpose(event.target.value)}>
-                {USES.map((choice) => <option key={choice.id} value={choice.id}>{choice.label}</option>)}
-              </select>
-            </Field>
-            <Field label="Quantity" name="sale_quantity"><input id="sale_quantity" value={saleQuantity} onChange={(event) => setSaleQuantity(event.target.value)} /></Field>
-            {purpose === "sold" ? (
-              <>
-                <Field label="Amount in RWF" name="amount_rwf"><input id="amount_rwf" value={amount} onChange={(event) => setAmount(event.target.value)} /></Field>
-                <Field label="Buyer" name="buyer_name" help="Market or organization name. Do not enter a national ID.">
-                  <input id="buyer_name" value={buyer} onChange={(event) => setBuyer(event.target.value)} required />
+              <Field label="Quantity" name="sale_quantity"><input id="sale_quantity" value={saleQuantity} onChange={(event) => setSaleQuantity(event.target.value)} /></Field>
+              {purpose === "sold" ? (
+                <>
+                  <Field label="Amount in RWF" name="amount_rwf"><input id="amount_rwf" value={amount} onChange={(event) => setAmount(event.target.value)} /></Field>
+                  <Field label="Buyer" name="buyer_name" help="Market or organization name. Do not enter a national ID.">
+                    <input id="buyer_name" value={buyer} onChange={(event) => setBuyer(event.target.value)} required />
+                  </Field>
+                </>
+              ) : (
+                <Field label="Note" name="use_note" help="Optional. Do not enter a national ID.">
+                  <input id="use_note" value={useNote} onChange={(event) => setUseNote(event.target.value)} />
                 </Field>
-              </>
-            ) : (
-              <Field label="Note" name="use_note" help="Optional. Do not enter a national ID.">
-                <input id="use_note" value={useNote} onChange={(event) => setUseNote(event.target.value)} />
-              </Field>
-            )}
-            <button className="primary" type="submit">Save record</button>
-          </form>
+              )}
+              <div className="actions">
+                <button className="primary" type="submit">Continue</button>
+                <button className="secondary" type="button" onClick={() => goTo(1)}>Back</button>
+                <button className="secondary" type="button" onClick={closeForm}>Cancel</button>
+              </div>
+            </form>
+          ) : null}
+          {step === 3 ? (
+            <section className="card">
+              <h2 className="farmer-add-title">Review</h2>
+              <h3>Harvest</h3>
+              <dl className="review-list">
+                <div><dt>Tree or batch</dt><dd>{targetLabel}</dd></div>
+                <div><dt>Quantity</dt><dd>{quantity}</dd></div>
+                <div><dt>Unit</dt><dd>{unitLabel}</dd></div>
+              </dl>
+              <h3>Where it went</h3>
+              <dl className="review-list">
+                <div><dt>Harvest</dt><dd>{targetLabel} · {quantity} {unit}</dd></div>
+                <div><dt>Use</dt><dd>{useLabel}</dd></div>
+                <div><dt>Quantity</dt><dd>{saleQuantity}</dd></div>
+                {purpose === "sold" ? (
+                  <>
+                    <div><dt>Amount in RWF</dt><dd>{amount}</dd></div>
+                    <div><dt>Buyer</dt><dd>{buyer.trim()}</dd></div>
+                  </>
+                ) : (
+                  <div><dt>Note</dt><dd>{useNote.trim() || "Not recorded"}</dd></div>
+                )}
+              </dl>
+              <div className="actions">
+                <button className="primary" type="button" onClick={() => void submit()} disabled={saving}>{saving ? "Saving…" : "Submit"}</button>
+                <button className="secondary" type="button" onClick={() => goTo(2)} disabled={saving}>Back</button>
+                <button className="secondary" type="button" onClick={closeForm} disabled={saving}>Cancel</button>
+              </div>
+            </section>
+          ) : null}
         </div>
-      ) : null}
-      <HarvestFeedback refreshKey={version} harvests={harvests} />
+      ) : (
+        <>
+          {user?.role === "field_officer" ? <HarvestNotices refreshKey={version} /> : null}
+          <HarvestSummary refreshKey={version} />
+          <HarvestFeedback refreshKey={version} harvests={harvests} />
+        </>
+      )}
     </div>
   );
 }

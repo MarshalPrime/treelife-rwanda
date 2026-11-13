@@ -9,7 +9,7 @@ export default function AuthenticatedLayout({ children }: { children: React.Reac
   const { user, loading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
-  const allowed = user ? pathAllowed(user.role, pathname) : true;
+  const allowed = user ? pathAllowed(user.role, pathname, user.carbon_monitoring) : true;
 
   useEffect(() => {
     if (loading) return;
@@ -17,7 +17,7 @@ export default function AuthenticatedLayout({ children }: { children: React.Reac
       router.replace("/login");
       return;
     }
-    if (!pathAllowed(user.role, pathname)) {
+    if (!pathAllowed(user.role, pathname, user.carbon_monitoring)) {
       router.replace("/dashboard");
     }
   }, [loading, pathname, router, user]);

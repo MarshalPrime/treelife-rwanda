@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { featureCenter, formatCoordinates } from "@/lib/coordinates";
 import { healthLevels, healthOf, siteColor, type HealthId } from "@/lib/health";
 import type { MapFeature } from "@/lib/types";
 
@@ -85,6 +86,7 @@ export function MapPopup({ feature }: { feature: MapFeature }) {
     : feature.properties.species_common_name ?? feature.properties.title;
   const area = feature.properties.area_hectares;
   const trees = feature.properties.estimated_trees;
+  const center = forest ? featureCenter(feature) : null;
   const distribution = feature.properties.distribution
     ? distributionLabel[feature.properties.distribution] ?? feature.properties.distribution
     : null;
@@ -104,6 +106,7 @@ export function MapPopup({ feature }: { feature: MapFeature }) {
       {forest && feature.properties.species_common_name ? (
         <span>{[feature.properties.species_common_name, distribution].filter(Boolean).join(" · ")}</span>
       ) : null}
+      {center ? <span>{formatCoordinates(center[0], center[1])}</span> : null}
       <span>{feature.properties.subtitle || "Location recorded"}</span>
       <Link href={`/${path}/${feature.properties.id}`}>{forest ? "View forest" : "View record"}</Link>
     </article>

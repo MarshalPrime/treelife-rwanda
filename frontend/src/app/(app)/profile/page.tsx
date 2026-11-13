@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { Banner, Field } from "@/components/AppShell";
+import { CarbonAuthorizationPanel } from "@/components/carbon-authorization";
 import { TreePlace } from "@/components/forms";
 import { ApiError, api, apiUpload } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -185,6 +186,7 @@ export default function ProfilePage() {
           <button className="primary" type="submit" disabled={saving}>{saving ? "Saving…" : "Save details"}</button>
         </form>
       ) : null}
+      {user?.role === "field_officer" ? <CarbonAuthorizationPanel /> : null}
     </div>
   );
 }

@@ -1,10 +1,20 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { CircleMarker, MapContainer, Polygon, Popup, useMap } from "react-leaflet";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
+import { divIcon } from "leaflet";
+import { CircleMarker, MapContainer, Marker, Polygon, Popup, useMap } from "react-leaflet";
 import { ImageryLayer, MapLayerToggle } from "@/components/map-imagery";
+import { featureCenter, formatCoordinates } from "@/lib/coordinates";
 import type { MapFeature } from "@/lib/types";
 import "leaflet/dist/leaflet.css";
+
+const forestPin = divIcon({
+  className: "forest-pin",
+  html: `<svg width="28" height="36" viewBox="0 0 28 36" aria-hidden="true"><path d="M14 34.2S4.2 22.6 4.2 15.2a9.8 9.8 0 0 1 19.6 0c0 7.4-9.8 19-9.8 19z" fill="#1f8a4c" stroke="#fff" stroke-width="2"/><circle cx="14" cy="15" r="3.4" fill="#fff"/></svg>`,
+  iconSize: [28, 36],
+  iconAnchor: [14, 34],
+  popupAnchor: [0, -30],
+});
 
 const colors: Record<MapFeature["properties"]["kind"], string> = {
   site: "#1c4636",
@@ -76,9 +86,11 @@ export default function MapView({
       <Frame features={features} selectedId={selectedId} focusOnSelect={focusOnSelect} />
       {features.filter((feature) => feature.geometry.type === "Polygon").map((feature) => {
         const fill = colorOf ? colorOf(feature) : colors[feature.properties.kind];
+        const center = featureCenter(feature);
+        const coordinates = center ? formatCoordinates(center[0], center[1]) : null;
         return (
+          <Fragment key={`${feature.properties.kind}-${feature.properties.id}`}>
           <Polygon
-            key={`${feature.properties.kind}-${feature.properties.id}`}
             positions={latLngs(feature)}
             pathOptions={{
               color: fill,
@@ -94,6 +106,19 @@ export default function MapView({
               </Popup>
             ) : null}
           </Polygon>
+          {center && coordinates ? (
+            <Marker
+              position={center}
+              icon={forestPin}
+              zIndexOffset={400}
+              eventHandlers={{ click: () => onSelect(feature.properties.id) }}
+            >
+              <Popup className="record-popup" minWidth={180} maxWidth={240} autoPan>
+                {popupFor ? popupFor(feature) : <p className="forest-center-popup">{coordinates}</p>}
+              </Popup>
+            </Marker>
+          ) : null}
+          </Fragment>
         );
       })}
       {features.filter((feature) => feature.geometry.type === "Point").map((feature) => (

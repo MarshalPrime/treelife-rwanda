@@ -57,6 +57,10 @@ Creates accept `client_request_id`. Repeating the same id returns the original r
 
 The map uses OpenStreetMap tiles through Leaflet. The page attributes OpenStreetMap. Tile requests need a network connection. A later deployment should use a tile host that fits the expected traffic.
 
+## Carbon monitoring
+
+An administrator can approve a field officer for carbon measurements. The approval is a row in `carbon_authorizations`, not a fifth role. Only that approved field officer can record a measurement. Each measurement stores its original values and, when the species has a published basic wood specific gravity and a height, the carbon stock from Chave et al. 2014 equation 4. `GET /carbon/overview` sums the latest accepted measurement of each tree. Pending and correction records stay out of that total. The result is an estimate of standing stock, not annual sequestration and not a certified credit.
+
 ## What is intentionally absent
 
 Nursery stock, distribution, maintenance work orders, harvest quantities, and sales are not modules yet. The lifecycle event types include `maintenance` and `harvest_observation` so those notes have a place without pretending the later workflows exist.

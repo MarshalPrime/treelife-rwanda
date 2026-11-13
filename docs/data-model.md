@@ -60,6 +60,16 @@ Survival count is only valid for a batch, and it cannot exceed that batch's quan
 
 Event types: `inspection`, `survival_check`, `maintenance`, `harvest_observation`, `other`.
 
+### carbon_authorizations
+
+A request from a field officer. Status is `pending`, `approved`, `rejected`, or `revoked`. No row means not requested. Experience, training, and qualifications are stored on the request. `decided_by` and `decided_at` record the administrator decision. A partial unique index allows only one pending or approved request per officer.
+
+`carbon_authorization_events` keeps the history of submission, approval, rejection, and revocation, including the actor and reason. `carbon_documents` stores the name of an uploaded certificate. The file itself is on disk, not in the table.
+
+### carbon_measurements
+
+A specialist field measurement: optional tree, species, whether the species was checked, GPS coordinates, diameter at breast height, optional height, health status, measurement date, notes, optional photo, review status, and the authorized user who collected it. When the species has a published basic wood specific gravity and a height, the row also stores the estimated aboveground stock, the methodology, and the version. `species_carbon_parameters` holds those published values. `carbon_measurement_revisions` stores the previous field values when a measurement is edited. The stored figure is an estimate, not a certified credit.
+
 ### audit_logs
 
 Actor, action (`create` or `update`), entity type, entity id, and the names of changed fields. Values such as notes and coordinates are not copied into the log.

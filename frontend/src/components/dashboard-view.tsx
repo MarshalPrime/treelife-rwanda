@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Banner } from "@/components/AppShell";
+import { CarbonOverview } from "@/components/carbon-dashboard";
 import { BreakdownChart, SeriesChart, harvestLines, plantingLines, salesLines } from "@/components/dashboard-charts";
 import { DashboardEmpty, DashboardKpi, DashboardKpiGrid, DashboardSkeleton } from "@/components/dashboard-ui";
 import { HarvestNotices, HarvestSummary } from "@/components/harvest-insights";
@@ -307,6 +308,7 @@ export function DashboardView({ mode = "dashboard" }: { mode?: "dashboard" | "re
       </section>
 
       <TreeHealth summary={response.summary} />
+      {(role === "admin" || viewer) && mode === "dashboard" ? <CarbonOverview /> : null}
 
       <div className="dashboard-two-col">
         <section className="card"><div className="page-head"><h2>Planting & field activity</h2><span className="help">{dateLabel(response.filters.start_date)} – {dateLabel(response.filters.end_date)}</span></div><SeriesChart title="Planting and field activity" series={response.series} lines={plantingLines} unit="records" monthly={filters.range === "all"} /></section>
@@ -373,7 +375,7 @@ export function DashboardView({ mode = "dashboard" }: { mode?: "dashboard" | "re
       </section> : null}
       <section className="card report-map-card">
         <div className="page-head"><h2>Recorded locations</h2><span className="help">{map ? `${number(located.length)} locations shown` : "Locations in this view"}</span></div>
-        <p className="help">Shaded areas are forest stands. Dots are trees, batches, and sites.</p>
+        <p className="help">Shaded areas are forest stands. A pin marks each center. Open the pin to see the coordinates. Dots are trees, batches, and sites.</p>
         <HealthLegend selected={health} onSelect={setHealth} site />
         {activeMapError ? <Banner tone="error">{activeMapError} <button className="inline-link" type="button" onClick={() => invalidMapPath ? setRefresh((value) => value + 1) : setMapRefresh((value) => value + 1)}>{invalidMapPath ? "Retry dashboard" : "Retry map"}</button></Banner> : mapLoading || !map ? <p className="loading" role="status">Loading locations…</p> : !located.length ? <DashboardEmpty title="No markers for this health">Choose another health colour, or clear the filter.</DashboardEmpty> : <div className="map-frame report-map"><MapView features={located} selectedId={selectedId} onSelect={setSelectedId} focusOnSelect={false} colorOf={markerColor} popupFor={(feature) => <MapPopup feature={feature} />} /></div>}
         {map?.truncated ? <p className="help">Map results are limited. Dashboard totals include all matching records.</p> : null}

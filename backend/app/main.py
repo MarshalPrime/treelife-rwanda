@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.api.carbon import router as carbon_router
 from app.api.routes import router
 from app.core.config import get_settings
 from app.domain.errors import DomainError
@@ -117,6 +118,7 @@ def create_app() -> FastAPI:
         }
 
     app.include_router(router, prefix="/api/v1")
+    app.include_router(carbon_router, prefix="/api/v1")
     return app
 
 

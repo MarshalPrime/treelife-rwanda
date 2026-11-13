@@ -33,6 +33,7 @@ services:
       DEMO_VIEWER_PASSWORD: demo-viewer-pass
       DEMO_FARMER_PASSWORD: demo-farmer-pass
       PROFILE_PHOTO_DIR: /app/profile-photos
+      CARBON_DOCUMENT_DIR: /app/carbon-documents
       ASSISTANT_API_KEY: ${ASSISTANT_API_KEY:-}
       ASSISTANT_API_BASE_URL: ${ASSISTANT_API_BASE_URL:-}
       ASSISTANT_MODEL: ${ASSISTANT_MODEL:-}
@@ -45,6 +46,7 @@ services:
         condition: service_healthy
     volumes:
       - treelife_profiles:/app/profile-photos
+      - treelife_carbon:/app/carbon-documents
 
   web:
     build:
@@ -59,3 +61,4 @@ services:
 volumes:
   treelife_pg:
   treelife_profiles:
+  treelife_carbon:

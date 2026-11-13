@@ -1,4 +1,4 @@
-const STEPS = [
+const TREE_STEPS = [
   "Farmer Information",
   "Tree Information",
   "Tree Location",
@@ -9,24 +9,29 @@ const STEPS = [
 export function RegistrationProgress({
   step,
   forFarmer = false,
+  steps,
+  heading = "h1",
 }: {
-  step: 1 | 2 | 3 | 4 | 5;
+  step: number;
   forFarmer?: boolean;
+  steps?: readonly string[];
+  heading?: "h1" | "h2";
 }) {
-  const steps = forFarmer ? STEPS.slice(1) : [...STEPS];
-  const shown = forFarmer ? step - 1 : step;
-  const percent = Math.round((shown / steps.length) * 100);
+  const list = steps ?? (forFarmer ? TREE_STEPS.slice(1) : [...TREE_STEPS]);
+  const shown = steps ? step : forFarmer ? step - 1 : step;
+  const percent = Math.round((shown / list.length) * 100);
+  const Title = heading;
   return (
     <header className="reg-progress">
       <div className="reg-head">
-        <h1>Step {shown} of {steps.length} – {steps[shown - 1]}</h1>
+        <Title>Step {shown} of {list.length} – {list[shown - 1]}</Title>
         <span className="reg-percent">{percent}%</span>
       </div>
       <div className="reg-track" aria-hidden="true">
         <div className="reg-fill" style={{ width: `${percent}%` }} />
       </div>
       <p className="reg-path">
-        {steps.map((title, index) => (
+        {list.map((title, index) => (
           <span key={title}>
             {index > 0 ? " → " : null}
             {index + 1 === shown ? <strong>{title}</strong> : title}

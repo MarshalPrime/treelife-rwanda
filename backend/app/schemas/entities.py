@@ -129,6 +129,7 @@ class UserRead(BaseModel):
     is_active: bool
     farmer_id: uuid.UUID | None = None
     profile_photo_at: datetime | None = None
+    carbon_monitoring: str = "not_requested"
 
 
 class OrganizationCreate(BaseModel):

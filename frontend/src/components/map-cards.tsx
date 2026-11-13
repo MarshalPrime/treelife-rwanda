@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { featureCenter, formatCoordinates } from "@/lib/coordinates";
 import { label } from "@/lib/labels";
 import type { MapFeature, PlantingRecord, Site } from "@/lib/types";
 
@@ -60,6 +61,7 @@ export function LocationCard({ feature }: { feature: MapFeature }) {
     ? [site.district, site.sector].filter(Boolean).join(", ")
     : planting?.site_name ?? feature.properties.subtitle;
   const notes = detail?.notes?.trim();
+  const center = kind === "forest" ? featureCenter(feature) : null;
 
   return (
     <article className="record-card">
@@ -71,6 +73,7 @@ export function LocationCard({ feature }: { feature: MapFeature }) {
       {planting?.farmer_name || site?.farmer_name ? <p>Farmer: {planting?.farmer_name ?? site?.farmer_name}</p> : null}
       {planting ? <p>Planted {briefDate(planting.planting_date)}{kind === "batch" ? ` · ${planting.quantity} trees` : ""}</p> : null}
       {kind === "forest" && feature.properties.area_hectares != null ? <p>{feature.properties.area_hectares.toLocaleString("en-GB")} hectares · about {feature.properties.estimated_trees?.toLocaleString("en-GB")} trees</p> : null}
+      {center ? <p>{formatCoordinates(center[0], center[1])}</p> : null}
       {notes ? <p className="help">{notes.length > 140 ? `${notes.slice(0, 140)}…` : notes}</p> : null}
       <Link href={`/${path}/${feature.properties.id}`}>Open record</Link>
     </article>

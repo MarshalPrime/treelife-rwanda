@@ -103,6 +103,8 @@ class FarmerTreeBrief(BaseModel):
     public_code: str
     species_common_name: str | None
     planting_date: date
+    status: str
+    has_coordinates: bool = False
 
 
 class FarmerRead(BaseModel):

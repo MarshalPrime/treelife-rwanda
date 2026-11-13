@@ -122,6 +122,7 @@
   .dashboard-view .dashboard-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dashboard-view .dashboard-kpi { padding: 14px; min-height: 131px; }
   .dashboard-view .dashboard-kpi > strong { font-size: 1.55rem; }
+  .dashboard-view .carbon-total strong { font-size: 3.1rem; }
   .dashboard-view .dashboard-kpi > span { font-size: .71rem; }
   .dashboard-body .card { padding: 17px; }
   .dashboard-toolbar { padding: 14px; gap: 10px; }

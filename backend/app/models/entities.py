@@ -1112,3 +1112,198 @@ class Advisory(Base):
     farmer: Mapped[Farmer | None] = relationship()
     site: Mapped[PlantingSite | None] = relationship()
     registrar: Mapped[User] = relationship(foreign_keys=[registered_by])
+
+
+class CarbonAuthorization(Base):
+    __tablename__ = "carbon_authorizations"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'approved', 'rejected', 'revoked')",
+            name="ck_carbon_authorizations_status",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    experience: Mapped[str] = mapped_column(Text, nullable=False)
+    training: Mapped[str] = mapped_column(Text, nullable=False)
+    qualifications: Mapped[str] = mapped_column(Text, nullable=False)
+    decision_reason: Mapped[str | None] = mapped_column(Text)
+    decided_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        server_default=func.now(),
+        onupdate=utcnow,
+    )
+
+    officer: Mapped[User] = relationship(foreign_keys=[user_id])
+    decider: Mapped[User | None] = relationship(foreign_keys=[decided_by])
+    documents: Mapped[list["CarbonDocument"]] = relationship(back_populates="authorization")  # noqa: UP037
+    events: Mapped[list["CarbonAuthorizationEvent"]] = relationship(back_populates="authorization")  # noqa: UP037
+
+
+class CarbonAuthorizationEvent(Base):
+    __tablename__ = "carbon_authorization_events"
+    __table_args__ = (
+        CheckConstraint(
+            "action IN ('submitted', 'approved', 'rejected', 'revoked')",
+            name="ck_carbon_authorization_events_action",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    authorization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("carbon_authorizations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    action: Mapped[str] = mapped_column(String(20), nullable=False)
+    reason: Mapped[str | None] = mapped_column(Text)
+    actor_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow, server_default=func.now()
+    )
+
+    authorization: Mapped[CarbonAuthorization] = relationship(back_populates="events")
+    actor: Mapped[User | None] = relationship(foreign_keys=[actor_id])
+
+
+class CarbonDocument(Base):
+    __tablename__ = "carbon_documents"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    authorization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("carbon_authorizations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    original_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    stored_ext: Mapped[str] = mapped_column(String(8), nullable=False)
+    uploaded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow, server_default=func.now()
+    )
+
+    authorization: Mapped[CarbonAuthorization] = relationship(back_populates="documents")
+
+
+class SpeciesCarbonParameter(Base):
+    """Published basic wood specific gravity for one species. Empty means no carbon stock."""
+
+    __tablename__ = "species_carbon_parameters"
+    __table_args__ = (
+        CheckConstraint(
+            "basic_specific_gravity > 0 AND basic_specific_gravity <= 1.5",
+            name="ck_species_carbon_parameters_gravity",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    scientific_name: Mapped[str] = mapped_column(String(200), unique=True, nullable=False)
+    basic_specific_gravity: Mapped[float] = mapped_column(Float, nullable=False)
+    source: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow, server_default=func.now()
+    )
+
+
+class CarbonMeasurement(Base):
+    __tablename__ = "carbon_measurements"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('surviving', 'stressed', 'dead', 'planted', 'unknown')",
+            name="ck_carbon_measurements_status",
+        ),
+        CheckConstraint(
+            "review_status IN ('pending', 'accepted', 'correction')",
+            name="ck_carbon_measurements_review",
+        ),
+        CheckConstraint("dbh_cm > 0", name="ck_carbon_measurements_dbh"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    public_code: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
+    tree_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("individual_trees.id", ondelete="SET NULL"), nullable=True
+    )
+    species_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("species.id", ondelete="RESTRICT"), nullable=False
+    )
+    species_verified: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    species_note: Mapped[str | None] = mapped_column(Text)
+    latitude: Mapped[float] = mapped_column(Float, nullable=False)
+    longitude: Mapped[float] = mapped_column(Float, nullable=False)
+    dbh_cm: Mapped[float] = mapped_column(Float, nullable=False)
+    height_m: Mapped[float | None] = mapped_column(Float)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    measured_on: Mapped[date] = mapped_column(Date, nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text)
+    review_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="pending", server_default="pending"
+    )
+    review_reason: Mapped[str | None] = mapped_column(Text)
+    reviewed_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    agb_kg: Mapped[float | None] = mapped_column(Float)
+    carbon_kg: Mapped[float | None] = mapped_column(Float)
+    co2e_kg: Mapped[float | None] = mapped_column(Float)
+    wood_specific_gravity: Mapped[float | None] = mapped_column(Float)
+    methodology_id: Mapped[str | None] = mapped_column(String(40))
+    methodology_version: Mapped[str | None] = mapped_column(String(20))
+    parameter_source: Mapped[str | None] = mapped_column(Text)
+    estimate_note: Mapped[str | None] = mapped_column(Text)
+    photo_ext: Mapped[str | None] = mapped_column(String(8))
+    photo_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    collected_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    client_request_id: Mapped[str | None] = mapped_column(String(80), unique=True, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        server_default=func.now(),
+        onupdate=utcnow,
+    )
+
+    species: Mapped[Species] = relationship()
+    tree: Mapped[IndividualTree | None] = relationship()
+    collector: Mapped[User] = relationship(foreign_keys=[collected_by])
+
+
+class CarbonMeasurementRevision(Base):
+    __tablename__ = "carbon_measurement_revisions"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    measurement_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("carbon_measurements.id", ondelete="CASCADE"), nullable=False
+    )
+    actor_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    snapshot: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow, server_default=func.now()
+    )

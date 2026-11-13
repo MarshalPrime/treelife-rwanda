@@ -84,3 +84,5 @@ def test_officer_sees_trees_recorded_with_their_farmer(client, accounts):
     assert match["tree_count"] == 1
     assert match["trees"][0]["species_common_name"] == "Avocado"
     assert match["trees"][0]["planting_date"] == "2026-05-02"
+    assert match["trees"][0]["status"] == "planted"
+    assert match["trees"][0]["has_coordinates"] is False

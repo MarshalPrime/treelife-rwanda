@@ -15,6 +15,9 @@ from app.data.species_catalogue import apply_species_catalogue
 from app.db.session import SessionLocal
 from app.models.entities import (
     Advisory,
+    CarbonAuthorization,
+    CarbonAuthorizationEvent,
+    CarbonMeasurement,
     DataOrigin,
     Distribution,
     Farmer,
@@ -31,6 +34,7 @@ from app.models.entities import (
     Species,
     User,
 )
+from app.services.carbon import store_carbon_estimate
 from app.services.common import allocate_code, apply_point, utcnow, write_audit
 
 SYNTHETIC_NOTE = "SYNTHETIC DEMONSTRATION RECORD. Not a verified field observation."
@@ -624,6 +628,132 @@ def _sample_agents(
             )
 
 
+def _sample_carbon(db, officer: User, admin: User) -> None:
+    """Approve the demonstration officer and record 50 synthetic tree measurements.
+
+    Coordinates come from trees already stored. The note marks every row as synthetic.
+    """
+    if (
+        db.scalar(
+            select(CarbonMeasurement).where(
+                CarbonMeasurement.client_request_id == "synthetic-demo-carbon-001"
+            )
+        )
+        is not None
+    ):
+        return
+    latest = db.scalar(
+        select(CarbonAuthorization)
+        .where(CarbonAuthorization.user_id == officer.id)
+        .order_by(CarbonAuthorization.created_at.desc())
+        .limit(1)
+    )
+    if latest is not None and latest.status == "pending":
+        latest.status = "approved"
+        latest.decision_reason = "Approved for the local demonstration."
+        latest.decided_by = admin.id
+        latest.decided_at = utcnow()
+        db.add(
+            CarbonAuthorizationEvent(
+                authorization_id=latest.id,
+                user_id=officer.id,
+                action="approved",
+                reason="Approved for the local demonstration.",
+                actor_id=admin.id,
+            )
+        )
+    elif latest is None or latest.status != "approved":
+        authorization = CarbonAuthorization(
+            user_id=officer.id,
+            status="approved",
+            experience="SYNTHETIC demonstration authorization for the carbon monitoring showcase.",
+            training="SYNTHETIC demonstration training record.",
+            qualifications="SYNTHETIC demonstration qualification. Not a field certificate.",
+            decision_reason="Approved for the local demonstration.",
+            decided_by=admin.id,
+            decided_at=utcnow(),
+        )
+        db.add(authorization)
+        db.flush()
+        db.add(
+            CarbonAuthorizationEvent(
+                authorization_id=authorization.id,
+                user_id=officer.id,
+                action="approved",
+                reason="Approved for the local demonstration.",
+                actor_id=admin.id,
+            )
+        )
+    trees = list(
+        db.scalars(select(IndividualTree).where(IndividualTree.latitude.isnot(None))).all()
+    )
+    grouped: dict = {}
+    for tree in trees:
+        grouped.setdefault(tree.species_id, []).append(tree)
+    keys = list(grouped)
+    chosen = []
+    cursor = 0
+    while len(chosen) < 50 and keys:
+        key = keys[cursor % len(keys)]
+        bucket = grouped[key]
+        if bucket:
+            chosen.append(bucket.pop())
+            cursor += 1
+        else:
+            keys = [item for item in keys if grouped[item]]
+    allowed = {"surviving", "stressed", "dead", "planted", "unknown"}
+    for index, tree in enumerate(chosen, start=1):
+        if index <= 40:
+            review, reason = "accepted", None
+        elif index <= 45:
+            review, reason = "pending", None
+        else:
+            review, reason = "correction", "SYNTHETIC demonstration: height needs another check."
+        row = CarbonMeasurement(
+            public_code=allocate_code(db, CarbonMeasurement, "CARB"),
+            tree_id=tree.id,
+            species_id=tree.species_id,
+            species_verified=True,
+            latitude=tree.latitude,
+            longitude=tree.longitude,
+            dbh_cm=8 + (index % 25),
+            height_m=3 + (index % 10),
+            status=tree.status if tree.status in allowed else "surviving",
+            measured_on=date(2026, 7, 1) + timedelta(days=index),
+            notes=SYNTHETIC_NOTE,
+            collected_by=officer.id,
+            client_request_id=f"synthetic-demo-carbon-{index:03d}",
+            review_status=review,
+            review_reason=reason,
+            reviewed_by=admin.id if review != "pending" else None,
+            reviewed_at=utcnow() if review != "pending" else None,
+        )
+        store_carbon_estimate(db, row)
+        db.add(row)
+        if index > 5:
+            continue
+        earlier = CarbonMeasurement(
+            public_code=allocate_code(db, CarbonMeasurement, "CARB"),
+            tree_id=tree.id,
+            species_id=tree.species_id,
+            species_verified=True,
+            latitude=tree.latitude,
+            longitude=tree.longitude,
+            dbh_cm=6 + index,
+            height_m=3 + (index % 4),
+            status="surviving",
+            measured_on=date(2026, 5, 1) + timedelta(days=index),
+            notes=SYNTHETIC_NOTE,
+            collected_by=officer.id,
+            client_request_id=f"synthetic-demo-carbon-history-{index:03d}",
+            review_status="accepted",
+            reviewed_by=admin.id,
+            reviewed_at=utcnow(),
+        )
+        store_carbon_estimate(db, earlier)
+        db.add(earlier)
+
+
 def seed(allow_production: bool = False) -> None:
     settings = get_settings()
     if settings.is_production and not allow_production and not settings.seed_demo_data:
@@ -771,6 +901,7 @@ def seed(allow_production: bool = False) -> None:
         _sample_health_trees(db, officer, cooperative, species)
         _sample_forests(db, officer, species)
         _sample_agents(db, officer, cooperative, species, settings.demo_officer_password)
+        _sample_carbon(db, officer, admin)
         db.commit()
         print("Synthetic demonstration data is ready.")
         print("These accounts and coordinates are not real field records.")

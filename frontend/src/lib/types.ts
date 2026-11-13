@@ -37,6 +37,7 @@ export type User = {
   is_active: boolean;
   farmer_id: string | null;
   profile_photo_at: string | null;
+  carbon_monitoring?: "not_requested" | "pending" | "approved" | "rejected" | "revoked";
 };
 
 export type TokenResponse = {
@@ -102,7 +103,7 @@ export type Farmer = {
   registered_at: string;
   site_count: number;
   tree_count: number;
-  trees: { id: string; public_code: string; species_common_name: string | null; planting_date: string }[];
+  trees: { id: string; public_code: string; species_common_name: string | null; planting_date: string; status: string; has_coordinates: boolean }[];
   has_login: boolean;
 };
 

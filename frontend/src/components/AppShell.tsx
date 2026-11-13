@@ -12,11 +12,11 @@ import "./app-shell.css";
 
 const fieldLinks = [
   ["/dashboard", "Overview"],
+  ["/farmers", "Farmers"],
   ["/sites", "Sites"],
   ["/trees", "Trees"],
   ["/batches", "Batches"],
   ["/forests", "Forests"],
-  ["/farmers", "Farmers"],
   ["/nursery", "Nursery"],
   ["/field", "Field"],
   ["/harvest", "Harvest"],
@@ -48,15 +48,28 @@ const viewerLinks = [
   ["/forests", "Forests"],
 ];
 
-export function linksForRole(role: string | undefined) {
-  if (role === "admin") return adminLinks;
-  if (role === "viewer") return viewerLinks;
-  if (role === "farmer") return farmerLinks;
-  return fieldLinks;
+export function linksForRole(role: string | undefined, _carbonMonitoring?: string | null) {
+  const links = role === "admin"
+    ? [...adminLinks]
+    : role === "viewer"
+      ? [...viewerLinks]
+      : role === "farmer"
+        ? [...farmerLinks]
+        : [...fieldLinks];
+  const showCarbon = role === "admin" || role === "field_officer";
+  if (showCarbon && !links.some(([path]) => path === "/carbon")) {
+    const harvest = links.findIndex(([path]) => path === "/harvest");
+    links.splice(harvest >= 0 ? harvest + 1 : links.length, 0, ["/carbon", "Carbon"]);
+  }
+  return links;
 }
 
-export function pathAllowed(role: string, pathname: string) {
+export function pathAllowed(role: string, pathname: string, _carbonMonitoring?: string | null) {
   if (pathname === "/agents" || pathname.startsWith("/agents/")) return role === "admin";
+  if (pathname === "/carbon/review" || pathname.startsWith("/carbon/review/")) return role === "admin";
+  if (pathname === "/carbon" || pathname.startsWith("/carbon/")) {
+    return role === "admin" || role === "field_officer";
+  }
   if (role === "viewer") {
     if (pathname.endsWith("/new") || pathname.includes("/edit")) return false;
     return pathname === "/dashboard" || pathname === "/map" || pathname === "/trees" || pathname === "/forests" || pathname === "/advice" || /^\/trees\/[^/]+$/.test(pathname) || /^\/forests\/[^/]+$/.test(pathname);
@@ -142,11 +155,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const hasAccount = user?.role === "farmer" || user?.role === "field_officer";
   const roleName = user?.role === "farmer" ? "Smallholder farmer" : user?.role === "field_officer" ? "Field officer" : user?.role === "admin" ? "Administrator" : "Viewer";
-  const links = [...linksForRole(user?.role), ...(user?.role === "admin" ? [["/audit", "Audit log"]] : [])];
+  const links = [...linksForRole(user?.role, user?.carbon_monitoring), ...(user?.role === "admin" ? [["/audit", "Audit log"]] : [])];
   const groups = [
     { title: "Workspace", paths: ["/dashboard", "/map"] },
     { title: "Planting & people", paths: ["/agents", "/sites", "/trees", "/batches", "/forests", "/farmers", "/species"] },
-    { title: "Care & production", paths: ["/nursery", "/field", "/harvest"] },
+    { title: "Care & production", paths: ["/nursery", "/field", "/harvest", "/carbon"] },
     { title: "Insights", paths: ["/analytics", "/audit", "/about"] },
   ];
   const currentPage = links.find(([href]) => pathname === href || pathname.startsWith(`${href}/`))?.[1] ?? "TreeLife";

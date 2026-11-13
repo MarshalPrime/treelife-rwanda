@@ -227,7 +227,10 @@ def login_form(
 
 @router.get("/auth/me", response_model=UserRead)
 def me(db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> UserRead:
+    from app.services.carbon import carbon_status
+
     farmer_id = db.scalar(select(Farmer.id).where(Farmer.user_id == user.id))
+    monitoring = carbon_status(db, user.id) if user.role == "field_officer" else "not_requested"
     return UserRead(
         id=user.id,
         email=user.email,
@@ -237,6 +240,7 @@ def me(db: Session = Depends(get_db), user: User = Depends(get_current_user)) ->
         is_active=user.is_active,
         farmer_id=farmer_id,
         profile_photo_at=user.profile_photo_at,
+        carbon_monitoring=monitoring,
     )
 
 
@@ -656,6 +660,8 @@ def _farmer(row, viewer: User) -> FarmerRead:
                 public_code=tree.public_code,
                 species_common_name=tree.species.common_name if tree.species else None,
                 planting_date=tree.planting_date,
+                status=tree.status,
+                has_coordinates=tree.latitude is not None and tree.longitude is not None,
             )
             for tree in trees
         ],

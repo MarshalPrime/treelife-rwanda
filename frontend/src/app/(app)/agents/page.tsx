@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AgentExplorer } from "@/components/agents";
 import { Banner } from "@/components/AppShell";
@@ -38,6 +39,7 @@ export default function AgentsPage() {
           <h1>Agents</h1>
           <p className="lede">Field officers who register trees. Rows named SYNTHETIC Agent are numbered examples for the showcase, not field staff. Choose an agent to see that person&apos;s registrations, places, follow-up, and submissions.</p>
         </div>
+        <Link className="primary" href="/agents/carbon">Carbon Monitoring Authorization Requests</Link>
       </div>
       <section className="dashboard-toolbar" aria-label="Agent filters">
         <label htmlFor="agent-district">District

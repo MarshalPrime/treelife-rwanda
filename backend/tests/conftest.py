@@ -14,7 +14,9 @@ from app.main import app
 from app.models.entities import User
 
 TRUNCATE = (
-    "TRUNCATE forests, audit_logs, sales, harvests, maintenance_activities, growth_measurements, "
+    "TRUNCATE carbon_measurement_revisions, carbon_measurements, carbon_documents, "
+    "carbon_authorization_events, carbon_authorizations, forests, audit_logs, sales, harvests, "
+    "maintenance_activities, growth_measurements, "
     "distributions, seedling_lots, advisories, lifecycle_events, individual_trees, "
     "planting_batches, planting_sites, farmers, users, organizations, species_varieties, species "
     "RESTART IDENTITY CASCADE"
