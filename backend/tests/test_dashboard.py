@@ -513,7 +513,9 @@ def test_tree_health_counts_surviving_stressed_and_dead(client, accounts):
     moderate = create_tree(client, headers, site.json()["id"], species["id"], "health-moderate")
     critical = create_tree(client, headers, site.json()["id"], species["id"], "health-critical")
     create_tree(client, headers, site.json()["id"], species["id"], "health-planted")
-    batch = create_batch(client, headers, site.json()["id"], species["id"], "health-batch", quantity=4)
+    batch = create_batch(
+        client, headers, site.json()["id"], species["id"], "health-batch", quantity=4
+    )
     for tree, status in ((healthy, "surviving"), (moderate, "stressed"), (critical, "dead")):
         updated = client.patch(
             f"/api/v1/trees/{tree['id']}",

@@ -93,7 +93,7 @@ export function AgentExplorer({ agents, empty = "No field officer has registered
   const [followLimit, setFollowLimit] = useState(8);
   const [qualityLimit, setQualityLimit] = useState(8);
   const selected = agents.find((agent) => agent.id === selectedId) ?? null;
-  const scope = selected ? [selected] : agents;
+  const scope = useMemo(() => (selected ? [selected] : agents), [selected, agents]);
   const needle = query.trim().toLowerCase();
   const visible = needle ? agents.filter((agent) => agent.name.toLowerCase().includes(needle)) : agents;
   const bars = useMemo(() => activityBars(scope, grain), [scope, grain]);
