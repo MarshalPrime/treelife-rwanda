@@ -56,8 +56,20 @@ export default function MessagesPage() {
   }
 
   useEffect(() => {
-    Promise.all([api<MessageRecipientGroup[]>("/messages/groups"), loadHistory()])
-      .then(([nextGroups]) => setGroups(nextGroups))
+    const params = new URLSearchParams({
+      page: "1",
+      page_size: String(PAGE_SIZE),
+      sort: "created_at",
+      direction: "desc",
+    });
+    Promise.all([
+      api<MessageRecipientGroup[]>("/messages/groups"),
+      api<MessageHistoryPage>(`/messages?${params.toString()}`),
+    ])
+      .then(([nextGroups, nextHistory]) => {
+        setGroups(nextGroups);
+        setHistory(nextHistory);
+      })
       .catch((caught) => setError(caught instanceof Error ? caught.message : "Messages could not be loaded."));
   }, []);
 

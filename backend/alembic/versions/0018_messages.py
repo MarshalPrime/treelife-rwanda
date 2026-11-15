@@ -22,7 +22,9 @@ def upgrade() -> None:
         sa.Column("title", sa.String(length=160), nullable=False),
         sa.Column("body", sa.Text(), nullable=False),
         sa.Column("visit_date", sa.Date(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.CheckConstraint(
             "audience IN ('field_officer', 'farmer', 'individual')",
             name="ck_messages_audience",
@@ -43,7 +45,9 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["message_id"], ["messages.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["recipient_id"], ["users.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("message_id", "recipient_id", name="uq_message_recipients_message_user"),
+        sa.UniqueConstraint(
+            "message_id", "recipient_id", name="uq_message_recipients_message_user"
+        ),
     )
     op.create_index("ix_message_recipients_message_id", "message_recipients", ["message_id"])
     op.create_index("ix_message_recipients_recipient_id", "message_recipients", ["recipient_id"])

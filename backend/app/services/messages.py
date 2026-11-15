@@ -26,15 +26,17 @@ def create_message(db: Session, sender: User, payload: MessageCreate) -> Message
     if payload.audience == MessageAudience.individual:
         target_users = list(
             db.scalars(
-                select(User).where(User.id.in_(payload.recipient_user_ids), User.is_active.is_(True))
+                select(User).where(
+                    User.id.in_(payload.recipient_user_ids), User.is_active.is_(True)
+                )
             ).all()
         )
         if len(target_users) != len(set(payload.recipient_user_ids)):
-            raise DomainError("One or more selected recipients are not active.", field="recipient_user_ids")
-        if any(user.role not in RECIPIENT_ROLES for user in target_users):
             raise DomainError(
-                "Select a field officer or farmer.", field="recipient_user_ids"
+                "One or more selected recipients are not active.", field="recipient_user_ids"
             )
+        if any(user.role not in RECIPIENT_ROLES for user in target_users):
+            raise DomainError("Select a field officer or farmer.", field="recipient_user_ids")
         recipients = target_users
     else:
         target_users = []
@@ -44,7 +46,9 @@ def create_message(db: Session, sender: User, payload: MessageCreate) -> Message
             filters.append(Farmer.district.in_(payload.districts))
         else:
             recipients_query = select(User)
-        recipients = list(db.scalars(recipients_query.where(*filters).order_by(User.full_name, User.id)).all())
+        recipients = list(
+            db.scalars(recipients_query.where(*filters).order_by(User.full_name, User.id)).all()
+        )
         if not recipients:
             raise DomainError("There are no active recipients in this group.", field="audience")
 
@@ -60,7 +64,10 @@ def create_message(db: Session, sender: User, payload: MessageCreate) -> Message
     db.add(message)
     db.flush()
     db.add_all(
-        [MessageRecipient(message_id=message.id, recipient_id=recipient.id) for recipient in recipients]
+        [
+            MessageRecipient(message_id=message.id, recipient_id=recipient.id)
+            for recipient in recipients
+        ]
     )
     write_audit(
         db,
@@ -88,14 +95,22 @@ def list_recipient_options(db: Session, role: str) -> list[User]:
 
 
 def list_recipient_groups(db: Session) -> list[tuple[str, str | None, int]]:
-    officer_count = db.scalar(
-        select(func.count(User.id)).where(
-            User.role == UserRole.field_officer.value, User.is_active.is_(True)
+    officer_count = (
+        db.scalar(
+            select(func.count(User.id)).where(
+                User.role == UserRole.field_officer.value, User.is_active.is_(True)
+            )
         )
-    ) or 0
-    farmer_count = db.scalar(
-        select(func.count(User.id)).where(User.role == UserRole.farmer.value, User.is_active.is_(True))
-    ) or 0
+        or 0
+    )
+    farmer_count = (
+        db.scalar(
+            select(func.count(User.id)).where(
+                User.role == UserRole.farmer.value, User.is_active.is_(True)
+            )
+        )
+        or 0
+    )
     district_rows = db.execute(
         select(Farmer.district, func.count(User.id))
         .join(User, User.id == Farmer.user_id)
@@ -135,7 +150,9 @@ def list_sent_messages(
         filters.append(Message.audience == audience)
     total = db.scalar(select(func.count(Message.id)).where(*filters)) or 0
     recipient_count = func.count(MessageRecipient.id)
-    sort_column = recipient_count if sort == "recipient_count" else getattr(Message, sort, Message.created_at)
+    sort_column = (
+        recipient_count if sort == "recipient_count" else getattr(Message, sort, Message.created_at)
+    )
     ordering = sort_column.asc() if direction == "asc" else sort_column.desc()
     rows = db.execute(
         select(Message, recipient_count)
