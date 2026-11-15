@@ -617,10 +617,10 @@ def get_map(
 ) -> MapResponse:
     # The map is a shared UI, but its records still follow the same scope as
     # the dashboard. Never rely on the browser hiding a farmer or officer's
-    # filters: enforce the scope before building GeoJSON.
+    # filters: enforce the scope before building GeoJSON. An officer may still
+    # narrow that scope to one household.
     if user.role == "field_officer":
         entered_by = user.id
-        farmer_id = None
     elif user.role == "farmer":
         entered_by = None
         farmer_id = db.scalar(select(Farmer.id).where(Farmer.user_id == user.id))
