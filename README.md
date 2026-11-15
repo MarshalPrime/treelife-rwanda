@@ -1,6 +1,6 @@
 # TreeLife Rwanda
 
-TreeLife Rwanda is an Ejo Labs prototype for following urban and fruit trees from the nursery to a sale. It records planting sites, individual trees, planting batches, farmers, seedling lots, distribution, growth, maintenance, harvests, sales, and short advice notes, and it shows located records on a map.
+TreeLife Rwanda is an Ejo Labs Solution for following urban and fruit trees from the nursery to a sale. It records planting sites, individual trees, planting batches, farmers, seedling lots, distribution, growth, maintenance, harvests, sales, and short advice notes, and it shows located records on a map.
 
 The Government of Rwanda already operates the Forestry Management and Evaluation System (FMES) through the Rwanda Forestry Authority. TreeLife is being built to complement that system for urban and fruit-tree lifecycles. It does not replace FMES, and this repository is not connected to it.
 
