@@ -78,7 +78,7 @@ const distributionLabel: Record<string, string> = {
   mixed: "Mixed",
 };
 
-export function MapPopup({ feature }: { feature: MapFeature }) {
+export function MapPopup({ feature, viewer = false }: { feature: MapFeature; viewer?: boolean }) {
   const path = kindPath[feature.properties.kind];
   const forest = feature.properties.kind === "forest";
   const species = forest
@@ -96,7 +96,7 @@ export function MapPopup({ feature }: { feature: MapFeature }) {
         ? <span className="health-badge unknown"><i style={{ background: siteColor }} />Site</span>
         : <HealthBadge status={feature.properties.status} />}
       <strong>{species}</strong>
-      <span>{feature.properties.public_code}</span>
+      <span>{viewer ? "Programme coverage" : feature.properties.public_code}</span>
       {forest ? (
         <span>
           {area != null ? `${area.toLocaleString("en-GB")} ha` : "Area recorded"}
@@ -108,7 +108,7 @@ export function MapPopup({ feature }: { feature: MapFeature }) {
       ) : null}
       {center ? <span>{formatCoordinates(center[0], center[1])}</span> : null}
       <span>{feature.properties.subtitle || "Location recorded"}</span>
-      <Link href={`/${path}/${feature.properties.id}`}>{forest ? "View forest" : "View record"}</Link>
+      {!viewer || forest ? <Link href={`/${path}/${feature.properties.id}`}>{forest ? "View forest" : "View record"}</Link> : <span>View-only coverage</span>}
     </article>
   );
 }

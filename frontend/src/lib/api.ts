@@ -1,7 +1,7 @@
 import { enqueueOutbox } from "@/lib/outbox";
 import type { FieldErrors } from "@/lib/validation";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 const TOKEN_KEY = "treelife.token";
 
 export class ApiError extends Error {

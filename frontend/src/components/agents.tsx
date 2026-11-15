@@ -11,8 +11,7 @@ const dateLabel = (value?: string | null) => {
   const parsed = new Date(`${value}T00:00:00`);
   return Number.isNaN(parsed.getTime()) ? "Date unavailable" : parsed.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 };
-const shortDate = (value: string) => new Date(`${value}T00:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
-const monthLabel = (value: string) => new Date(`${value}T00:00:00`).toLocaleDateString("en-GB", { month: "short", year: "numeric" });
+const numericDate = (value: string) => new Date(`${value}T00:00:00`).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit" }).replaceAll("/", "-");
 
 const issueLabel: Record<AgentIssueKind, string> = {
   condition: "Condition not recorded",
@@ -21,11 +20,6 @@ const issueLabel: Record<AgentIssueKind, string> = {
   incomplete: "Incomplete place",
   duplicate: "Possible duplicate",
 };
-
-function initials(name: string) {
-  const parts = name.split(/\s+/).filter(Boolean);
-  return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase() || "A";
-}
 
 function places(districts: string[]) {
   if (!districts.length) return "No district on the records";
@@ -48,8 +42,7 @@ function bucketKey(day: string, grain: "day" | "week" | "month") {
 }
 
 function bucketLabel(key: string, grain: "day" | "week" | "month") {
-  if (grain === "month") return monthLabel(key);
-  return shortDate(key);
+  return numericDate(key);
 }
 
 function activityBars(agents: AgentBoardRow[], grain: "day" | "week" | "month") {
@@ -96,7 +89,8 @@ export function AgentExplorer({ agents, empty = "No field officer has registered
   const scope = useMemo(() => (selected ? [selected] : agents), [selected, agents]);
   const needle = query.trim().toLowerCase();
   const visible = needle ? agents.filter((agent) => agent.name.toLowerCase().includes(needle)) : agents;
-  const bars = useMemo(() => activityBars(scope, grain), [scope, grain]);
+  const bars = useMemo(() => activityBars(agents, grain), [agents, grain]);
+  const selectedBars = useMemo(() => activityBars(scope, grain), [scope, grain]);
   const areaRows = useMemo(() => combinedPlaces(scope), [scope]);
   const registered = scope.reduce((sum, agent) => sum + agent.trees_registered, 0);
   const checked = scope.reduce((sum, agent) => sum + agent.checked, 0);
@@ -116,6 +110,7 @@ export function AgentExplorer({ agents, empty = "No field officer has registered
     coordinates: scope.reduce((sum, agent) => sum + agent.missing_coordinates, 0),
   };
   const peak = Math.max(...bars.map((bar) => bar.trees), 1);
+  const selectedByDate = new Map(selectedBars.map((bar) => [bar.key, bar.trees]));
 
   if (!agents.length) {
     return <DashboardEmpty title="No agents in this view">{empty}</DashboardEmpty>;
@@ -123,123 +118,99 @@ export function AgentExplorer({ agents, empty = "No field officer has registered
 
   return (
     <>
-      <section className="card agent-board" aria-label="Agent results">
+      <section className="agent-workspace" aria-label="Agent leaderboard">
         <div className="agent-strip">
           <div><span>Agents</span><strong>{number(scope.length)}</strong></div>
-          <div><span>Trees registered</span><strong>{number(registered)}</strong></div>
+          <div><span>Registered</span><strong>{number(registered)}</strong></div>
           <div><span>Checked</span><strong>{number(checked)}</strong></div>
           <div><span>Pending</span><strong>{number(pending)}</strong></div>
         </div>
-        <div className="page-head">
-          <div>
-            <h2>Registration activity</h2>
-            <p className="help">{selected ? `Trees registered by ${selected.name}.` : "Trees registered by every agent."} Daily, weekly, and monthly counts use the registration date. A batch quantity counts as that many trees.</p>
-          </div>
-          <div className="filter-chips" role="group" aria-label="Registration period">
-            {(["day", "week", "month"] as const).map((choice) => (
-              <button key={choice} type="button" aria-pressed={grain === choice} onClick={() => setGrain(choice)}>{choice === "day" ? "Daily" : choice === "week" ? "Weekly" : "Monthly"}</button>
-            ))}
-          </div>
-        </div>
-        {bars.length ? (
-          <ul className="agent-chart" aria-label={`${grain} registrations`}>
-            {bars.map((bar) => (
-              <li className="agent-bar" key={bar.key}>
-                <span className="agent-bar-value">{number(bar.trees)}</span>
-                <span className="agent-bar-fill" style={{ height: `${Math.max(8, Math.round((bar.trees / peak) * 120))}px` }} />
-                <span className="agent-bar-label">{bar.label}</span>
-              </li>
-            ))}
-          </ul>
-        ) : <p className="help">No registration dates in this view.</p>}
-      </section>
+        <div className="agent-workgrid">
+          <section className="card agent-list-panel" aria-label="Agent leaderboard">
+            <div className="section-caption">
+              <h2>Agents</h2>
+              <span className="agent-count">{number(visible.length)} shown</span>
+            </div>
+            <div className="agent-tools">
+              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Find an agent" aria-label="Find an agent" />
+              <button type="button" aria-pressed={selectedId === null} onClick={() => setSelectedId(null)}>All agents</button>
+            </div>
+            {!visible.length ? <DashboardEmpty title="No matching agent">Try another name.</DashboardEmpty> : (
+              <div className="table-wrap agent-list-scroll">
+                <table className="agent-table">
+                  <caption>Trees registered by each agent</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Agent</th>
+                      <th scope="col">Trees</th>
+                      <th scope="col">Checked</th>
+                      <th scope="col">Pending</th>
+                      <th scope="col">GPS</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visible.map((agent) => (
+                      <tr key={agent.id} className={agent.id === selectedId ? "is-selected" : undefined}>
+                        <th scope="row">
+                          <button type="button" className="agent-pick" aria-pressed={agent.id === selectedId} onClick={() => setSelectedId(agent.id)}>
+                            <span className="agent-copy"><span>{agent.name}</span><small>{places(agent.districts)} · {dateLabel(agent.last_registered_on)}</small></span>
+                          </button>
+                        </th>
+                        <td>{number(agent.trees_registered)}</td>
+                        <td>{number(agent.checked)}</td>
+                        <td>{number(agent.pending)}</td>
+                        <td><span className={agent.coordinate_percent >= 90 ? "agent-quality high" : agent.coordinate_percent >= 70 ? "agent-quality mid" : "agent-quality low"}>{agent.coordinate_percent}%</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
 
-      <section className="card agent-board" aria-label="Agent leaderboard">
-        <div className="page-head">
-          <div>
-            <h2>Agent leaderboard</h2>
-            <p className="help">Number of trees registered by each agent. Choose a row to explore that agent. Checked means a condition was recorded. Pending means the record is still planted or not assessed.</p>
-          </div>
-        </div>
-        <div className="agent-tools">
-          <button type="button" aria-pressed={selectedId === null} onClick={() => setSelectedId(null)}>All agents</button>
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Find an agent" aria-label="Find an agent" />
-        </div>
-        {!visible.length ? <DashboardEmpty title="No matching agent">Try another name.</DashboardEmpty> : (
-          <div className="table-wrap">
-            <table className="agent-table">
-              <caption>Trees registered by each agent</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Agent</th>
-                  <th scope="col">Registered</th>
-                  <th scope="col">Checked</th>
-                  <th scope="col">Pending</th>
-                  <th scope="col">Coordinates</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visible.map((agent) => (
-                  <tr key={agent.id} className={agent.id === selectedId ? "is-selected" : undefined}>
-                    <th scope="row">
-                      <button type="button" className="agent-pick" aria-pressed={agent.id === selectedId} onClick={() => setSelectedId(agent.id)}>
-                        <span className="agent-mark" aria-hidden="true">{initials(agent.name)}</span>
-                        <span>
-                          {agent.name}
-                          <small>{places(agent.districts)} · Last record {dateLabel(agent.last_registered_on)}</small>
-                        </span>
-                      </button>
-                    </th>
-                    <td>{number(agent.trees_registered)}</td>
-                    <td>{number(agent.checked)}</td>
-                    <td>{number(agent.pending)}</td>
-                    <td><span className={agent.coordinate_percent >= 90 ? "agent-quality high" : agent.coordinate_percent >= 70 ? "agent-quality mid" : "agent-quality low"}>{agent.coordinate_percent}%</span></td>
-                  </tr>
+          <section className="card agent-focus-panel" aria-label="Registration activity">
+            <div className="agent-focus-head">
+              <div className="agent-focus-person">
+                <div><span className="agent-panel-kicker">Activity</span><h2>{selected?.name ?? "All agents"}</h2><p className="help">{selected ? `Last record ${dateLabel(selected.last_registered_on)}` : "Combined registration activity"}</p></div>
+              </div>
+              <div className="filter-chips" role="group" aria-label="Registration period">
+                {(["day", "week", "month"] as const).map((choice) => (
+                  <button key={choice} type="button" aria-pressed={grain === choice} onClick={() => setGrain(choice)}>{choice === "day" ? "Daily" : choice === "week" ? "Weekly" : "Monthly"}</button>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+              </div>
+            </div>
+            {bars.length ? <>
+              <ul className="agent-chart" aria-label={`${grain} registrations`}>
+              {bars.map((bar) => {
+                const selectedTrees = selectedByDate.get(bar.key) ?? 0;
+                return <li className={`agent-bar${selected ? " has-selection" : ""}`} key={bar.key}>
+                  <span className="agent-bar-label">{bar.label}</span>
+                  <span className="agent-bar-track"><span className="agent-bar-fill" style={{ width: `${Math.round((bar.trees / peak) * 100)}%` }} />{selected ? <span className="agent-bar-selected" style={{ width: `${Math.round((selectedTrees / peak) * 100)}%` }} /> : null}</span>
+                  <span className="agent-bar-value">{number(selected ? selectedTrees : bar.trees)}</span>
+                </li>;
+              })}
+              </ul>
+              <div className="agent-chart-scale" aria-hidden="true"><span>0</span><span>{number(peak)}</span></div>
+            </> : <p className="help">No registration dates in this view.</p>}
+            <div className="agent-focus-stats">
+              <div><span>Registered</span><strong>{number(registered)}</strong></div>
+              <div><span>Submissions</span><strong>{number(submissions)}</strong></div>
+              <div><span>Last submission</span><strong>{dateLabel(latestSubmission)}</strong></div>
+            </div>
+            <div className="agent-focus-details">
+              <div><h3>Places</h3>{!areaRows.length ? <p className="help">No places recorded.</p> : <ul>{areaRows.slice(0, 5).map((place) => <li className="agent-place" key={`${place.district}-${place.sector ?? ""}-${place.village ?? ""}`}><span>{placeLine(place)}</span><strong>{number(place.trees)}</strong></li>)}</ul>}</div>
+              <div><h3>Recent submissions</h3><ul>{[...scope].sort((left, right) => right.last_submission_on.localeCompare(left.last_submission_on)).slice(0, 5).map((agent) => <li className="agent-issue" key={agent.id}><span>{agent.name}<small>{dateLabel(agent.last_submission_on)}</small></span><strong>{number(agent.submissions)}</strong></li>)}</ul></div>
+            </div>
+          </section>
+        </div>
       </section>
 
-      <div className="agent-explore">
-        <section className="card" aria-label="Assigned areas">
-          <h2>Assigned areas</h2>
-          <p className="help">Districts, sectors, and villages written on the trees {selected ? selected.name : "these agents"} registered. TreeLife does not keep a separate assignment list.</p>
-          {!areaRows.length ? <p className="help">No district is written on these records.</p> : (
-            <ul>
-              {areaRows.map((place) => (
-                <li className="agent-place" key={`${place.district}-${place.sector ?? ""}-${place.village ?? ""}`}>
-                  <span>{placeLine(place)}</span>
-                  <strong>{number(place.trees)}</strong>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-        <section className="card" aria-label="Field activity">
-          <h2>Field activity</h2>
-          <p className="help">A submission is a tree or batch registration, a field visit, a growth measurement, or a maintenance record.</p>
-          <div className="agent-strip">
-            <div><span>Records submitted</span><strong>{number(submissions)}</strong></div>
-            <div><span>Last submission</span><strong>{dateLabel(latestSubmission)}</strong></div>
-          </div>
-          <ul>
-            {[...scope].sort((left, right) => right.last_submission_on.localeCompare(left.last_submission_on)).slice(0, 8).map((agent) => (
-              <li className="agent-issue" key={agent.id}>
-                <span>{agent.name}<small>Last submission {dateLabel(agent.last_submission_on)}</small></span>
-                <strong>{number(agent.submissions)}</strong>
-              </li>
-            ))}
-          </ul>
-        </section>
-      </div>
-
+      <div className="agent-lower-grid">
       <section className="card agent-stack" aria-label="Pending tasks">
         <div className="page-head">
           <div>
             <h2>Pending tasks</h2>
-            <p className="help">Trees awaiting a recorded condition, a visit because the tree is stressed, or a map point. There is no separate verification step.</p>
+            <p className="help">Records that need follow-up.</p>
           </div>
           <div className="filter-chips" role="group" aria-label="Follow-up filter">
             {([["all", "All follow-up"], ["condition", "Condition not recorded"], ["visit", "Needs a visit"], ["coordinates", "Missing coordinates"]] as const).map(([choice, label]) => (
@@ -264,7 +235,7 @@ export function AgentExplorer({ agents, empty = "No field officer has registered
 
       <section className="card agent-stack" aria-label="Data quality">
         <h2>Data quality</h2>
-        <p className="help">Incomplete means a district, sector, or village is missing. A possible duplicate shares a species and a map point, or the same site, species, and planting date when the map point is missing.</p>
+        <p className="help">Records needing a data check.</p>
         <div className="agent-quality-grid">
           <button type="button" aria-pressed={quality === "incomplete"} onClick={() => { setQuality("incomplete"); setQualityLimit(8); }}><span>Incomplete records</span><strong>{number(qualityTotals.incomplete)}</strong></button>
           <button type="button" aria-pressed={quality === "duplicate"} onClick={() => { setQuality("duplicate"); setQualityLimit(8); }}><span>Possible duplicates</span><strong>{number(qualityTotals.duplicate)}</strong></button>
@@ -282,6 +253,7 @@ export function AgentExplorer({ agents, empty = "No field officer has registered
         )}
         {qualityIssues.length > qualityLimit ? <button type="button" className="inline-link" onClick={() => setQualityLimit((value) => value + 12)}>Show more</button> : null}
       </section>
+      </div>
     </>
   );
 }

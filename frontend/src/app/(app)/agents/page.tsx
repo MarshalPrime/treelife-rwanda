@@ -37,7 +37,6 @@ export default function AgentsPage() {
       <div className="page-head">
         <div>
           <h1>Agents</h1>
-          <p className="lede">Field officers who register trees. Rows named SYNTHETIC Agent are numbered examples for the showcase, not field staff. Choose an agent to see that person&apos;s registrations, places, follow-up, and submissions.</p>
         </div>
         <Link className="primary" href="/agents/carbon">Carbon Monitoring Authorization Requests</Link>
       </div>

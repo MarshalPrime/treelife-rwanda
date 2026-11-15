@@ -613,9 +613,21 @@ def get_map(
     farmer_id: uuid.UUID | None = None,
     entered_by: uuid.UUID | None = None,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ) -> MapResponse:
-    return build_map(
+    # The map is a shared UI, but its records still follow the same scope as
+    # the dashboard. Never rely on the browser hiding a farmer or officer's
+    # filters: enforce the scope before building GeoJSON.
+    if user.role == "field_officer":
+        entered_by = user.id
+        farmer_id = None
+    elif user.role == "farmer":
+        entered_by = None
+        farmer_id = db.scalar(select(Farmer.id).where(Farmer.user_id == user.id))
+        if farmer_id is None:
+            return MapResponse(features=[], unlocated=[], truncated=False)
+
+    result = build_map(
         db,
         kind=kind,
         species_id=species_id,
@@ -626,6 +638,19 @@ def get_map(
         farmer_id=farmer_id,
         entered_by=entered_by,
     )
+    if user.role == "viewer":
+        # Public map labels should not disclose household names or exact
+        # record codes. The geometry is still useful for programme coverage.
+        for feature in result.features:
+            if feature.properties.kind == "forest":
+                continue
+            feature.properties.title = feature.properties.species_common_name or "Planting site"
+            feature.properties.subtitle = district or "Rwanda"
+            feature.properties.public_code = "Programme record"
+        for record in result.unlocated:
+            record.title = "Record without coordinates"
+            record.public_code = "Programme record"
+    return result
 
 
 def _farmer(row, viewer: User) -> FarmerRead:

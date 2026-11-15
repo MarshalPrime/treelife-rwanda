@@ -39,10 +39,10 @@ describe("agent list", () => {
     const user = userEvent.setup();
     render(<AgentExplorer agents={[officer]} />);
     await user.click(screen.getByRole("button", { name: "Daily" }));
-    expect(screen.getByText("1 Mar")).toBeInTheDocument();
+    expect(screen.getByText("01-03")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /Possible duplicates/ }));
     expect(screen.getByText(/TREE-2/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /Test Officer/ }));
-    expect(screen.getByText(/Trees registered by Test Officer/)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Test Officer" })).toBeInTheDocument();
   });
 });

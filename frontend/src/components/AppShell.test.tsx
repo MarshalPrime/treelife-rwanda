@@ -21,13 +21,18 @@ afterEach(cleanup);
 
 describe("workspace navigation", () => {
   it("keeps viewer and administrator route permissions", () => {
-    expect(linksForRole("viewer").map(([path]) => path)).toEqual(["/dashboard", "/map", "/trees", "/forests"]);
+    expect(linksForRole("viewer").map(([path]) => path)).toEqual(["/dashboard", "/monitoring", "/map", "/trees", "/forests"]);
     expect(pathAllowed("viewer", "/trees/new")).toBe(false);
     expect(pathAllowed("viewer", "/advice")).toBe(true);
     expect(pathAllowed("admin", "/advice")).toBe(true);
     expect(pathAllowed("admin", "/sites/new")).toBe(false);
     expect(pathAllowed("field_officer", "/sites/new")).toBe(true);
     expect(linksForRole("admin").map(([path]) => path)).toContain("/agents");
+    expect(linksForRole("admin").map(([path]) => path)).toContain("/fmes-preparation");
+    expect(linksForRole("field_officer").map(([path]) => path)).not.toContain("/fmes-preparation");
+    expect(pathAllowed("admin", "/fmes-preparation")).toBe(true);
+    expect(pathAllowed("field_officer", "/fmes-preparation")).toBe(false);
+    expect(pathAllowed("viewer", "/fmes-preparation")).toBe(false);
     expect(pathAllowed("admin", "/agents")).toBe(true);
     expect(pathAllowed("field_officer", "/agents")).toBe(false);
     const officerPaths = linksForRole("field_officer").map(([path]) => path);

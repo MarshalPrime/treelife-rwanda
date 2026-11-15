@@ -43,10 +43,11 @@ export function MapLayerToggle({
       className="map-layers"
       type="button"
       aria-pressed={satellite}
+      aria-label={satellite ? "Show street map" : "Show reference imagery basemap"}
       onClick={onToggle}
     >
       <span className={satellite ? "map-layers-preview streets" : "map-layers-preview satellite"} />
-      {satellite ? "Map" : "Satellite"}
+      {satellite ? "Street map" : "Reference imagery"}
     </button>
   );
 }

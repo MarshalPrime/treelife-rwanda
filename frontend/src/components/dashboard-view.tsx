@@ -273,22 +273,43 @@ export function DashboardView({ mode = "dashboard" }: { mode?: "dashboard" | "re
       </div>
     </div>
 
-    <section className="dashboard-toolbar" aria-label="Dashboard filters">
-      <label htmlFor="dashboard-range">Period<select id="dashboard-range" value={filters.range} onChange={(event) => changeFilters({ range: event.target.value as DashboardRange })}>{ranges.map((range) => <option value={range.value} key={range.value}>{range.label}</option>)}</select></label>
-      <label htmlFor="dashboard-district">District<select id="dashboard-district" value={filters.district} disabled={!options} onChange={(event) => changeFilters({ district: event.target.value })}><option value="">All districts</option>{options?.districts.map((district) => <option key={district} value={district}>{district}</option>)}</select></label>
-      <label htmlFor="dashboard-species">Species<select id="dashboard-species" value={filters.species_id} disabled={!options} onChange={(event) => changeFilters({ species_id: event.target.value })}><option value="">All species</option>{options?.species.map((species) => <option key={species.id} value={species.id}>{species.common_name}</option>)}</select></label>
-      <button className="ghost" type="button" onClick={reset}>Reset filters</button>
-      <button className="ghost" type="button" onClick={() => { setRefresh((value) => value + 1); setMapRefresh((value) => value + 1); }} disabled={loading}>Refresh dashboard</button>
-      <p className="help">District and species apply to all panels. The period applies to trends, harvest, and sales.{user?.role === "admin" && mode === "dashboard" ? " The figures, charts, and map update on their own while the connection is up." : ""}</p>
-    </section>
-    <div className="filter-chips" aria-label="Active filters">
-      {filters.district ? <button type="button" aria-label="Clear district filter" onClick={() => changeFilters({ district: "" })}>{filters.district} <span aria-hidden="true">×</span></button> : null}
-      {filters.species_id ? <button type="button" aria-label="Clear species filter" onClick={() => changeFilters({ species_id: "" })}>{speciesLabel} <span aria-hidden="true">×</span></button> : null}
-    </div>
-
-    {error ? <Banner tone="error">{error} <button className="inline-link" type="button" onClick={() => setRefresh((value) => value + 1)}>Retry dashboard</button></Banner> : null}
-    {(!response && !error) || (loading && !response) ? <DashboardSkeleton /> : null}
-    {response && !error ? <div className="dashboard-body" aria-busy={loading}>
+    <div className="dashboard-layout">
+      <aside className="dashboard-controls" aria-label="Dashboard filters">
+        <div className="dashboard-controls-head">
+          <span className="dashboard-panel-kicker">View controls</span>
+          <strong>Shape your view</strong>
+          <p>Use the filters to narrow every number, chart, and location below.</p>
+        </div>
+        <section className="dashboard-toolbar">
+          <label htmlFor="dashboard-range">Period<select id="dashboard-range" value={filters.range} onChange={(event) => changeFilters({ range: event.target.value as DashboardRange })}>{ranges.map((range) => <option value={range.value} key={range.value}>{range.label}</option>)}</select></label>
+          <label htmlFor="dashboard-district">District<select id="dashboard-district" value={filters.district} disabled={!options} onChange={(event) => changeFilters({ district: event.target.value })}><option value="">All districts</option>{options?.districts.map((district) => <option key={district} value={district}>{district}</option>)}</select></label>
+          <label htmlFor="dashboard-species">Species<select id="dashboard-species" value={filters.species_id} disabled={!options} onChange={(event) => changeFilters({ species_id: event.target.value })}><option value="">All species</option>{options?.species.map((species) => <option key={species.id} value={species.id}>{species.common_name}</option>)}</select></label>
+          <div className="dashboard-filter-actions">
+            <button className="ghost" type="button" onClick={reset}>Reset filters</button>
+            <button className="primary" type="button" onClick={() => { setRefresh((value) => value + 1); setMapRefresh((value) => value + 1); }} disabled={loading}>Refresh</button>
+          </div>
+          <p className="help">District and species apply everywhere. The period controls trends, harvest, and sales.{user?.role === "admin" && mode === "dashboard" ? " Figures refresh while connected." : ""}</p>
+        </section>
+        <div className="dashboard-control-divider" />
+        <div className="dashboard-filter-summary">
+          <span className="dashboard-panel-kicker">Active view</span>
+          <strong>{filters.district || "All districts"}</strong>
+          <p>{filters.species_id ? speciesLabel : "All species"} · {ranges.find((range) => range.value === filters.range)?.label}</p>
+          <div className="filter-chips" aria-label="Active filters">
+            {filters.district ? <button type="button" aria-label="Clear district filter" onClick={() => changeFilters({ district: "" })}>{filters.district} <span aria-hidden="true">×</span></button> : null}
+            {filters.species_id ? <button type="button" aria-label="Clear species filter" onClick={() => changeFilters({ species_id: "" })}>{speciesLabel} <span aria-hidden="true">×</span></button> : null}
+            {!filters.district && !filters.species_id ? <span className="filter-chip-empty">No extra filters</span> : null}
+          </div>
+        </div>
+        <div className="dashboard-control-note">
+          <span aria-hidden="true">✦</span>
+          <p><strong>TreeLife field note</strong>Fresh records flow into this view as teams work across Rwanda.</p>
+        </div>
+      </aside>
+      <div className="dashboard-main">
+        {error ? <Banner tone="error">{error} <button className="inline-link" type="button" onClick={() => setRefresh((value) => value + 1)}>Retry dashboard</button></Banner> : null}
+        {(!response && !error) || (loading && !response) ? <DashboardSkeleton /> : null}
+        {response && !error ? <div className="dashboard-body" aria-busy={loading}>
       {response.includes_demonstration ? <Banner tone="warning">Demonstration data is included in this view.</Banner> : null}
       {role === "farmer" && !response.linked ? <Banner tone="warning">Your login is not linked to a farmer record yet. Ask your field officer to link your household.</Banner> : null}
       <section aria-label="Key figures" className="dashboard-figures">
@@ -377,11 +398,13 @@ export function DashboardView({ mode = "dashboard" }: { mode?: "dashboard" | "re
         <div className="page-head"><h2>Recorded locations</h2><span className="help">{map ? `${number(located.length)} locations shown` : "Locations in this view"}</span></div>
         <p className="help">Shaded areas are forest stands. A pin marks each center. Open the pin to see the coordinates. Dots are trees, batches, and sites.</p>
         <HealthLegend selected={health} onSelect={setHealth} site />
-        {activeMapError ? <Banner tone="error">{activeMapError} <button className="inline-link" type="button" onClick={() => invalidMapPath ? setRefresh((value) => value + 1) : setMapRefresh((value) => value + 1)}>{invalidMapPath ? "Retry dashboard" : "Retry map"}</button></Banner> : mapLoading || !map ? <p className="loading" role="status">Loading locations…</p> : !located.length ? <DashboardEmpty title="No markers for this health">Choose another health colour, or clear the filter.</DashboardEmpty> : <div className="map-frame report-map"><MapView features={located} selectedId={selectedId} onSelect={setSelectedId} focusOnSelect={false} colorOf={markerColor} popupFor={(feature) => <MapPopup feature={feature} />} /></div>}
+        {activeMapError ? <Banner tone="error">{activeMapError} <button className="inline-link" type="button" onClick={() => invalidMapPath ? setRefresh((value) => value + 1) : setMapRefresh((value) => value + 1)}>{invalidMapPath ? "Retry dashboard" : "Retry map"}</button></Banner> : mapLoading || !map ? <p className="loading" role="status">Loading locations…</p> : !located.length ? <DashboardEmpty title="No markers for this health">Choose another health colour, or clear the filter.</DashboardEmpty> : <div className="map-frame report-map"><MapView features={located} selectedId={selectedId} onSelect={setSelectedId} focusOnSelect={false} colorOf={markerColor} popupFor={(feature) => <MapPopup feature={feature} viewer={viewer} />} /></div>}
         {map?.truncated ? <p className="help">Map results are limited. Dashboard totals include all matching records.</p> : null}
       </section>
       <details className="card metric-explanation"><summary>How these figures are counted</summary><p>Recorded trees includes individual trees and planting batch quantities. Survival uses checked individual trees and the latest survival count for each assessed batch; stressed trees count as alive. Unassessed trees are excluded from the survival percentage. Tree health counts surviving trees as healthy, stressed trees as moderate, and dead trees as critical. Planted trees and trees without a condition stay outside that split, and a batch quantity counts as that many trees. Forest stands keep their own estimated tree counts and those estimates are not added to these totals. Field activity records includes lifecycle events, growth measurements, and maintenance. Harvest is measured in kilograms; sales are recorded amounts in RWF.</p></details>
       <p className="help dashboard-updated">Updated {new Date(response.generated_at).toLocaleString("en-GB")} · Recorded data in TreeLife</p>
-    </div> : null}
+        </div> : null}
+      </div>
+    </div>
   </div>;
 }

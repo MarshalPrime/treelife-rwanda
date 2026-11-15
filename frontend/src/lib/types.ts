@@ -28,6 +28,53 @@ export type AgentBoardResponse = {
 
 export type Role = "admin" | "field_officer" | "farmer" | "viewer";
 
+export type MessageAudience = "field_officer" | "farmer" | "individual";
+export type MessageChannel = "in_app" | "sms";
+
+export type MessageRecipientOption = {
+  id: string;
+  full_name: string;
+  role: Role;
+};
+
+export type MessageRecipientGroup = {
+  key: string;
+  role: "field_officer" | "farmer";
+  district: string | null;
+  label: string;
+  recipient_count: number;
+};
+
+export type MessageSent = {
+  id: string;
+  channel: MessageChannel;
+  audience: MessageAudience;
+  districts: string[];
+  recipient_user_id: string | null;
+  recipient_name: string | null;
+  title: string;
+  body: string;
+  recipient_count: number;
+  created_at: string;
+};
+
+export type MessageHistoryPage = Page<MessageSent>;
+
+export type NotificationItem = {
+  id: string;
+  message_id: string;
+  title: string;
+  body: string;
+  sender_name: string;
+  created_at: string;
+  read_at: string | null;
+};
+
+export type NotificationList = {
+  items: NotificationItem[];
+  unread_count: number;
+};
+
 export type User = {
   id: string;
   email: string;

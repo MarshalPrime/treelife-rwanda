@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Banner } from "@/components/AppShell";
+import { AccountSourceChoice, AmisPreview, type AccountSource } from "@/components/account-source-choice";
 import { ApiError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import type { Role } from "@/lib/types";
@@ -38,6 +39,7 @@ function passwordChecks(password: string, confirm: string) {
 export default function RegisterPage() {
   const { user, loading, login } = useAuth();
   const router = useRouter();
+  const [source, setSource] = useState<AccountSource>("treelife");
   const [role, setRole] = useState<Role>("farmer");
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -82,7 +84,7 @@ export default function RegisterPage() {
 
   return (
     <main className="login-wrap">
-      <form className="card login-card wide" onSubmit={handleSubmit}>
+      <form className="card login-card register-card" onSubmit={handleSubmit}>
         <div className="auth-head">
           <Link className="auth-mark" href="/" aria-label="TreeLife home">TL</Link>
           <div>
@@ -90,60 +92,71 @@ export default function RegisterPage() {
             <h1>Create an account</h1>
           </div>
         </div>
-        <p>Choose the account that matches your responsibility. TreeLife follows a tree from the nursery through planting, care, harvest, and sale.</p>
-        {error ? <Banner tone="error">{error}</Banner> : null}
-        <fieldset className="role-choice">
-          <legend>Which account are you?</legend>
-          {roles.map((choice) => (
-            <label key={choice.value} className={role === choice.value ? "role-option selected" : "role-option"}>
-              <input
-                type="radio"
-                name="role"
-                value={choice.value}
-                checked={role === choice.value}
-                onChange={() => setRole(choice.value)}
-              />
-              <span className="role-copy">
-                <strong>{choice.title}</strong>
-                <span className="help">{choice.detail}</span>
-              </span>
-            </label>
-          ))}
-        </fieldset>
-        <label htmlFor="full_name">Full name
-          <input id="full_name" autoComplete="name" value={fullName} onChange={(event) => setFullName(event.target.value)} required />
-        </label>
-        <label htmlFor="email">Email
-          <input id="email" type="email" autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} required />
-        </label>
-        <div className="row">
-          <label htmlFor="password">Password
-            <input id="password" type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} required />
-          </label>
-          <label htmlFor="confirm_password">Confirm password
-            <input
-              id="confirm_password"
-              type="password"
-              autoComplete="new-password"
-              value={confirm}
-              onChange={(event) => setConfirm(event.target.value)}
-              aria-invalid={confirm.length > 0 && password !== confirm}
-              required
-            />
-          </label>
+        <div className="auth-choice-intro">
+          <p className="lede">Set up secure access</p>
+          <h2>Create an account</h2>
+          <p>Choose your account source, then tell TreeLife what you will manage.</p>
         </div>
-        <ul className="password-rules" aria-live="polite">
-          {checks.map((check) => (
-            <li key={check.text} className={check.ok ? "met" : undefined}>{check.ok ? "Met" : "Needed"}: {check.text}</li>
-          ))}
-        </ul>
-        {role === "farmer" ? null : (
-          <label htmlFor="organization_name">Organisation
-            <input id="organization_name" value={organizationName} onChange={(event) => setOrganizationName(event.target.value)} />
-          </label>
+        <AccountSourceChoice source={source} onChange={setSource} />
+        {source === "amis" ? (
+          <AmisPreview returnLabel="Create a TreeLife account instead" onReturn={() => setSource("treelife")} />
+        ) : (
+          <>
+            {error ? <Banner tone="error">{error}</Banner> : null}
+            <fieldset className="role-choice">
+              <legend>Which account are you?</legend>
+              {roles.map((choice) => (
+                <label key={choice.value} className={role === choice.value ? "role-option selected" : "role-option"}>
+                  <input
+                    type="radio"
+                    name="role"
+                    value={choice.value}
+                    checked={role === choice.value}
+                    onChange={() => setRole(choice.value)}
+                  />
+                  <span className="role-copy">
+                    <strong>{choice.title}</strong>
+                    <span className="help">{choice.detail}</span>
+                  </span>
+                </label>
+              ))}
+            </fieldset>
+            <div className="register-fields">
+              <label htmlFor="full_name">Full name
+                <input id="full_name" autoComplete="name" value={fullName} onChange={(event) => setFullName(event.target.value)} required />
+              </label>
+              <label htmlFor="email">Email
+                <input id="email" type="email" autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} required />
+              </label>
+              <label htmlFor="password">Password
+                <input id="password" type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} required />
+              </label>
+              <label htmlFor="confirm_password">Confirm password
+                <input
+                  id="confirm_password"
+                  type="password"
+                  autoComplete="new-password"
+                  value={confirm}
+                  onChange={(event) => setConfirm(event.target.value)}
+                  aria-invalid={confirm.length > 0 && password !== confirm}
+                  required
+                />
+              </label>
+              {role === "farmer" ? null : (
+                <label className="register-field-full" htmlFor="organization_name">Organisation
+                  <input id="organization_name" value={organizationName} onChange={(event) => setOrganizationName(event.target.value)} />
+                </label>
+              )}
+            </div>
+            <ul className="password-rules" aria-live="polite">
+              {checks.map((check) => (
+                <li key={check.text} className={check.ok ? "met" : undefined}>{check.ok ? "Met" : "Needed"}: {check.text}</li>
+              ))}
+            </ul>
+            <button className="primary" type="submit" disabled={saving || !passwordReady}>{saving ? "Creating account…" : "Create account"}</button>
+            <p className="help">Already have an account? <Link href="/login">Sign in</Link></p>
+          </>
         )}
-        <button className="primary" type="submit" disabled={saving || !passwordReady}>{saving ? "Creating account…" : "Create account"}</button>
-        <p className="help">Already have an account? <Link href="/login">Sign in</Link></p>
       </form>
     </main>
   );

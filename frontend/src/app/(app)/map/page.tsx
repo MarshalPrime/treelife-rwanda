@@ -108,7 +108,7 @@ export default function MapPage() {
       <HealthLegend selected={health} onSelect={setHealth} site />
       <div className="map-layout">
         <div className="map-frame" aria-label="Registration map">
-          {data ? <MapView features={features} selectedId={selectedId} onSelect={setSelectedId} colorOf={markerColor} popupFor={(feature) => <MapPopup feature={feature} />} /> : <p className="loading">Loading map…</p>}
+          {data ? <MapView features={features} selectedId={selectedId} onSelect={setSelectedId} colorOf={markerColor} popupFor={(feature) => <MapPopup feature={feature} viewer={viewer} />} /> : <p className="loading">Loading map…</p>}
         </div>
         <aside className="card">
           {nothingLocated ? (

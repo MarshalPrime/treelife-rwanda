@@ -179,6 +179,58 @@ class User(Base):
     organization: Mapped[Organization | None] = relationship(back_populates="members")
 
 
+class Message(Base):
+    __tablename__ = "messages"
+    __table_args__ = (
+        CheckConstraint(
+            "audience IN ('field_officer', 'farmer', 'individual')",
+            name="ck_messages_audience",
+        ),
+        CheckConstraint("channel IN ('in_app', 'sms')", name="ck_messages_channel"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    sender_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    channel: Mapped[str] = mapped_column(String(16), nullable=False, default="in_app")
+    audience: Mapped[str] = mapped_column(String(32), nullable=False)
+    target_districts: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
+    target_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    title: Mapped[str] = mapped_column(String(160), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow, server_default=func.now()
+    )
+
+    sender: Mapped[User] = relationship(foreign_keys=[sender_id])
+    target_user: Mapped[User | None] = relationship(foreign_keys=[target_user_id])
+    recipients: Mapped[list[MessageRecipient]] = relationship(
+        back_populates="message", cascade="all, delete-orphan"
+    )
+
+
+class MessageRecipient(Base):
+    __tablename__ = "message_recipients"
+    __table_args__ = (
+        UniqueConstraint("message_id", "recipient_id", name="uq_message_recipients_message_user"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    message_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("messages.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    recipient_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    message: Mapped[Message] = relationship(back_populates="recipients")
+    recipient: Mapped[User] = relationship(foreign_keys=[recipient_id])
+
+
 class Species(Base):
     __tablename__ = "species"
     __table_args__ = (

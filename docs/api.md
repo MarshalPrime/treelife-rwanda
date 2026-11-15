@@ -23,6 +23,20 @@ Other routes require `Authorization: Bearer <token>`.
 - Invalid body: `422` with `detail` and `errors`
 - Conflicting scientific name or organization name: `409`
 
+## Messaging
+
+Administrators can send immediate in-app messages to all active field officers, all active farmers, farmers in selected districts, or selected people. SMS is reserved for a later integration and is currently rejected by the API.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/messages/groups` | Admin recipient groups and active recipient counts |
+| GET | `/messages/recipients?role=field_officer\|farmer` | Admin individual recipient options |
+| GET | `/messages?page=1&page_size=20&q=...` | Admin searchable sent-message history |
+| POST | `/messages` | Admin sends an in-app message |
+| GET | `/notifications` | Signed-in user reads their notifications and unread count |
+| POST | `/notifications/{message_id}/read` | Mark one notification read |
+| POST | `/notifications/read-all` | Mark all notifications read |
+
 A repeated `client_request_id` returns the original record with `200` and `X-Idempotent-Replay: true`. The first successful create returns `201`.
 
 ## Registration
