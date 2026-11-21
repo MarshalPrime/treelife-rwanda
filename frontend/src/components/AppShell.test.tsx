@@ -52,7 +52,7 @@ describe("workspace navigation", () => {
 
   it("groups links and provides an accessible main landmark", () => {
     render(<AppShell><h1>Planting overview</h1></AppShell>);
-    expect(screen.getByRole("button", { name: /Leaf AI/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Advisory AI/ })).toBeInTheDocument();
     expect(screen.getByRole("main")).toHaveAttribute("id", "main");
     expect(screen.getByText("Planting & people")).toBeInTheDocument();
     expect(screen.getByText("Care & production")).toBeInTheDocument();

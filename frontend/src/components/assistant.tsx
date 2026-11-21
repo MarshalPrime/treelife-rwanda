@@ -57,10 +57,10 @@ export function AssistantWidget() {
   return (
     <div className="assistant-slot" ref={root}>
       {open ? (
-        <section className="assistant-panel" id={panelId} aria-label="Leaf AI">
+        <section className="assistant-panel" id={panelId} aria-label="Advisory AI">
           <header className="assistant-panel-head">
             <LeafMark />
-            <strong>Advesory AI</strong>
+            <strong>Advisory AI</strong>
             <button className="assistant-close" type="button" aria-label="Close" onClick={() => setOpen(false)}>
               <span aria-hidden="true">×</span>
             </button>
@@ -71,7 +71,7 @@ export function AssistantWidget() {
         <button className="assistant-launcher" type="button" aria-expanded={false} aria-controls={panelId} onClick={() => setOpen(true)}>
           <span className="assistant-face" aria-hidden="true"><LeafMark /></span>
           <span className="assistant-label">
-            <strong>Advesory AI</strong>
+            <strong>Advisory AI</strong>
             <small>How can I help?</small>
           </span>
         </button>
@@ -84,7 +84,7 @@ export function AssistantPage() {
   const { user } = useAuth();
   return (
     <div className="page">
-      <h1>Advesory AI</h1>
+      <h1>Advisory AI</h1>
       <p className="lede">Ask about the trees and records this account can already see, from planting through harvest and selling.</p>
       <div className="card assistant-card">
         <AssistantChat role={user?.role} />
@@ -99,7 +99,7 @@ function BotMessage({ at, children }: { at: string; children: ReactNode }) {
       <span className="assistant-face" aria-hidden="true"><LeafMark /></span>
       <div className="assistant-stack">
         <p className="assistant-meta">
-          <strong>Advesory AI</strong>
+          <strong>Advisory AI</strong>
           <span className="assistant-chip">AI</span>
           <time>{at}</time>
         </p>
