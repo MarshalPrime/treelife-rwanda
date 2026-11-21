@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Banner } from "@/components/AppShell";
 import { CarbonOverview } from "@/components/carbon-dashboard";
 import { BreakdownChart, SeriesChart, harvestLines, plantingLines, salesLines } from "@/components/dashboard-charts";
@@ -176,7 +176,15 @@ const STREAM_STATE_LABELS: Record<LiveStreamState, string> = {
   offline: "Offline",
 };
 
-function LiveTreeTotal({ value, streamState }: { value: number; streamState: LiveStreamState }) {
+function LiveTreeTotal({
+  value,
+  streamState,
+  summary,
+}: {
+  value: number;
+  streamState: LiveStreamState;
+  summary: DashboardResponse["summary"];
+}) {
   const previous = useRef<number | null>(null);
   const [delta, setDelta] = useState<number | null>(null);
   const [now, setNow] = useState(() => new Date());
@@ -225,40 +233,48 @@ function LiveTreeTotal({ value, streamState }: { value: number; streamState: Liv
   }, [projecting]);
 
   const liveMarkText = `Live · updated ${programmeClock(now)}`;
+  const checked = summary.checked_trees;
+  const notSurviving = Math.max(0, checked - summary.surviving_trees);
+  const deathRate = checked === 0 ? "Not assessed" : `${Math.round((100 * notSurviving) / checked)}%`;
+
+  const hero = (action: ReactNode) => (
+    <div className="dashboard-live-total">
+      <div className="live-total-topbar">
+        <p className={`live-mark is-${streamState}`}>
+          <span>{liveMarkText}</span>
+          <em className="live-stream-pill">{STREAM_STATE_LABELS[streamState]}</em>
+        </p>
+        {action}
+      </div>
+      <div className="live-total-center">
+        <strong aria-live="polite"><CenterExpandingNumber value={value} /></strong>
+        <span>Trees standing</span>
+        {delta != null ? (
+          <p className={`dashboard-live-delta ${delta > 0 ? "up" : "down"}`}>
+            {delta > 0 ? `+${delta.toLocaleString("en-GB")}` : delta.toLocaleString("en-GB")} {Math.abs(delta) === 1 ? "tree" : "trees"}
+          </p>
+        ) : (
+          <p className="help">Living trees across the programme.</p>
+        )}
+      </div>
+    </div>
+  );
 
   return (
     <>
-      <div className="dashboard-live-total">
-        <div className="live-total-topbar">
-          <p className={`live-mark is-${streamState}`}>
-            <span>{liveMarkText}</span>
-            <em className="live-stream-pill">{STREAM_STATE_LABELS[streamState]}</em>
-          </p>
-          <button
-            type="button"
-            className="live-fullscreen-btn"
-            aria-label="Open full-screen projection"
-            onClick={() => setProjecting(true)}
-          >
-            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-              <path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            <span>Full screen</span>
-          </button>
-        </div>
-
-        <div className="live-total-center">
-          <strong aria-live="polite"><CenterExpandingNumber value={value} /></strong>
-          <span>Trees standing</span>
-          {delta != null ? (
-            <p className={`dashboard-live-delta ${delta > 0 ? "up" : "down"}`}>
-              {delta > 0 ? `+${delta.toLocaleString("en-GB")}` : delta.toLocaleString("en-GB")} {Math.abs(delta) === 1 ? "tree" : "trees"}
-            </p>
-          ) : (
-            <p className="help">Living trees across the programme.</p>
-          )}
-        </div>
-      </div>
+      {hero(
+        <button
+          type="button"
+          className="live-fullscreen-btn"
+          aria-label="Open full-screen projection"
+          onClick={() => setProjecting(true)}
+        >
+          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+            <path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          <span>Full screen</span>
+        </button>,
+      )}
 
       {projecting ? (
         <div
@@ -266,30 +282,31 @@ function LiveTreeTotal({ value, streamState }: { value: number; streamState: Liv
           className="live-projection-stage"
           role="dialog"
           aria-modal="true"
-          aria-label="Full-screen live tree count projection"
+          aria-label="Full-screen programme summary"
         >
-          <div className="live-projection-topbar">
-            <p className={`live-mark is-${streamState}`}>
-              <span>{liveMarkText}</span>
-              <em className="live-stream-pill">{STREAM_STATE_LABELS[streamState]}</em>
-            </p>
-            <button
-              type="button"
-              className="live-projection-exit"
-              onClick={() => setProjecting(false)}
-            >
+          {hero(
+            <button type="button" className="live-fullscreen-btn" onClick={() => setProjecting(false)}>
               Exit full screen <kbd>Esc</kbd>
-            </button>
-          </div>
-          <div className="live-projection-core">
-            <strong aria-live="polite"><CenterExpandingNumber value={value} /></strong>
-            <span className="live-projection-label">Trees standing</span>
-            {delta != null ? (
-              <p className={`live-projection-delta ${delta > 0 ? "up" : "down"}`}>
-                {delta > 0 ? `+${delta.toLocaleString("en-GB")}` : delta.toLocaleString("en-GB")} {Math.abs(delta) === 1 ? "tree" : "trees"}
-              </p>
-            ) : null}
-          </div>
+            </button>,
+          )}
+          <section aria-label="Key figures" className="dashboard-figures">
+            <div className="section-caption">
+              <h2>At a glance</h2>
+              <span className="help">Live stream · production matches selected period</span>
+            </div>
+            <div className="dashboard-glance-row">
+              <TreeHealth summary={summary} />
+              <DashboardKpiGrid>
+                <DashboardKpi label="Survival rate" value={summary.survival_percent == null ? "Not assessed" : `${summary.survival_percent}%`} hint={`${number(checked)} checked`} />
+                <DashboardKpi label="Death rate" value={deathRate} hint={`${number(notSurviving)} not surviving`} />
+                <DashboardKpi label="Farmers" value={number(summary.farmers)} hint="Current scope" />
+                <DashboardKpi label="Planting sites" value={number(summary.sites)} hint="Current sites" />
+                <DashboardKpi label="Harvest" value={`${number(summary.harvested_kg ?? 0)} kg`} hint="Selected period" />
+                <DashboardKpi label="Sales" value={`${number(summary.sales_rwf ?? 0)} RWF`} hint="Selected period" />
+              </DashboardKpiGrid>
+            </div>
+          </section>
+          <CarbonOverview />
         </div>
       ) : null}
     </>
@@ -819,6 +836,7 @@ export function DashboardView({ mode = "dashboard" }: { mode?: "dashboard" | "re
           <LiveTreeTotal
             value={displaySummary.standing_trees ?? displaySummary.recorded_trees}
             streamState={streamStatus}
+            summary={displaySummary}
           />
         ) : null}
 

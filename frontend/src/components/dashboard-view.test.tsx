@@ -254,9 +254,13 @@ describe("dashboard requests and role behavior", () => {
 
     // Open and exit full-screen projection stage
     await user.click(screen.getByRole("button", { name: "Open full-screen projection" }));
-    expect(screen.getByRole("dialog", { name: "Full-screen live tree count projection" })).toBeInTheDocument();
+    const board = screen.getByRole("dialog", { name: "Full-screen programme summary" });
+    expect(within(board).getByText("Trees standing")).toBeInTheDocument();
+    expect(within(board).getByText("Survival rate")).toBeInTheDocument();
+    expect(within(board).getByRole("heading", { name: "Tree health" })).toBeInTheDocument();
+    expect(await within(board).findByRole("heading", { name: "Carbon monitoring" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /Exit full screen/ }));
-    expect(screen.queryByRole("dialog", { name: "Full-screen live tree count projection" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Full-screen programme summary" })).not.toBeInTheDocument();
 
     // Compact carbon info icon toggle
     await user.click(screen.getByRole("button", { name: "Carbon monitoring details" }));
