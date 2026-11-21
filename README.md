@@ -27,6 +27,7 @@ A signed-in user can:
 - record nursery production, seedling distribution, growth, maintenance, harvest, sales, and advice
 - let a field officer request carbon monitoring authorization, and let an administrator approve, reject, or revoke it. An approved officer records a tree measurement, and TreeLife stores that tree's estimated carbon stock when a published wood specific gravity exists for the species. Administrators and viewers see the project total from accepted measurements. The figure is an estimate of standing stock, not annual sequestration and not a certified credit
 - see counts for that chain on the analytics page
+- see a live standing-tree count on the administrator overview. The count updates when a tree or batch is recorded, and the overview can be filtered by period, district, and species. Field officers, farmers, and viewers see the same overview for the records in their scope
 - see located records on a map, filter them by district or farmer, and see which records have no coordinates
 - keep a failed create on the device and send it again when the connection returns
 
@@ -34,7 +35,7 @@ Anyone can create a field officer, farmer, or viewer account. Administrator acco
 
 ## Architecture
 
-The prototype is one web application and one API, backed by PostgreSQL with PostGIS.
+The application is one web application and one API, backed by PostgreSQL with PostGIS.
 
 - `frontend/` — Next.js, React, and TypeScript. Leaflet draws the map.
 - `backend/` — FastAPI, Pydantic, and SQLAlchemy. Alembic owns the schema.
