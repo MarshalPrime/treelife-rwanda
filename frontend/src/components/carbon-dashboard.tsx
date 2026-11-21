@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Banner } from "@/components/AppShell";
-import { DashboardKpi, DashboardKpiGrid } from "@/components/dashboard-ui";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
@@ -25,6 +24,7 @@ export function CarbonOverview({ detail = false }: { detail?: boolean }) {
   const { user } = useAuth();
   const [data, setData] = useState<Overview | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showInfo, setShowInfo] = useState(detail);
 
   useEffect(() => {
     api<Overview>("/carbon/overview").then(setData).catch((caught: Error) => setError(caught.message));
@@ -33,29 +33,57 @@ export function CarbonOverview({ detail = false }: { detail?: boolean }) {
   if (error) return <Banner tone="error">{error}</Banner>;
   if (!data) return <p className="loading">Loading carbon monitoring…</p>;
 
+  const metrics = [
+    { label: "Trees measured", value: number(data.distinct_trees), hint: "Distinct trees with an accepted measurement" },
+    { label: "Species", value: number(data.distinct_species), hint: "Distinct species measured" },
+    { label: "Agents", value: number(data.agents), hint: "Authorized agents with accepted measurements" },
+    { label: "Accepted", value: number(data.accepted_measurements), hint: "Accepted submissions" },
+    { label: "Pending", value: number(data.pending_measurements), hint: "Waiting for review" },
+    { label: "Corrections", value: number(data.correction_measurements), hint: "Sent back to the agent" },
+  ];
+
   return (
-    <section className="card" aria-label="Carbon monitoring">
-      <div className="page-head">
-        <div>
+    <section className="card compact-carbon-card" aria-label="Carbon monitoring">
+      <div className="compact-panel-head">
+        <div className="compact-panel-title">
           {detail ? <h1>Carbon monitoring</h1> : <h2>Carbon monitoring</h2>}
-          <p className="lede">Project standing stock from accepted field measurements. Repeated visits to the same tree count once, using the latest accepted result.</p>
+          <button
+            type="button"
+            className="info-icon-btn"
+            aria-label="Carbon monitoring details"
+            aria-expanded={showInfo}
+            title="Methodology and estimate notes"
+            onClick={() => setShowInfo((open) => !open)}
+          >
+            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+              <circle cx="8" cy="8" r="6.75" fill="none" stroke="currentColor" strokeWidth="1.4" />
+              <path d="M8 7.2v4.1M8 4.8v.4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            </svg>
+          </button>
         </div>
-        {user?.role === "admin" ? <Link className="secondary" href="/carbon/review">Review measurements</Link> : null}
+        {user?.role === "admin" ? <Link className="secondary compact-action-link" href="/carbon/review">Review measurements</Link> : null}
       </div>
-      <p className="carbon-total" aria-label="Total estimated carbon stock">
-        <span>Total estimated carbon stock</span>
-        <strong>{number(data.total_tonnes_co2e)} tCO₂e</strong>
-        <small>Estimate. Standing stock, not annual sequestration, and not a certified credit.</small>
-      </p>
-      <DashboardKpiGrid label="Carbon monitoring summary">
-        <DashboardKpi label="Trees measured" value={number(data.distinct_trees)} hint="Distinct trees with an accepted measurement" />
-        <DashboardKpi label="Species measured" value={number(data.distinct_species)} hint="Distinct species in that tree set" />
-        <DashboardKpi label="Agents" value={number(data.agents)} hint="Authorized agents with an accepted measurement" />
-        <DashboardKpi label="Accepted" value={number(data.accepted_measurements)} hint="Accepted submissions, including earlier visits" />
-        <DashboardKpi label="Pending" value={number(data.pending_measurements)} hint="Waiting for review" />
-        <DashboardKpi label="Needs correction" value={number(data.correction_measurements)} hint="Sent back to the agent" />
-      </DashboardKpiGrid>
-      <p className="help">Only accepted measurements enter the stock. Methodology {data.methodology}, version {data.methodology_version}. A species without a published wood specific gravity is measured, and its stock is left uncalculated.</p>
+
+      <div className="carbon-compact-strip">
+        <div className="carbon-hero-compact" aria-label="Total estimated carbon stock">
+          <span>Total estimated carbon stock</span>
+          <strong>{number(data.total_tonnes_co2e)} <small>tCO₂e</small></strong>
+        </div>
+        <div className="carbon-mini-grid" role="region" aria-label="Carbon monitoring summary">
+          {metrics.map((item) => (
+            <article key={item.label} className="carbon-mini-stat" title={item.hint}>
+              <span>{item.label}</span>
+              <strong>{item.value}</strong>
+            </article>
+          ))}
+        </div>
+      </div>
+
+      {showInfo ? (
+        <p className="help compact-panel-note">
+          Standing stock estimate ({data.methodology}, v{data.methodology_version}) from latest accepted measurements per tree; not annual sequestration or a certified credit. Species without published wood specific gravity remain measured without calculated stock.
+        </p>
+      ) : null}
     </section>
   );
 }

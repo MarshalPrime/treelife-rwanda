@@ -173,6 +173,9 @@ def _commit(db: Session) -> None:
             "This record conflicts with an existing one.",
             status_code=409,
         ) from exc
+    from app.services.live_stream import notify_dashboard_change
+
+    notify_dashboard_change()
 
 
 def _finish(db: Session, entity_type: str, entity_id: uuid.UUID) -> None:

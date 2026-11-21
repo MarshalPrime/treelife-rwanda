@@ -8,6 +8,62 @@ export function HealthBadge({ status }: { status: string | null | undefined }) {
   return <span className={`health-badge ${health.id}`}><i style={{ background: health.color }} />{health.label}</span>;
 }
 
+export type FollowUpReason = "stressed" | "missing_coordinates";
+
+export function RecordKindIcon({ kind }: { kind: "site" | "tree" | "batch" }) {
+  if (kind === "site") {
+    return (
+      <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+        <path
+          d="M3 14V3.2A1.2 1.2 0 0 1 4.2 2h4.6A1.2 1.2 0 0 1 10 3.2V14M10 6.5h2.3A1.2 1.2 0 0 1 13.5 7.7V14M2 14h12M5.5 5h2M5.5 7.5h2M5.5 10h2M11.5 9.5h.5"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.35"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+      <path
+        d="M8 14v-3.2M8 2.2 4.5 7h2.1L3.5 10.8h9L9.4 7h2.1L8 2.2Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.35"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+export function IssuePill({ reason }: { reason: FollowUpReason }) {
+  if (reason === "missing_coordinates") {
+    return (
+      <span className="issue-pill coords">
+        <svg viewBox="0 0 16 16" width="10" height="10" aria-hidden="true">
+          <path d="M8 1.5a4.5 4.5 0 0 1 4.5 4.5c0 3.2-4.5 8.5-4.5 8.5S3.5 9.2 3.5 6A4.5 4.5 0 0 1 8 1.5Z" fill="none" stroke="currentColor" strokeWidth="1.5" />
+          <circle cx="8" cy="6" r="1.5" fill="currentColor" />
+        </svg>
+        No coords
+      </span>
+    );
+  }
+  return (
+    <span className="issue-pill visit">
+      <svg viewBox="0 0 16 16" width="10" height="10" aria-hidden="true">
+        <rect x="2" y="3" width="10" height="9" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
+        <path d="M5 1.8v2.2M9 1.8v2.2M2 6h10" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+        <circle cx="11.5" cy="11.5" r="3" fill="#fdf0ed" stroke="currentColor" strokeWidth="1.3" />
+        <path d="M11.5 10.2v1.4l.9.6" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+      </svg>
+      Visit due
+    </span>
+  );
+}
+
 export function TreeCard({
   href,
   code,
@@ -17,7 +73,10 @@ export function TreeCard({
   when,
   age,
   detail,
-  action = "View tree",
+  reasons,
+  kind,
+  action = "Open",
+  showActionText = true,
 }: {
   href?: string;
   code?: string | null;
@@ -27,20 +86,46 @@ export function TreeCard({
   when?: string | null;
   age?: string | null;
   detail?: string | null;
+  reasons?: FollowUpReason[];
+  kind?: "site" | "tree" | "batch";
   action?: string;
+  showActionText?: boolean;
 }) {
   const health = healthOf(status);
+  const meta = [place, when, age].filter(Boolean).join(" · ") || "Location not recorded";
+  const showFoot = Boolean(reasons?.length || detail || href);
   const body = (
     <>
       <span className="tree-card-top">
-        <i className="health-dot" style={{ background: health.color }} aria-hidden="true" />
-        <strong>{species}</strong>
+        {kind ? (
+          <span className="tree-card-kind" aria-hidden="true"><RecordKindIcon kind={kind} /></span>
+        ) : (
+          <i className="health-dot" style={{ background: health.color }} aria-hidden="true" />
+        )}
+        <strong title={species}>{species}</strong>
         <HealthBadge status={status} />
       </span>
-      {code ? <span className="tree-card-code">{code}</span> : null}
-      <span className="tree-card-meta">{[place, when, age].filter(Boolean).join(" · ") || "Location not recorded"}</span>
-      {detail ? <span className="tree-card-detail">{detail}</span> : null}
-      {href ? <span className="tree-card-action">{action}</span> : null}
+      <span className="tree-card-sub">
+        {code ? <code className="tree-card-code">{code}</code> : null}
+        {code ? <span className="tree-card-sep" aria-hidden="true">·</span> : null}
+        <span className="tree-card-meta" title={meta}>{meta}</span>
+      </span>
+      {showFoot ? (
+        <span className="tree-card-foot">
+          <span className="tree-card-badges">
+            {reasons?.length ? reasons.map((reason) => <IssuePill key={reason} reason={reason} />) : null}
+            {detail ? <span className="tree-card-detail">{detail}</span> : null}
+          </span>
+          {href ? (
+            <span className="tree-card-action">
+              {showActionText ? action : null}
+              <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+                <path d="M6 3.5 10.5 8 6 12.5" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </span>
+          ) : null}
+        </span>
+      ) : null}
     </>
   );
   if (!href) return <article className={`tree-card ${health.id}`}>{body}</article>;

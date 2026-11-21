@@ -145,6 +145,9 @@ def _commit(db: Session) -> None:
             "A carbon monitoring request is already open for this field officer.",
             status_code=409,
         ) from exc
+    from app.services.live_stream import notify_dashboard_change
+
+    notify_dashboard_change()
 
 
 def submit_request(

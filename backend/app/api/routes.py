@@ -5,22 +5,24 @@ from __future__ import annotations
 import uuid
 from datetime import date
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
-from fastapi.responses import FileResponse
+import jwt
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Response, UploadFile
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.core.deps import (
     get_current_user,
+    oauth2_scheme,
     require_admin,
     require_attention,
     require_forest_writer,
     require_staff,
     require_writer,
 )
-from app.core.security import create_access_token, verify_password
-from app.db.session import get_db
+from app.core.security import create_access_token, decode_access_token, verify_password
+from app.db.session import SessionLocal, get_db
 from app.domain.errors import DomainError
 from app.models.entities import Farmer, User
 from app.schemas.entities import (
@@ -1207,6 +1209,61 @@ def dashboard(
         range_name=range,
         start_date=start_date,
         end_date=end_date,
+    )
+
+
+def _authenticate_stream_user(token: str | None) -> uuid.UUID:
+    if not token:
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication is required.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    try:
+        payload = decode_access_token(token)
+        user_id = uuid.UUID(str(payload.get("sub")))
+    except (jwt.PyJWTError, ValueError, TypeError) as exc:
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication is required.",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from exc
+    with SessionLocal() as db:
+        user = db.get(User, user_id)
+        if user is None or not user.is_active:
+            raise HTTPException(
+                status_code=401,
+                detail="Authentication is required.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+    return user_id
+
+
+@router.get("/dashboard/stream")
+async def dashboard_stream(
+    request: Request,
+    district: str | None = Query(default=None),
+    species_id: uuid.UUID | None = Query(default=None),
+    once: bool = Query(default=False),
+    token: str | None = Depends(oauth2_scheme),
+) -> StreamingResponse:
+    from app.services.live_stream import stream_dashboard_events
+
+    user_id = _authenticate_stream_user(token)
+    return StreamingResponse(
+        stream_dashboard_events(
+            user_id=user_id,
+            district=district,
+            species_id=species_id,
+            is_disconnected=request.is_disconnected,
+            once=once,
+        ),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )
 
 

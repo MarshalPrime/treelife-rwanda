@@ -205,6 +205,16 @@ export type PlantingRecord = {
   species_scientific_name: string | null;
   category: string;
   planting_date: string;
+  planting_date_approximate?: boolean;
+  planting_method?: string | null;
+  planting_method_note?: string | null;
+  soil_type?: string | null;
+  terrain?: string | null;
+  water_availability?: string | null;
+  spacing?: string | null;
+  fertilizer_applied?: string | boolean | null;
+  mulching_applied?: string | boolean | null;
+  watering_provided?: string | boolean | null;
   quantity: number;
   latitude: number | null;
   longitude: number | null;

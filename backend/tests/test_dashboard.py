@@ -536,3 +536,18 @@ def test_tree_health_counts_surviving_stressed_and_dead(client, accounts):
     assert summary["healthy_trees"] == 5
     assert summary["moderate_trees"] == 1
     assert summary["critical_trees"] == 1
+
+
+def test_dashboard_stream_returns_initial_live_snapshot(client, accounts):
+    species = make_species(client, accounts, "Mangifera indica", "Mango")
+    site = make_site(client, accounts, client_request_id="stream-site")
+    create_batch(client, auth(accounts), site.json()["id"], species["id"], "stream-batch", 7)
+
+    with client.stream(
+        "GET", "/api/v1/dashboard/stream?once=true", headers=auth(accounts, "admin")
+    ) as response:
+        assert response.status_code == 200
+        body = "".join(response.iter_text())
+        assert "event: trees" in body
+        assert '"standing_trees": 7' in body
+        assert '"recorded_trees": 7' in body

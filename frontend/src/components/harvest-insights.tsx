@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { Banner, Field } from "@/components/AppShell";
-import { DashboardKpi, DashboardKpiGrid } from "@/components/dashboard-ui";
 import { ApiError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { newRequestId } from "@/lib/validation";
@@ -107,12 +106,12 @@ function measure(kg: number, count: number) {
 }
 
 const BARS = [
-  { key: "sold_kg", label: "Sold", color: "#187e73" },
-  { key: "personal_kg", label: "Personal consumption", color: "#3c8f68" },
-  { key: "stored_kg", label: "Stored", color: "#ac741d" },
-  { key: "given_kg", label: "Given away", color: "#826293" },
-  { key: "other_kg", label: "Other", color: "#5c6b73" },
-  { key: "unassigned_kg", label: "Not yet assigned", color: "#d5ddd6" },
+  { key: "sold_kg", countKey: "sold_count", label: "Sold", color: "#187e73" },
+  { key: "personal_kg", countKey: "personal_count", label: "Personal consumption", color: "#3c8f68" },
+  { key: "stored_kg", countKey: "stored_count", label: "Stored", color: "#ac741d" },
+  { key: "given_kg", countKey: "given_count", label: "Given away", color: "#826293" },
+  { key: "other_kg", countKey: "other_count", label: "Other", color: "#5c6b73" },
+  { key: "unassigned_kg", countKey: "unassigned_count", label: "Not yet assigned", color: "#d5ddd6" },
 ] as const;
 
 export function HarvestNotices({ refreshKey = 0 }: { refreshKey?: string | number }) {
@@ -122,9 +121,12 @@ export function HarvestNotices({ refreshKey = 0 }: { refreshKey?: string | numbe
   }, [refreshKey]);
   if (!rows?.length) return null;
   return (
-    <section className="card" aria-label="Harvest notices">
-      <h2>Needs attention</h2>
-      <ul className="record-list">
+    <section className="card compact-notices-card" aria-label="Harvest notices">
+      <div className="compact-panel-head">
+        <h2>Needs attention</h2>
+        <span className="compact-badge warn">{rows.length}</span>
+      </div>
+      <ul className="record-list compact-record-list">
         {rows.map((row) => <li key={row.id}><strong>{row.harvest_code ?? "Harvest"}</strong> · {row.summary}</li>)}
       </ul>
     </section>
@@ -134,40 +136,117 @@ export function HarvestNotices({ refreshKey = 0 }: { refreshKey?: string | numbe
 export function HarvestSummary({ refreshKey = 0 }: { refreshKey?: string | number }) {
   const [overview, setOverview] = useState<Overview | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<"overview" | "distribution" | "history">("overview");
+  const [activeBar, setActiveBar] = useState<(typeof BARS)[number]["key"] | null>(null);
+
   useEffect(() => {
     api<Overview>("/harvests/overview").then(setOverview).catch((caught: Error) => setError(caught.message));
   }, [refreshKey]);
   if (error) return <Banner tone="error">{error}</Banner>;
   if (!overview) return <p className="loading" role="status">Loading harvest summary…</p>;
+
   const total = BARS.reduce((sum, bar) => sum + overview[bar.key], 0);
   const unbalanced = overview.shares.filter((row) => !row.balanced);
+  const selectedBar = activeBar ? BARS.find((bar) => bar.key === activeBar) : null;
+
   return (
-    <>
-      <section className="card" aria-label="Harvest summary">
-        <h2>Harvest summary</h2>
-        <DashboardKpiGrid label="Harvest totals">
-          <DashboardKpi label="Harvested" value={measure(overview.harvested_kg, overview.harvested_count)} hint="All recorded harvests" />
-          <DashboardKpi label="Sold" value={measure(overview.sold_kg, overview.sold_count)} hint="Quantity sold" />
-          <DashboardKpi label="Revenue" value={`${number(overview.sales_rwf)} RWF`} hint="Sales only" />
-          <DashboardKpi label="Personal consumption" value={measure(overview.personal_kg, overview.personal_count)} />
-          <DashboardKpi label="Stored" value={measure(overview.stored_kg, overview.stored_count)} />
-          <DashboardKpi label="Given away" value={measure(overview.given_kg, overview.given_count)} />
-          <DashboardKpi label="Other" value={measure(overview.other_kg, overview.other_count)} />
-          <DashboardKpi label="Not yet assigned" value={measure(overview.unassigned_kg, overview.unassigned_count)} hint="Still on the harvest" />
-        </DashboardKpiGrid>
-        {total > 0 ? (
-          <>
-            <div className="distribution-bar" role="img" aria-label="How harvested kilograms are distributed">
-              {BARS.map((bar) => <span key={bar.key} style={{ width: `${(overview[bar.key] / total) * 100}%`, background: bar.color }} />)}
+    <section className="card compact-harvest-card" aria-label="Harvest summary">
+      <div className="compact-panel-head">
+        <div className="compact-panel-title">
+          <h2>Harvest summary</h2>
+          {unbalanced.length ? <span className="compact-badge warn">{unbalanced.length} unbalanced</span> : null}
+        </div>
+        <div className="compact-tabs" role="tablist" aria-label="Harvest views">
+          <button type="button" role="tab" aria-selected={tab === "overview"} className={tab === "overview" ? "is-active" : ""} onClick={() => setTab("overview")}>
+            Overview
+          </button>
+          <button type="button" role="tab" aria-selected={tab === "distribution"} className={tab === "distribution" ? "is-active" : ""} onClick={() => setTab("distribution")}>
+            Distribution <small>{overview.shares.length}</small>
+          </button>
+          <button type="button" role="tab" aria-selected={tab === "history"} className={tab === "history" ? "is-active" : ""} onClick={() => setTab("history")}>
+            History <small>{overview.history.length}</small>
+          </button>
+        </div>
+      </div>
+
+      {tab === "overview" ? (
+        <div className="harvest-overview-body">
+          <div className="harvest-kpi-strip" role="region" aria-label="Harvest totals">
+            <article className="harvest-mini-kpi">
+              <span>Harvested</span>
+              <strong>{measure(overview.harvested_kg, overview.harvested_count)}</strong>
+            </article>
+            <article className="harvest-mini-kpi">
+              <span>Sold</span>
+              <strong>{measure(overview.sold_kg, overview.sold_count)}</strong>
+            </article>
+            <article className="harvest-mini-kpi">
+              <span>Revenue</span>
+              <strong>{number(overview.sales_rwf)} RWF</strong>
+            </article>
+            <article className="harvest-mini-kpi">
+              <span>Not yet assigned</span>
+              <strong>{measure(overview.unassigned_kg, overview.unassigned_count)}</strong>
+            </article>
+          </div>
+
+          {total > 0 ? (
+            <div className="harvest-distribution-interactive">
+              <div className="distribution-bar" role="img" aria-label="How harvested kilograms are distributed">
+                {BARS.map((bar) => {
+                  const pct = (overview[bar.key] / total) * 100;
+                  const dimmed = activeBar !== null && activeBar !== bar.key;
+                  return (
+                    <span
+                      key={bar.key}
+                      style={{ width: `${pct}%`, background: bar.color, opacity: dimmed ? 0.35 : 1 }}
+                      onMouseEnter={() => setActiveBar(bar.key)}
+                      onMouseLeave={() => setActiveBar(null)}
+                      onClick={() => setActiveBar((current) => (current === bar.key ? null : bar.key))}
+                      title={`${bar.label}: ${number(overview[bar.key])} kg (${Math.round(pct)}%)`}
+                    />
+                  );
+                })}
+              </div>
+              <div className="harvest-legend-row">
+                {BARS.map((bar) => {
+                  const pct = total > 0 ? Math.round((overview[bar.key] / total) * 100) : 0;
+                  const active = activeBar === bar.key;
+                  return (
+                    <button
+                      key={bar.key}
+                      type="button"
+                      className={`harvest-legend-chip ${active ? "is-active" : ""}`}
+                      onMouseEnter={() => setActiveBar(bar.key)}
+                      onMouseLeave={() => setActiveBar(null)}
+                      onClick={() => setActiveBar((current) => (current === bar.key ? null : bar.key))}
+                    >
+                      <i style={{ background: bar.color }} aria-hidden="true" />
+                      <span>{bar.label}</span>
+                      <b>{measure(overview[bar.key], overview[bar.countKey])}</b>
+                      <small>{pct}%</small>
+                    </button>
+                  );
+                })}
+              </div>
+              {selectedBar ? (
+                <p className="help">
+                  {selectedBar.label}: {measure(overview[selectedBar.key], overview[selectedBar.countKey])} ({Math.round((overview[selectedBar.key] / total) * 100)}% of harvested kg)
+                </p>
+              ) : null}
             </div>
-            <p className="distribution-legend">{BARS.map((bar) => <span key={bar.key}><i style={{ background: bar.color }} />{bar.label} {number(overview[bar.key])} kg</span>)}</p>
-          </>
-        ) : <p>No harvest quantities yet.</p>}
-        {unbalanced.length ? <Banner tone="error">{unbalanced.map((row) => row.public_code).join(", ")} does not add up to the harvested quantity.</Banner> : <p className="help">Sold, eaten, stored, given away, other, and what is not yet assigned add up to each harvest.</p>}
-      </section>
-      <section className="card">
-        <h2>Distribution</h2>
-        <div className="table-wrap">
+          ) : <p className="help">No harvest quantities yet.</p>}
+
+          {unbalanced.length ? (
+            <Banner tone="error">{unbalanced.map((row) => row.public_code).join(", ")} does not add up to the harvested quantity.</Banner>
+          ) : (
+            <p className="help">Sold, eaten, stored, given away, other, and unassigned quantities add up to each harvest.</p>
+          )}
+        </div>
+      ) : null}
+
+      {tab === "distribution" ? (
+        <div className="table-wrap compact-table-scroll">
           <table>
             <caption>How each harvest is split</caption>
             <thead>
@@ -195,14 +274,14 @@ export function HarvestSummary({ refreshKey = 0 }: { refreshKey?: string | numbe
             </tbody>
           </table>
         </div>
-      </section>
-      <section className="card">
-        <h2>Harvest history</h2>
-        {overview.history.length ? (
-          <ul className="record-list">
+      ) : null}
+
+      {tab === "history" ? (
+        overview.history.length ? (
+          <ul className="record-list compact-record-list">
             {overview.history.map((item) => (
               <li key={`${item.kind}-${item.public_code}`}>
-                {when(item.occurred_on)} · {item.public_code} · {item.kind === "harvest" ? `Harvest ${number(item.quantity)} ${item.unit}` : `${USE_LABELS[item.purpose ?? ""] ?? "Use"} ${number(item.quantity)} ${item.unit}`}
+                {when(item.occurred_on)} · <strong>{item.public_code}</strong> · {item.kind === "harvest" ? `Harvest ${number(item.quantity)} ${item.unit}` : `${USE_LABELS[item.purpose ?? ""] ?? "Use"} ${number(item.quantity)} ${item.unit}`}
                 {item.amount_rwf ? ` · ${number(item.amount_rwf)} RWF` : ""}
                 {item.buyer_name ? ` · ${item.buyer_name}` : ""}
                 {item.harvest_code && item.kind === "destination" ? ` · ${item.harvest_code}` : ""}
@@ -211,9 +290,9 @@ export function HarvestSummary({ refreshKey = 0 }: { refreshKey?: string | numbe
               </li>
             ))}
           </ul>
-        ) : <p>No harvest history yet.</p>}
-      </section>
-    </>
+        ) : <p className="help">No harvest history yet.</p>
+      ) : null}
+    </section>
   );
 }
 

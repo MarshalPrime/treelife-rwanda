@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { useId, useState } from "react";
 import { DashboardEmpty } from "@/components/dashboard-ui";
 import { speciesPhoto } from "@/components/map-cards";
 import type { DashboardResponse } from "@/lib/types";
@@ -18,37 +19,145 @@ export function SeriesChart({ title, series, lines, unit, monthly = false }: {
   unit: string;
   monthly?: boolean;
 }) {
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const [hiddenKeys, setHiddenKeys] = useState<Set<Metric>>(() => new Set());
+  const gradientId = useId();
+
   if (!series.length) return <DashboardEmpty title="No records in this period">Try a different period or clear the district and species filters.</DashboardEmpty>;
+
+  const visibleLines = lines.filter((line) => !hiddenKeys.has(line.key));
+  const activeLines = visibleLines.length ? visibleLines : lines;
   const width = 680;
-  const height = 220;
-  const left = 48;
-  const right = 18;
-  const top = 18;
-  const bottom = 36;
+  const height = 190;
+  const left = 46;
+  const right = 16;
+  const top = 16;
+  const bottom = 30;
   const plotWidth = width - left - right;
   const plotHeight = height - top - bottom;
-  const maximum = Math.max(1, ...series.flatMap((point) => lines.map((line) => point[line.key] ?? 0)));
-  const x = (index: number) => left + (series.length === 1 ? plotWidth / 2 : index * plotWidth / (series.length - 1));
+  const maximum = Math.max(1, ...series.flatMap((point) => activeLines.map((line) => point[line.key] ?? 0)));
+  const x = (index: number) => left + (series.length === 1 ? plotWidth / 2 : (index * plotWidth) / (series.length - 1));
   const y = (value: number) => top + plotHeight * (1 - value / maximum);
   const ticks = [...new Set([0, Math.floor((series.length - 1) / 2), series.length - 1])];
   const totals = lines.map((line) => `${full.format(series.reduce((sum, point) => sum + (point[line.key] ?? 0), 0))} ${line.label.toLowerCase()}`).join(" · ");
-  const dateLabel = (day: string) => new Date(`${day}T00:00:00`).toLocaleDateString("en-GB", monthly ? { month: "short", year: "2-digit" } : { day: "numeric", month: "short" });
+  const dateLabel = (day: string) => {
+    const parsed = new Date(`${day}T00:00:00`);
+    if (Number.isNaN(parsed.getTime())) return day;
+    return parsed.toLocaleDateString("en-GB", monthly ? { month: "short", year: "2-digit" } : { day: "numeric", month: "short" });
+  };
+
+  const primaryLine = activeLines[0];
+  const primaryPoints = series.map((point, index) => `${x(index)},${y(point[primaryLine.key] ?? 0)}`).join(" ");
+  const areaPoints = `${x(0)},${top + plotHeight} ${primaryPoints} ${x(series.length - 1)},${top + plotHeight}`;
+
+  const updateHover = (clientX: number, rect: DOMRect) => {
+    if (!rect.width) return;
+    const svgX = ((clientX - rect.left) / rect.width) * width;
+    const ratio = Math.max(0, Math.min(1, (svgX - left) / Math.max(1, plotWidth)));
+    const nextIndex = series.length === 1 ? 0 : Math.round(ratio * (series.length - 1));
+    setActiveIndex(nextIndex);
+  };
+
+  const toggleLine = (key: Metric) => {
+    setHiddenKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else if (next.size < lines.length - 1) next.add(key);
+      return next;
+    });
+  };
+
+  const hovered = activeIndex !== null && activeIndex >= 0 && activeIndex < series.length ? series[activeIndex] : null;
+  const hoverPct = activeIndex !== null && series.length > 1 ? ((x(activeIndex) - left) / plotWidth) * 100 : 50;
 
   return <div className="dashboard-chart-wrap">
     <p className="chart-summary">{totals}{unit === "kg" || unit === "RWF" ? ` ${unit}` : ""}</p>
-    <svg className="dashboard-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${title}. ${totals}. Values in ${unit}.`}>
-      {[0, .5, 1].map((fraction) => <g key={fraction}>
-        <line x1={left} y1={y(maximum * fraction)} x2={width - right} y2={y(maximum * fraction)} stroke="currentColor" opacity=".12" />
-        <text x={left - 10} y={y(maximum * fraction) + 4} textAnchor="end">{compact.format(maximum * fraction)}</text>
-      </g>)}
-      {lines.map((line) => <g key={line.key}>
-        <polyline points={series.map((point, index) => `${x(index)},${y(point[line.key] ?? 0)}`).join(" ")} fill="none" stroke={line.color} strokeWidth="3" strokeDasharray={line.dashed ? "6 5" : undefined} strokeLinejoin="round" />
-        {series.length === 1 ? <circle cx={x(0)} cy={y(series[0][line.key] ?? 0)} r="4" fill={line.color} /> : null}
-      </g>)}
-      {ticks.map((index) => <text key={index} x={x(index)} y={height - 8} textAnchor={index === 0 ? "start" : index === series.length - 1 ? "end" : "middle"}>{dateLabel(series[index].day)}</text>)}
-    </svg>
+    <div className="chart-stage" onPointerLeave={() => setActiveIndex(null)}>
+      <svg
+        className="dashboard-chart"
+        viewBox={`0 0 ${width} ${height}`}
+        role="img"
+        aria-label={`${title}. ${totals}. Values in ${unit}.`}
+        onPointerMove={(event) => updateHover(event.clientX, event.currentTarget.getBoundingClientRect())}
+        onPointerDown={(event) => updateHover(event.clientX, event.currentTarget.getBoundingClientRect())}
+      >
+        <defs>
+          <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={primaryLine.color} stopOpacity="0.16" />
+            <stop offset="100%" stopColor={primaryLine.color} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        {[0, 0.5, 1].map((fraction) => <g key={fraction}>
+          <line x1={left} y1={y(maximum * fraction)} x2={width - right} y2={y(maximum * fraction)} stroke="currentColor" opacity=".1" />
+          <text x={left - 8} y={y(maximum * fraction) + 4} textAnchor="end">{compact.format(maximum * fraction)}</text>
+        </g>)}
+        {series.length > 1 ? <polygon points={areaPoints} fill={`url(#${gradientId})`} /> : null}
+        {activeLines.map((line) => <g key={line.key}>
+          <polyline
+            points={series.map((point, index) => `${x(index)},${y(point[line.key] ?? 0)}`).join(" ")}
+            fill="none"
+            stroke={line.color}
+            strokeWidth="2.75"
+            strokeDasharray={line.dashed ? "6 5" : undefined}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+          {series.length === 1 ? <circle cx={x(0)} cy={y(series[0][line.key] ?? 0)} r="4" fill={line.color} /> : null}
+        </g>)}
+        {hovered && activeIndex !== null ? <g className="chart-crosshair" aria-hidden="true">
+          <line x1={x(activeIndex)} y1={top} x2={x(activeIndex)} y2={top + plotHeight} stroke="#1c4636" strokeWidth="1" strokeDasharray="3 3" opacity=".45" />
+          {activeLines.map((line) => (
+            <circle
+              key={line.key}
+              cx={x(activeIndex)}
+              cy={y(hovered[line.key] ?? 0)}
+              r="4.5"
+              fill="#fff"
+              stroke={line.color}
+              strokeWidth="2.5"
+            />
+          ))}
+        </g> : null}
+        {ticks.map((index) => <text key={index} x={x(index)} y={height - 8} textAnchor={index === 0 ? "start" : index === series.length - 1 ? "end" : "middle"}>{dateLabel(series[index].day)}</text>)}
+      </svg>
+      {hovered ? (
+        <div
+          className={`chart-tooltip ${hoverPct > 65 ? "align-right" : ""}`}
+          style={{ left: `${Math.max(10, Math.min(90, hoverPct))}%` }}
+          role="status"
+          aria-live="polite"
+        >
+          <strong>{dateLabel(hovered.day)}</strong>
+          <ul>
+            {activeLines.map((line) => (
+              <li key={line.key}>
+                <i style={{ background: line.color }} aria-hidden="true" />
+                <span>{line.label}</span>
+                <b>{full.format(hovered[line.key] ?? 0)}{unit === "kg" || unit === "RWF" ? ` ${unit}` : ""}</b>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </div>
     <div className="chart-legend" aria-label={`${title} legend`}>
-      {lines.map((line) => <span key={line.key}><span aria-hidden="true" className="chart-key" style={{ background: line.color, borderRadius: line.dashed ? 0 : 8 }} />{line.label}</span>)}
+      {lines.map((line) => {
+        const hidden = hiddenKeys.has(line.key);
+        return lines.length > 1 ? (
+          <button
+            key={line.key}
+            type="button"
+            className={`chart-legend-toggle ${hidden ? "is-muted" : ""}`}
+            aria-pressed={!hidden}
+            onClick={() => toggleLine(line.key)}
+          >
+            <span aria-hidden="true" className="chart-key" style={{ background: line.color, borderRadius: line.dashed ? 0 : 8 }} />
+            {line.label}
+          </button>
+        ) : (
+          <span key={line.key}><span aria-hidden="true" className="chart-key" style={{ background: line.color, borderRadius: line.dashed ? 0 : 8 }} />{line.label}</span>
+        );
+      })}
     </div>
     <details className="chart-table">
       <summary>View {title.toLowerCase()} data table</summary>
@@ -77,15 +186,17 @@ export function BreakdownChart({ title, rows, selected, onSelect, photos = false
 }) {
   if (!rows.length) return <DashboardEmpty title="No trees in this view">Clear filters or register a planting to start this comparison.</DashboardEmpty>;
   const maximum = Math.max(1, ...rows.map((row) => row.value));
+  const total = rows.reduce((sum, row) => sum + row.value, 0);
   return <div className="dashboard-bars">
     <ul className="dashboard-breakdown-list" aria-label={title}>
       {rows.map((row) => {
         const photo = photos ? speciesPhoto(row.label) : undefined;
+        const share = total > 0 ? Math.round((row.value / total) * 100) : 0;
         return <li key={row.id}>
           <button type="button" className="dashboard-breakdown-button" aria-pressed={selected === row.id} aria-label={`Filter by ${row.label}, ${full.format(row.value)} trees`} onClick={() => onSelect(row.id)}>
-            <span className="breakdown-name">{photo ? <Image src={photo} width={30} height={30} alt="" className="breakdown-photo" /> : null}<span>{row.label}</span></span>
-            <svg viewBox="0 0 300 16" className="breakdown-bar" aria-hidden="true"><rect width="300" height="16" rx="8" fill="#e9ece3" /><rect width={row.value / maximum * 300} height="16" rx="8" fill="#397c55" /></svg>
-            <strong>{full.format(row.value)}</strong>
+            <span className="breakdown-name">{photo ? <Image src={photo} width={24} height={24} alt="" className="breakdown-photo" /> : null}<span>{row.label}</span></span>
+            <svg viewBox="0 0 300 12" className="breakdown-bar" aria-hidden="true"><rect width="300" height="12" rx="6" fill="#e9ece3" /><rect width={(row.value / maximum) * 300} height="12" rx="6" fill="#397c55" /></svg>
+            <strong>{full.format(row.value)} <small>{share}%</small></strong>
           </button>
         </li>;
       })}

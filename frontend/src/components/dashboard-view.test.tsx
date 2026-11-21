@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -205,5 +205,195 @@ describe("dashboard requests and role behavior", () => {
     expect(screen.getByText(/Date unavailable.*Date unavailable/)).toBeInTheDocument();
     expect(screen.queryByText("Loading locations…")).not.toBeInTheDocument();
     expect(mocks.api.mock.calls.some(([path]) => path === "/map")).toBe(false);
+  });
+
+  it("opens and exits full-screen tree count projection and renders compact interactive panels", async () => {
+    const user = userEvent.setup();
+    const harvestData = {
+      ...quietHarvest,
+      harvested_kg: 12,
+      sold_kg: 8,
+      sales_rwf: 3200,
+      unassigned_kg: 4,
+      shares: [{
+        public_code: "HARV-1",
+        target_code: "TREE-1",
+        harvested_on: "2026-11-01",
+        quantity: 12,
+        unit: "kg",
+        sold: 8,
+        personal_consumption: 0,
+        stored: 0,
+        given_away: 0,
+        other: 0,
+        unassigned: 4,
+        balanced: true,
+        recorded_by: "Officer",
+      }],
+      history: [{
+        public_code: "HARV-1",
+        kind: "harvest",
+        occurred_on: "2026-11-01",
+        target_code: "TREE-1",
+        quantity: 12,
+        unit: "kg",
+        purpose: null,
+        amount_rwf: null,
+        buyer_name: null,
+        recorded_by: "Officer",
+        harvest_code: null,
+      }],
+    };
+    mocks.api.mockImplementation((path: string) => {
+      if (path.startsWith("/harvests/")) return Promise.resolve(harvestData);
+      return dashboardApi(path, response("admin", 1250));
+    });
+
+    render(<DashboardView />);
+    expect((await screen.findAllByText("1,250")).length).toBeGreaterThan(0);
+
+    // Open and exit full-screen projection stage
+    await user.click(screen.getByRole("button", { name: "Open full-screen projection" }));
+    expect(screen.getByRole("dialog", { name: "Full-screen live tree count projection" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Exit full screen/ }));
+    expect(screen.queryByRole("dialog", { name: "Full-screen live tree count projection" })).not.toBeInTheDocument();
+
+    // Compact carbon info icon toggle
+    await user.click(screen.getByRole("button", { name: "Carbon monitoring details" }));
+    expect(screen.getByText(/Standing stock estimate/)).toBeInTheDocument();
+
+    // Interactive chart legend toggle
+    const plantedToggle = screen.getByRole("button", { name: "Trees planted" });
+    expect(plantedToggle).toHaveAttribute("aria-pressed", "true");
+    await user.click(plantedToggle);
+    expect(plantedToggle).toHaveAttribute("aria-pressed", "false");
+
+    // Tabbed harvest summary switching
+    await user.click(screen.getByRole("tab", { name: /Distribution/ }));
+    expect(screen.getByRole("table", { name: /How each harvest is split/ })).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: /History/ }));
+    expect(screen.getByText(/Harvest 12 kg/)).toBeInTheDocument();
+  });
+
+  it("streams live tree counts automatically and refreshes dashboard figures when totals change", async () => {
+    sessionStorage.setItem("treelife.token", "admin-jwt");
+    let streamController: ReadableStreamDefaultController<Uint8Array> | null = null;
+    const encoder = new TextEncoder();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              streamController = controller;
+              controller.enqueue(
+                encoder.encode(
+                  'event: trees\ndata: {"standing_trees":111,"recorded_trees":111,"healthy_trees":0,"moderate_trees":0,"critical_trees":0,"generated_at":"2026-11-21T10:00:00Z"}\n\n',
+                ),
+              );
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "text/event-stream" } },
+        ),
+      ),
+    );
+
+    render(<DashboardView />);
+    expect((await screen.findAllByText("111")).length).toBeGreaterThan(0);
+
+    mocks.api.mockImplementation((path: string) => dashboardApi(path, response("admin", 120)));
+    await act(async () => {
+      streamController!.enqueue(
+        encoder.encode(
+          'event: trees\ndata: {"standing_trees":120,"recorded_trees":120,"healthy_trees":0,"moderate_trees":0,"critical_trees":0,"generated_at":"2026-11-21T10:00:05Z"}\n\n',
+        ),
+      );
+    });
+
+    await waitFor(() => expect(screen.getByText(/\+9 trees/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Filter by Mango, 120 trees" })).toBeInTheDocument());
+    streamController!.close();
+    sessionStorage.clear();
+    vi.unstubAllGlobals();
+  });
+
+  it("deduplicates follow-up items and toggles between unified, action items, search clear, and list view", async () => {
+    const user = userEvent.setup();
+    const withAttention: DashboardResponse = {
+      ...response("admin", 50),
+      attention: [
+        { id: "t1", kind: "tree", title: "Jacaranda", reason: "stressed", public_code: "TREE-1", status: "stressed", place: "Huye" },
+        { id: "t1", kind: "tree", title: "Jacaranda", reason: "missing_coordinates", public_code: "TREE-1", status: "stressed", place: "Huye" },
+        { id: "t2", kind: "tree", title: "Grevillea", reason: "missing_coordinates", public_code: "TREE-2", status: "planted", place: "Musanze" },
+      ],
+    };
+    mocks.api.mockImplementation((path: string) => dashboardApi(path, withAttention));
+
+    render(<DashboardView />);
+    await screen.findByText("TREE-1");
+
+    // Deduplicated to 2 cards by default; TREE-1 has both pills
+    expect(screen.getAllByText("TREE-1")).toHaveLength(1);
+    expect(screen.getAllByText(/Visit due/)).toHaveLength(2);
+    expect(screen.getAllByText(/No coords/)).toHaveLength(3);
+    expect(screen.getByText(/unique records · Click any card/)).toHaveTextContent("Showing 2 unique records");
+
+    // Switching to Action Items expands to raw entries
+    await user.click(screen.getByRole("button", { name: "Action Items" }));
+    expect(screen.getAllByText("TREE-1")).toHaveLength(2);
+    expect(screen.getByText(/action items · Click any card/)).toHaveTextContent("Showing 3 action items");
+
+    // Switching back collapses duplicates
+    await user.click(screen.getByRole("button", { name: "Unified" }));
+    expect(screen.getAllByText("TREE-1")).toHaveLength(1);
+
+    // Search filters to Grevillea and inline clear restores all
+    await user.type(screen.getByLabelText("Search follow-up records"), "Musanze");
+    expect(screen.queryByText("TREE-1")).not.toBeInTheDocument();
+    expect(screen.getByText("TREE-2")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Clear follow-up search" }));
+    expect(screen.getByText("TREE-1")).toBeInTheDocument();
+
+    // Switch to list view
+    await user.click(screen.getByRole("button", { name: "List view" }));
+    expect(screen.getByRole("table", { name: "Follow-up records" })).toBeInTheDocument();
+  });
+
+  it("renders recent plantings as a compact audit-style line-by-line list and protects viewer privacy", async () => {
+    const withRecent: DashboardResponse = {
+      ...response("admin", 50),
+      recent: [
+        { id: "tree-1", kind: "tree", title: "Avocado", site_name: "Huye Demo Plot", status: "surviving", planting_date: "2026-11-04", quantity: 1, public_code: "TREE-2026-AVO1" },
+        { id: "batch-2", kind: "batch", title: "Grevillea", site_name: "Nyagatare Agro", status: "stressed", planting_date: "2026-11-02", quantity: 40, public_code: "BATCH-2026-GRV2" },
+      ],
+    };
+    mocks.api.mockImplementation((path: string) => dashboardApi(path, withRecent));
+
+    render(<DashboardView />);
+    const recentRegion = await screen.findByRole("region", { name: "Recent plantings" });
+    const links = within(recentRegion).getAllByRole("link");
+    expect(links).toHaveLength(2);
+    expect(links[0]).toHaveAttribute("href", "/trees/tree-1");
+    expect(links[1]).toHaveAttribute("href", "/batches/batch-2");
+    expect(within(recentRegion).getByText("Huye Demo Plot")).toBeInTheDocument();
+    expect(within(recentRegion).getByText("×40")).toBeInTheDocument();
+    expect(within(recentRegion).getByText(/^4 Nov/)).toBeInTheDocument();
+
+    cleanup();
+    mocks.user.role = "viewer";
+    const viewerRecent: DashboardResponse = {
+      ...response("viewer", 50),
+      recent: withRecent.recent.map((row) => ({ ...row, site_name: null })),
+    };
+    mocks.api.mockImplementation((path: string) => dashboardApi(path, viewerRecent));
+
+    render(<DashboardView />);
+    const viewerRegion = await screen.findByRole("region", { name: "Recent plantings" });
+    expect(within(viewerRegion).queryAllByRole("link")).toHaveLength(0);
+    expect(within(viewerRegion).getByText("Avocado")).toBeInTheDocument();
+    expect(within(viewerRegion).getByText("×40")).toBeInTheDocument();
+    expect(within(viewerRegion).queryByText("Huye Demo Plot")).not.toBeInTheDocument();
+    expect(within(viewerRegion).queryByText("TREE-2026-AVO1")).not.toBeInTheDocument();
+    expect(within(viewerRegion).queryByText("Location not recorded")).not.toBeInTheDocument();
   });
 });
