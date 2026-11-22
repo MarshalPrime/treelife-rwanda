@@ -10,6 +10,7 @@ import { useAuth } from "@/lib/auth";
 import { coordinateText, formatWhen, label, treeStatuses } from "@/lib/labels";
 import { choiceLabel, plantingMethods, soilTypes, terrains, waterSources, yesNoUnknown } from "@/lib/planting-choices";
 import { plantedAge } from "@/lib/health";
+import { TreeBiography, type BiographyEntry } from "@/components/tree-biography";
 import type { LifecycleEvent, Page, PlantingRecord, Site } from "@/lib/types";
 import { newRequestId, todayInput, validateCoordinates, validateDate } from "@/lib/validation";
 import "./details.css";
@@ -472,6 +473,7 @@ export function PlantingDetail({ mode }: { mode: "tree" | "batch" }) {
   const { canWrite, user } = useAuth();
   const [record, setRecord] = useState<PlantingRecord | null>(null);
   const [events, setEvents] = useState<LifecycleEvent[]>([]);
+  const [biography, setBiography] = useState<BiographyEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
   const [updatingStatus, setUpdatingStatus] = useState(false);
@@ -483,13 +485,17 @@ export function PlantingDetail({ mode }: { mode: "tree" | "batch" }) {
 
   useEffect(() => {
     let active = true;
+    const history = mode === "tree"
+      ? api<{ entries: BiographyEntry[] }>(`/trees/${params.id}/biography`)
+      : api<Page<LifecycleEvent>>(`/events?batch_id=${params.id}&page_size=20`);
     Promise.all([
       api<PlantingRecord>(`/${base}/${params.id}`),
-      api<Page<LifecycleEvent>>(`/events?${mode === "tree" ? "tree_id" : "batch_id"}=${params.id}&page_size=20`),
-    ]).then(([nextRecord, nextEvents]) => {
+      history,
+    ]).then(([nextRecord, nextHistory]) => {
       if (!active) return;
       setRecord(nextRecord);
-      setEvents(nextEvents.items);
+      if (mode === "tree") setBiography((nextHistory as { entries: BiographyEntry[] }).entries);
+      else setEvents((nextHistory as Page<LifecycleEvent>).items);
     }).catch((caught: Error) => {
       if (active) setError(caught.message);
     });
@@ -548,7 +554,8 @@ export function PlantingDetail({ mode }: { mode: "tree" | "batch" }) {
   ].filter(([, value]) => Boolean(value)) as [string, string][];
 
   const healthAssessed = record.status !== "planted" && record.status !== "unknown";
-  const openTasksCount = (!record.has_coordinates ? 1 : 0) + (!healthAssessed ? 1 : 0) + (events.length === 0 ? 1 : 0);
+  const recordedActivities = mode === "tree" ? biography.filter((entry) => entry.chapter !== "planting").length : events.length;
+  const openTasksCount = (!record.has_coordinates ? 1 : 0) + (!healthAssessed ? 1 : 0) + (recordedActivities === 0 ? 1 : 0);
 
   return (
     <div className="page detail-page">
@@ -605,7 +612,7 @@ export function PlantingDetail({ mode }: { mode: "tree" | "batch" }) {
         <div className="detail-hero-actions">
           {canWrite ? <Link className="primary" href={`/${base}/${record.id}/edit`}>Edit</Link> : null}
           {isViewer || !record.site_id ? null : <Link className="secondary" href={`/sites/${record.site_id}`}>Open site</Link>}
-          {canWrite ? <button type="button" className="secondary" onClick={() => setShowEvent((open) => !open)}>+ Log inspection</button> : null}
+          {canWrite ? <button type="button" className="secondary" onClick={() => setShowEvent((open) => !open)}>{mode === "tree" ? "+ Add to biography" : "+ Log inspection"}</button> : null}
         </div>
       </section>
 
@@ -647,15 +654,26 @@ export function PlantingDetail({ mode }: { mode: "tree" | "batch" }) {
             </section>
           ) : null}
 
-          <EventSection
-            events={events}
-            canWrite={canWrite}
-            show={showEvent}
-            onToggle={() => setShowEvent((value) => !value)}
-            target={mode === "tree" ? { tree_id: record.id } : { batch_id: record.id }}
-            onSaved={() => { setShowEvent(false); setVersion((value) => value + 1); }}
-            hideRecorder={isViewer}
-          />
+          {mode === "tree" ? (
+            <TreeBiography
+              treeId={record.id}
+              entries={biography}
+              canWrite={canWrite}
+              show={showEvent}
+              onToggle={() => setShowEvent((value) => !value)}
+              onSaved={() => { setShowEvent(false); setVersion((value) => value + 1); }}
+            />
+          ) : (
+            <EventSection
+              events={events}
+              canWrite={canWrite}
+              show={showEvent}
+              onToggle={() => setShowEvent((value) => !value)}
+              target={{ batch_id: record.id }}
+              onSaved={() => { setShowEvent(false); setVersion((value) => value + 1); }}
+              hideRecorder={isViewer}
+            />
+          )}
         </div>
 
         <div className="detail-col-side">
@@ -690,9 +708,11 @@ export function PlantingDetail({ mode }: { mode: "tree" | "batch" }) {
                   <button type="button" onClick={() => handleStatusChange("surviving")}>Mark surviving</button>
                 ) : null}
               </li>
-              <li className={`detail-check-item ${events.length > 0 ? "done" : ""}`}>
-                <span>{events.length > 0 ? `✓ ${events.length} inspection${events.length === 1 ? "" : "s"} logged` : "Log first field inspection"}</span>
-                {events.length === 0 && canWrite ? (
+              <li className={`detail-check-item ${recordedActivities > 0 ? "done" : ""}`}>
+                <span>{recordedActivities > 0
+                  ? `✓ ${recordedActivities} ${mode === "tree" ? (recordedActivities === 1 ? "activity" : "activities") : (recordedActivities === 1 ? "inspection" : "inspections")} logged`
+                  : (mode === "tree" ? "Log the first care or inspection" : "Log first field inspection")}</span>
+                {recordedActivities === 0 && canWrite ? (
                   <button type="button" onClick={() => setShowEvent(true)}>Log</button>
                 ) : null}
               </li>

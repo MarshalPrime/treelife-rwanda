@@ -49,6 +49,7 @@ A repeated `client_request_id` returns the original record with `200` and `X-Ide
 | GET, PATCH | `/sites/{id}` | Read or update a site |
 | GET, POST | `/trees` | List or create an individual tree |
 | GET, PATCH | `/trees/{id}` | Read or update a tree |
+| GET | `/trees/{id}/biography` | Chronological planting, care, inspection, and harvest records for one tree |
 | GET, POST | `/batches` | List or create a planting batch |
 | GET, PATCH | `/batches/{id}` | Read or update a batch |
 | GET, POST | `/events` | List or record a lifecycle event |
@@ -83,8 +84,12 @@ Map: `kind` (`site`, `tree`, `batch`, or `all`), `species_id`, `category`, `stat
 | GET, POST | `/seedling-lots` | List or record nursery production |
 | GET, POST | `/distributions` | List or move seedlings to a site |
 | GET, POST | `/growth` | List or record a height, diameter, or survival count |
-| GET, POST | `/maintenance` | List or record pruning, watering, mulching, pest control, or staking |
+| GET, POST | `/maintenance` | List or record pruning, watering, fertilizer, weeding, mulching, pest control, environmental damage, or staking |
 | GET, POST | `/harvests` | List or record fruit in kilograms or as a count |
+| GET | `/harvests/forecast` | Expected next harvest from standing trees. Separate from recorded harvests and sales |
+| GET | `/harvest-offers` | Expected harvests a viewer can explore, grouped by farmer, species, and district |
+| GET, POST | `/harvest-interests` | List or send a request to discuss an expected harvest. A request does not change the forecast or a recorded harvest |
+| PATCH | `/harvest-interests/{id}` | Accept, reject, complete, or cancel a request |
 | GET, POST | `/sales` | List or record a sale in Rwandan francs |
 | GET, POST | `/advisories` | List or write an advice note |
 | GET | `/analytics` | Counts for the chain, including harvest by species and sites by district |

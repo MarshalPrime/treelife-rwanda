@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PlantingDetail } from "@/components/details";
@@ -84,6 +84,19 @@ describe("PlantingDetail", () => {
         });
       }
       if (path.startsWith("/events")) return Promise.resolve({ items: [], total: 0, page: 1, page_size: 20 });
+      if (path.endsWith("/biography")) {
+        return Promise.resolve({
+          entries: [{
+            id: "plant-1",
+            occurred_on: "2026-01-10",
+            chapter: "planting",
+            title: "Planted",
+            detail: "Transplanted from a nursery. Demo Huye",
+            public_code: "TREE-2026-29GHEY",
+            recorded_by_name: "Officer One",
+          }],
+        });
+      }
       return Promise.resolve(sampleTree);
     });
 
@@ -93,6 +106,7 @@ describe("PlantingDetail", () => {
     expect(screen.getByText("Planting Context")).toBeInTheDocument();
     expect(screen.getByText("Loam")).toBeInTheDocument();
     expect(screen.getByText("3 open")).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "Tree biography" })).getByText("Planted")).toBeInTheDocument();
 
     await user.selectOptions(screen.getByLabelText("Update status"), "surviving");
     await waitFor(() =>
@@ -119,26 +133,28 @@ describe("PlantingDetail", () => {
     mocks.role = "viewer";
     mocks.canWrite = false;
     mocks.api.mockImplementation((path: string) => {
-      if (path.startsWith("/events")) {
+      if (path.endsWith("/biography")) {
         return Promise.resolve({
-          items: [{
-            id: "ev-1",
-            public_code: "EVT-1",
-            tree_id: "tree-1",
-            batch_id: null,
-            site_id: null,
-            event_type: "inspection",
-            event_date: "2026-02-01",
-            status_after: "surviving",
-            survival_count: null,
-            notes: "Canopy healthy",
-            data_origin: "field_entry",
-            recorded_by_name: "Officer One",
-            created_at: "2026-02-01T10:00:00Z",
-          }],
-          total: 1,
-          page: 1,
-          page_size: 20,
+          entries: [
+            {
+              id: "plant-1",
+              occurred_on: "2026-01-10",
+              chapter: "planting",
+              title: "Planted",
+              detail: "Demo Huye",
+              public_code: "TREE-2026-29GHEY",
+              recorded_by_name: null,
+            },
+            {
+              id: "ev-1",
+              occurred_on: "2026-02-01",
+              chapter: "inspection",
+              title: "Inspection",
+              detail: "Canopy healthy",
+              public_code: "EVT-1",
+              recorded_by_name: null,
+            },
+          ],
         });
       }
       return Promise.resolve(sampleTree);

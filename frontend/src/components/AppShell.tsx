@@ -30,6 +30,7 @@ const fieldLinks = [
 
 const adminLinks = [
   ["/dashboard", "Overview"],
+  ["/discover", "Harvests"],
   ["/monitoring", "Monitoring"],
   ["/fmes-preparation", "FMES preparation"],
   ["/analytics", "Reports"],
@@ -47,7 +48,7 @@ const farmerLinks = fieldLinks.filter(([href]) => href !== "/farmers");
 
 const viewerLinks = [
   ["/dashboard", "Overview"],
-  ["/monitoring", "Monitoring"],
+  ["/discover", "Harvests"],
   ["/map", "Map"],
   ["/trees", "Trees"],
   ["/forests", "Forests"],
@@ -57,6 +58,7 @@ function NavIcon({ path }: { path: string }) {
   const common = { className: "shell-nav-icon", viewBox: "0 0 20 20", fill: "none", stroke: "currentColor", strokeWidth: 1.7, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true };
   if (path === "/dashboard") return <svg {...common}><rect x="3" y="3" width="5" height="5" rx="1" /><rect x="12" y="3" width="5" height="5" rx="1" /><rect x="3" y="12" width="5" height="5" rx="1" /><rect x="12" y="12" width="5" height="5" rx="1" /></svg>;
   if (path === "/monitoring") return <svg {...common}><circle cx="10" cy="10" r="6.5" /><path d="M10 5.5v4.5l3 2" /><path d="M4.5 4.5 3 3M15.5 4.5 17 3" /></svg>;
+  if (path === "/discover") return <svg {...common}><path d="M4 8h12v8H4z" /><path d="M7 8V6a3 3 0 0 1 6 0v2" /><path d="M10 11v2" /></svg>;
   if (path === "/fmes-preparation") return <svg {...common}><path d="M4 4.5h12v11H4z" /><path d="M7 8h6M7 11h4M7 14h6" /><path d="m13.5 13 1.5 1.5 2.5-3" /></svg>;
   if (path === "/map") return <svg {...common}><path d="M10 17s5-4.5 5-8.5a5 5 0 1 0-10 0C5 12.5 10 17 10 17Z" /><circle cx="10" cy="8.5" r="1.6" /></svg>;
   if (path === "/farmers" || path === "/agents") return <svg {...common}><circle cx="10" cy="6.5" r="2.5" /><path d="M5.5 16c.5-2.5 2-4 4.5-4s4 1.5 4.5 4" /><path d="M4 9.5h2M14 9.5h2" /></svg>;
@@ -101,7 +103,7 @@ export function pathAllowed(role: string, pathname: string, _carbonMonitoring?: 
   }
   if (role === "viewer") {
     if (pathname.endsWith("/new") || pathname.includes("/edit")) return false;
-    return pathname === "/dashboard" || pathname === "/monitoring" || pathname === "/map" || pathname === "/trees" || pathname === "/forests" || pathname === "/advice" || /^\/trees\/[^/]+$/.test(pathname) || /^\/forests\/[^/]+$/.test(pathname);
+    return pathname === "/dashboard" || pathname === "/discover" || pathname === "/map" || pathname === "/trees" || pathname === "/forests" || pathname === "/advice" || /^\/trees\/[^/]+$/.test(pathname) || /^\/forests\/[^/]+$/.test(pathname);
   }
   if (role === "farmer") {
     if (pathname === "/farmers" || pathname.startsWith("/farmers/")) return false;
@@ -213,7 +215,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const roleName = user?.role === "farmer" ? "Smallholder farmer" : user?.role === "field_officer" ? "Field officer" : user?.role === "admin" ? "Administrator" : "Viewer";
   const links = [...linksForRole(user?.role, user?.carbon_monitoring), ...(user?.role === "admin" ? [["/messages", "Messages"], ["/audit", "Audit log"]] : [])];
   const groups = [
-    { title: "Workspace", paths: ["/dashboard", "/monitoring", "/map"] },
+    { title: "Workspace", paths: ["/dashboard", "/discover", "/monitoring", "/map"] },
     { title: "Institutional", paths: ["/fmes-preparation"] },
     { title: "Planting & people", paths: ["/agents", "/sites", "/trees", "/batches", "/forests", "/farmers", "/species"] },
     { title: "Care & production", paths: ["/nursery", "/field", "/harvest", "/carbon"] },

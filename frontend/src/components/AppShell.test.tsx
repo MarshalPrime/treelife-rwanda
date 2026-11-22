@@ -21,7 +21,9 @@ afterEach(cleanup);
 
 describe("workspace navigation", () => {
   it("keeps viewer and administrator route permissions", () => {
-    expect(linksForRole("viewer").map(([path]) => path)).toEqual(["/dashboard", "/monitoring", "/map", "/trees", "/forests"]);
+    expect(linksForRole("viewer").map(([path]) => path)).toEqual(["/dashboard", "/discover", "/map", "/trees", "/forests"]);
+    expect(pathAllowed("viewer", "/monitoring")).toBe(false);
+    expect(pathAllowed("viewer", "/discover")).toBe(true);
     expect(pathAllowed("viewer", "/trees/new")).toBe(false);
     expect(pathAllowed("viewer", "/advice")).toBe(true);
     expect(pathAllowed("admin", "/advice")).toBe(true);

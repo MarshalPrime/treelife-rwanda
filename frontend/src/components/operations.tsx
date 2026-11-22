@@ -3,11 +3,13 @@
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
 import { Banner, Field } from "@/components/AppShell";
-import { FarmerBoard } from "@/components/farmer-board";
-import { RegistrationProgress } from "@/components/registration-progress";
 import { DashboardView } from "@/components/dashboard-view";
+import { BuyerRequests } from "@/components/discover";
+import { FarmerBoard } from "@/components/farmer-board";
+import { HarvestForecast } from "@/components/harvest-forecast";
 import { HarvestFeedback, HarvestNotices, HarvestSummary } from "@/components/harvest-insights";
 import { TreePlace } from "@/components/forms";
+import { RegistrationProgress } from "@/components/registration-progress";
 import { ApiError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { newRequestId, optionalNumber, todayInput, validateCoordinates } from "@/lib/validation";
@@ -983,6 +985,14 @@ export function HarvestPage() {
         </div>
       ) : (
         <>
+          {user?.role === "farmer" || user?.role === "field_officer" ? (
+            <section className="card" aria-label="Buyer interest">
+              <h2>Buyer interest</h2>
+              <p className="help">Requests from viewers. Accepting one does not change the forecast or a recorded harvest.</p>
+              <BuyerRequests refreshKey={version} />
+            </section>
+          ) : null}
+          <HarvestForecast refreshKey={version} />
           {user?.role === "field_officer" ? <HarvestNotices refreshKey={version} /> : null}
           <HarvestSummary refreshKey={version} />
           <HarvestFeedback refreshKey={version} harvests={harvests} />

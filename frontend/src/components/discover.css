@@ -1,0 +1,20 @@
+.discover-kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 180px)); gap: 28px; margin: 8px 0 22px; }
+.discover-kpis span { display: block; color: var(--muted); font-size: .85rem; }
+.discover-kpis strong { display: block; margin-top: 4px; font-size: 2rem; font-weight: 650; letter-spacing: -0.03em; }
+.discover-kpis small { color: var(--muted); }
+.discover-list { display: grid; }
+.discover-offer { display: grid; grid-template-columns: 72px 1fr; gap: 14px; padding: 16px 0; border-top: 1px solid var(--line); }
+.discover-photo { width: 72px; height: 72px; border-radius: 12px; background: #e7f0e6 center / cover no-repeat; }
+.discover-offer h3 { margin: 0 0 2px; font-size: 1.05rem; }
+.discover-offer p { margin: 0; }
+.discover-meta { color: var(--muted); font-size: .85rem; }
+.discover-pill { display: inline-flex; margin-top: 8px; padding: 2px 8px; border-radius: 999px; background: #e7f1ff; color: #1d4f91; font-size: .75rem; font-weight: 650; }
+.discover-form { grid-column: 1 / -1; }
+.discover-requests { display: grid; gap: 12px; }
+.discover-request { display: grid; gap: 6px; padding-top: 12px; border-top: 1px solid var(--line); }
+.discover-status { justify-self: start; padding: 2px 8px; border-radius: 999px; background: var(--line); font-size: .75rem; font-weight: 650; }
+.discover-status.is-pending { background: #fff4d6; }
+.discover-status.is-accepted, .discover-status.is-completed { background: #e5f6ea; }
+.discover-status.is-rejected, .discover-status.is-cancelled { background: #f8e6e4; }
+.discover-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.discover-actions input { min-width: 180px; }

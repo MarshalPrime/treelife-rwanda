@@ -296,6 +296,9 @@ class MaintenanceCreate(BaseModel):
             "mulching",
             "pest_control",
             "staking",
+            "fertilizer",
+            "weeding",
+            "environmental",
             "other",
         }:
             raise ValueError("Choose a maintenance activity.")
@@ -877,3 +880,125 @@ class AssistantRequest(BaseModel):
 
 class AssistantReply(BaseModel):
     reply: str
+
+
+class ForecastTotal(BaseModel):
+    unit: Literal["kg", "count"]
+    low: float
+    high: float
+    trees: int
+
+
+class ForecastSpecies(BaseModel):
+    species_common_name: str
+    unit: Literal["kg", "count"]
+    low: float
+    high: float
+    trees: int
+    source: str | None = None
+
+
+class ForecastGroup(BaseModel):
+    label: str
+    unit: Literal["kg", "count"]
+    low: float
+    high: float
+    trees: int
+
+
+class ForecastPlanting(BaseModel):
+    public_code: str
+    species_common_name: str
+    trees: int
+    unit: Literal["kg", "count"] | None = None
+    low: float | None = None
+    high: float | None = None
+    basis: Literal["recorded", "household", "reference", "bearing", "young", "none"]
+    note: str
+
+
+class HarvestForecast(BaseModel):
+    role: str
+    totals: list[ForecastTotal]
+    by_species: list[ForecastSpecies]
+    by_district: list[ForecastGroup]
+    by_province: list[ForecastGroup]
+    by_farmer: list[ForecastGroup]
+    plantings: list[ForecastPlanting]
+    young_trees: int
+    bearing_trees: int
+    unestimated_trees: int
+
+
+class HarvestOffer(BaseModel):
+    farmer_id: uuid.UUID
+    farmer_name: str
+    species_id: uuid.UUID
+    species_common_name: str
+    farm_label: str | None = None
+    province: str | None = None
+    district: str | None = None
+    sector: str | None = None
+    trees: int
+    unit: Literal["kg", "count"]
+    low: float
+    high: float
+    period: str
+
+
+class HarvestInterestCreate(BaseModel):
+    farmer_id: uuid.UUID
+    species_id: uuid.UUID
+    district: str | None = Field(default=None, max_length=120)
+    quantity: float
+    unit: Literal["kg", "count"]
+    period: str = Field(min_length=1, max_length=120)
+    notes: str | None = Field(default=None, max_length=2000)
+
+    @field_validator("period")
+    @classmethod
+    def clean_period(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("Enter the period you want to collect.")
+        return cleaned
+
+    @field_validator("notes", "district")
+    @classmethod
+    def clean_interest_text(cls, value: str | None) -> str | None:
+        return clean_optional_text(value)
+
+    @model_validator(mode="after")
+    def check_quantity(self) -> HarvestInterestCreate:
+        check_positive_number(self.quantity, "Quantity")
+        return self
+
+
+class HarvestInterestUpdate(BaseModel):
+    status: Literal["accepted", "rejected", "completed", "cancelled"]
+    response_note: str | None = Field(default=None, max_length=2000)
+
+    @field_validator("response_note")
+    @classmethod
+    def clean_reply(cls, value: str | None) -> str | None:
+        return clean_optional_text(value)
+
+
+class HarvestInterestRead(BaseModel):
+    id: uuid.UUID
+    public_code: str
+    farmer_id: uuid.UUID
+    farmer_name: str
+    species_common_name: str
+    farm_label: str | None = None
+    province: str | None = None
+    district: str | None = None
+    sector: str | None = None
+    quantity: float
+    unit: Literal["kg", "count"]
+    period: str
+    notes: str | None = None
+    status: Literal["pending", "accepted", "rejected", "completed", "cancelled"]
+    response_note: str | None = None
+    requester_name: str
+    created_at: datetime

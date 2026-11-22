@@ -8,6 +8,8 @@ import { Banner } from "@/components/AppShell";
 import { CarbonOverview } from "@/components/carbon-dashboard";
 import { BreakdownChart, SeriesChart, harvestLines, plantingLines, salesLines } from "@/components/dashboard-charts";
 import { DashboardEmpty, DashboardKpi, DashboardKpiGrid, DashboardSkeleton } from "@/components/dashboard-ui";
+import { BuyerInterestLink } from "@/components/discover";
+import { HarvestForecast } from "@/components/harvest-forecast";
 import { HarvestNotices, HarvestSummary } from "@/components/harvest-insights";
 import { HealthBadge, HealthLegend, IssuePill, MapPopup, RecordKindIcon, TreeCard, type FollowUpReason } from "@/components/tree-card";
 import { api } from "@/lib/api";
@@ -873,6 +875,14 @@ export function DashboardView({ mode = "dashboard" }: { mode?: "dashboard" | "re
           <section className="card"><div className="page-head"><h2>Sales over time</h2><span className="help">Recorded sales in RWF</span></div><SeriesChart title="Sales" series={response.series} lines={salesLines} unit="RWF" monthly={filters.range === "all"} /></section>
         </div> : null}
 
+        {role === "admin" && mode === "dashboard" ? <BuyerInterestLink /> : null}
+        {role === "admin" && mode === "dashboard" ? (
+          <HarvestForecast
+            district={filters.district}
+            speciesId={filters.species_id}
+            refreshKey={response.generated_at}
+          />
+        ) : null}
         {!viewer ? <HarvestSummary refreshKey={response.generated_at} /> : null}
         {role === "admin" || role === "field_officer" ? <HarvestNotices refreshKey={response.generated_at} /> : null}
 

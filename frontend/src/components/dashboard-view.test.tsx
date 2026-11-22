@@ -31,9 +31,12 @@ vi.mock("next/dynamic", () => ({
 
 const emptyMap: MapResponse = { type: "FeatureCollection", features: [], unlocated: [], truncated: false };
 const quietHarvest = { harvested_kg: 0, harvested_count: 0, sold_kg: 0, sold_count: 0, sales_rwf: 0, personal_kg: 0, personal_count: 0, stored_kg: 0, stored_count: 0, given_kg: 0, given_count: 0, other_kg: 0, other_count: 0, unassigned_kg: 0, unassigned_count: 0, shares: [], history: [] };
+const quietForecast = { role: "admin", totals: [], by_species: [], by_district: [], by_province: [], by_farmer: [], plantings: [], young_trees: 0, bearing_trees: 0, unestimated_trees: 0 };
 const quietCarbon = { total_tonnes_co2e: 0, distinct_trees: 0, distinct_species: 0, agents: 0, accepted_measurements: 0, pending_measurements: 0, correction_measurements: 0, methodology: "chave2014-eq4", methodology_version: "1" };
 function dashboardApi(path: string, dashboard: unknown, map: unknown = emptyMap) {
+  if (path.startsWith("/harvest-interests")) return Promise.resolve([]);
   if (path.startsWith("/harvest-notices")) return Promise.resolve([]);
+  if (path.startsWith("/harvests/forecast")) return Promise.resolve(quietForecast);
   if (path.startsWith("/harvests/")) return Promise.resolve(quietHarvest);
   if (path.startsWith("/carbon/overview")) return Promise.resolve(quietCarbon);
   if (path.startsWith("/dashboard/map") || path.startsWith("/map")) return Promise.resolve(map);
@@ -89,6 +92,7 @@ describe("dashboard requests and role behavior", () => {
     expect(screen.getByText("Critical")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Harvest over time" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Sales over time" })).toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: "Harvest forecast" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Register/ })).not.toBeInTheDocument();
   });
 
@@ -245,6 +249,7 @@ describe("dashboard requests and role behavior", () => {
       }],
     };
     mocks.api.mockImplementation((path: string) => {
+      if (path.startsWith("/harvests/forecast")) return Promise.resolve(quietForecast);
       if (path.startsWith("/harvests/")) return Promise.resolve(harvestData);
       return dashboardApi(path, response("admin", 1250));
     });

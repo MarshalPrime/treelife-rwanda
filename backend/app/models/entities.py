@@ -934,7 +934,8 @@ class MaintenanceActivity(Base):
     __tablename__ = "maintenance_activities"
     __table_args__ = (
         CheckConstraint(
-            "activity_type IN ('pruning', 'watering', 'mulching', 'pest_control', 'staking', 'other')",
+            "activity_type IN ('pruning', 'watering', 'mulching', 'pest_control', 'staking', "
+            "'fertilizer', 'weeding', 'environmental', 'other')",
             name="ck_maintenance_type",
         ),
         CheckConstraint(
@@ -1275,6 +1276,94 @@ class SpeciesCarbonParameter(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow, server_default=func.now()
     )
+
+
+class SpeciesYieldReference(Base):
+    """Published yield for one productive tree. Empty means that species is not estimated."""
+
+    __tablename__ = "species_yield_references"
+    __table_args__ = (
+        CheckConstraint(
+            "years_to_bearing >= 1 AND years_to_cited_yield >= years_to_bearing",
+            name="ck_species_yield_years",
+        ),
+        CheckConstraint(
+            "quantity_low > 0 AND quantity_high >= quantity_low AND quantity_high <= 1000000",
+            name="ck_species_yield_quantity",
+        ),
+        CheckConstraint("unit IN ('kg', 'count')", name="ck_species_yield_unit"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    scientific_name: Mapped[str] = mapped_column(String(200), unique=True, nullable=False)
+    years_to_bearing: Mapped[int] = mapped_column(Integer, nullable=False)
+    years_to_cited_yield: Mapped[int] = mapped_column(Integer, nullable=False)
+    quantity_low: Mapped[float] = mapped_column(Float, nullable=False)
+    quantity_high: Mapped[float] = mapped_column(Float, nullable=False)
+    unit: Mapped[str] = mapped_column(String(16), nullable=False)
+    source: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow, server_default=func.now()
+    )
+
+
+class HarvestInterest(Base):
+    """A buyer's request to discuss an expected harvest. It does not reserve fruit."""
+
+    __tablename__ = "harvest_interests"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'accepted', 'rejected', 'completed', 'cancelled')",
+            name="ck_harvest_interests_status",
+        ),
+        CheckConstraint("unit IN ('kg', 'count')", name="ck_harvest_interests_unit"),
+        CheckConstraint(
+            "quantity > 0 AND quantity <= 1000000",
+            name="ck_harvest_interests_quantity",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    public_code: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
+    requester_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    farmer_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("farmers.id", ondelete="RESTRICT"), nullable=False
+    )
+    species_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("species.id", ondelete="RESTRICT"), nullable=False
+    )
+    province: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    district: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    sector: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    farm_label: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    quantity: Mapped[float] = mapped_column(Float, nullable=False)
+    unit: Mapped[str] = mapped_column(String(16), nullable=False)
+    period: Mapped[str] = mapped_column(String(120), nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="pending", server_default="pending"
+    )
+    response_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    responded_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        server_default=func.now(),
+        onupdate=utcnow,
+    )
+
+    requester: Mapped[User] = relationship(foreign_keys=[requester_id])
+    farmer: Mapped[Farmer] = relationship()
+    species: Mapped[Species] = relationship()
+    responder: Mapped[User | None] = relationship(foreign_keys=[responded_by])
 
 
 class CarbonMeasurement(Base):

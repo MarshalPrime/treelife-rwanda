@@ -651,6 +651,21 @@ class EventCreate(BaseModel):
         return self
 
 
+class BiographyEntry(BaseModel):
+    id: str
+    occurred_on: date
+    chapter: str
+    title: str
+    detail: str | None
+    public_code: str | None
+    recorded_by_name: str | None
+
+
+class TreeBiography(BaseModel):
+    tree_id: uuid.UUID
+    entries: list[BiographyEntry]
+
+
 class EventRead(BaseModel):
     id: uuid.UUID
     public_code: str

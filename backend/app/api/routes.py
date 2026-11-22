@@ -47,6 +47,7 @@ from app.schemas.entities import (
     SpeciesUpdate,
     StatsResponse,
     TokenResponse,
+    TreeBiography,
     TreeCreate,
     TreeRead,
     TreeUpdate,
@@ -75,7 +76,12 @@ from app.schemas.valuechain import (
     HarvestCreate,
     HarvestFeedbackCreate,
     HarvestFeedbackRead,
+    HarvestForecast,
+    HarvestInterestCreate,
+    HarvestInterestRead,
+    HarvestInterestUpdate,
     HarvestNoticeRead,
+    HarvestOffer,
     HarvestOverview,
     HarvestRead,
     LotCreate,
@@ -89,7 +95,15 @@ from app.schemas.valuechain import (
     SaleRead,
 )
 from app.services.assistant import reply as assistant_reply
+from app.services.biography import collect_tree_biography
 from app.services.dashboard import collect_agent_board
+from app.services.discovery import (
+    collect_offers,
+    create_interest,
+    list_interests,
+    update_interest,
+)
+from app.services.forecast import collect_forecast
 from app.services.forests import create_forest, get_forest, list_forests, to_read, update_forest
 from app.services.harvest import create_feedback, harvest_overview, list_feedback, list_notices
 from app.services.locations import child_places
@@ -431,6 +445,15 @@ def post_tree(
     tree, replay = create_tree(db, user, payload)
     mark_created(response, replay)
     return tree_to_read(tree)
+
+
+@router.get("/trees/{tree_id}/biography", response_model=TreeBiography)
+def get_tree_biography(
+    tree_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> TreeBiography:
+    return TreeBiography(tree_id=tree_id, entries=collect_tree_biography(db, user, tree_id))
 
 
 @router.get("/trees/{tree_id}", response_model=TreeRead)
@@ -1078,6 +1101,49 @@ def post_sale(
     row, replay = create_sale(db, user, payload)
     mark_created(response, replay)
     return next(item for item in get_sales(db) if item.id == row.id)
+
+
+@router.get("/harvest-offers", response_model=list[HarvestOffer])
+def get_harvest_offers(
+    db: Session = Depends(get_db), user: User = Depends(get_current_user)
+) -> list[HarvestOffer]:
+    return collect_offers(db, user)
+
+
+@router.get("/harvest-interests", response_model=list[HarvestInterestRead])
+def get_harvest_interests(
+    db: Session = Depends(get_db), user: User = Depends(get_current_user)
+) -> list[HarvestInterestRead]:
+    return list_interests(db, user)
+
+
+@router.post("/harvest-interests", response_model=HarvestInterestRead, status_code=201)
+def post_harvest_interest(
+    payload: HarvestInterestCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> HarvestInterestRead:
+    return create_interest(db, user, payload)
+
+
+@router.patch("/harvest-interests/{interest_id}", response_model=HarvestInterestRead)
+def patch_harvest_interest(
+    interest_id: uuid.UUID,
+    payload: HarvestInterestUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> HarvestInterestRead:
+    return update_interest(db, user, interest_id, payload)
+
+
+@router.get("/harvests/forecast", response_model=HarvestForecast)
+def get_harvest_forecast(
+    district: str | None = None,
+    species_id: uuid.UUID | None = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> HarvestForecast:
+    return collect_forecast(db, user, district=district, species_id=species_id)
 
 
 @router.get("/harvests/overview", response_model=HarvestOverview)
