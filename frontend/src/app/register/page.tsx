@@ -5,39 +5,31 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Banner } from "@/components/AppShell";
 import { AccountSourceChoice, AmisPreview, type AccountSource } from "@/components/account-source-choice";
+import { LanguageSwitch } from "@/components/language-switch";
 import { ApiError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { useI18n } from "@/lib/i18n";
+import type { MessageKey } from "@/lib/messages";
 import type { Role } from "@/lib/types";
 
-const roles: { value: Role; title: string; detail: string }[] = [
-  {
-    value: "field_officer",
-    title: "Field officer",
-    detail: "Register a tree or batch, and name the smallholder you are helping. The trees you record are acknowledged on your account.",
-  },
-  {
-    value: "farmer",
-    title: "Farmer",
-    detail: "Register trees for your household and record a nursery. After you sign in, add where you live from your account.",
-  },
-  {
-    value: "viewer",
-    title: "Viewer",
-    detail: "See recorded trees by species and district, and the map. Farmer and officer names stay hidden, and records cannot be changed.",
-  },
+const roles: { value: Role; title: MessageKey; detail: MessageKey }[] = [
+  { value: "field_officer", title: "auth.officer", detail: "auth.officerHelp" },
+  { value: "farmer", title: "auth.farmer", detail: "auth.farmerHelp" },
+  { value: "viewer", title: "auth.viewer", detail: "auth.viewerHelp" },
 ];
 
 function passwordChecks(password: string, confirm: string) {
   return [
-    { ok: password.length >= 8, text: "At least 8 characters" },
-    { ok: /[A-Za-z]/.test(password), text: "At least one letter" },
-    { ok: /\d/.test(password), text: "At least one number" },
-    { ok: password.length > 0 && password === confirm, text: "Both passwords match" },
+    { id: "length", ok: password.length >= 8, text: "auth.ruleLength" as MessageKey },
+    { id: "letter", ok: /[A-Za-z]/.test(password), text: "auth.ruleLetter" as MessageKey },
+    { id: "number", ok: /\d/.test(password), text: "auth.ruleNumber" as MessageKey },
+    { id: "match", ok: password.length > 0 && password === confirm, text: "auth.ruleMatch" as MessageKey },
   ];
 }
 
 export default function RegisterPage() {
   const { user, loading, login } = useAuth();
+  const { t } = useI18n();
   const router = useRouter();
   const [source, setSource] = useState<AccountSource>("treelife");
   const [role, setRole] = useState<Role>("farmer");
@@ -58,7 +50,7 @@ export default function RegisterPage() {
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     if (!passwordReady) {
-      setError(password !== confirm ? "The two passwords do not match." : "Choose a stronger password.");
+      setError(password !== confirm ? t("auth.mismatch") : t("auth.stronger"));
       return;
     }
     setSaving(true);
@@ -89,22 +81,23 @@ export default function RegisterPage() {
           <Link className="auth-mark" href="/" aria-label="TreeLife home">TL</Link>
           <div>
             <p className="lede">Ejo Labs</p>
-            <h1>Create an account</h1>
+            <h1>{t("auth.createTitle")}</h1>
           </div>
         </div>
         <div className="auth-choice-intro">
-          <p className="lede">Set up secure access</p>
-          <h2>Create an account</h2>
-          <p>Choose your account source, then tell TreeLife what you will manage.</p>
+          <LanguageSwitch />
+          <p className="lede">{t("auth.setup")}</p>
+          <h2>{t("auth.createTitle")}</h2>
+          <p>{t("auth.createHelp")}</p>
         </div>
         <AccountSourceChoice source={source} onChange={setSource} />
         {source === "amis" ? (
-          <AmisPreview returnLabel="Create a TreeLife account instead" onReturn={() => setSource("treelife")} />
+          <AmisPreview returnLabel={t("auth.createInstead")} onReturn={() => setSource("treelife")} />
         ) : (
           <>
             {error ? <Banner tone="error">{error}</Banner> : null}
             <fieldset className="role-choice">
-              <legend>Which account are you?</legend>
+              <legend>{t("auth.which")}</legend>
               {roles.map((choice) => (
                 <label key={choice.value} className={role === choice.value ? "role-option selected" : "role-option"}>
                   <input
@@ -115,23 +108,23 @@ export default function RegisterPage() {
                     onChange={() => setRole(choice.value)}
                   />
                   <span className="role-copy">
-                    <strong>{choice.title}</strong>
-                    <span className="help">{choice.detail}</span>
+                    <strong>{t(choice.title)}</strong>
+                    <span className="help">{t(choice.detail)}</span>
                   </span>
                 </label>
               ))}
             </fieldset>
             <div className="register-fields">
-              <label htmlFor="full_name">Full name
+              <label htmlFor="full_name">{t("auth.fullName")}
                 <input id="full_name" autoComplete="name" value={fullName} onChange={(event) => setFullName(event.target.value)} required />
               </label>
-              <label htmlFor="email">Email
+              <label htmlFor="email">{t("auth.email")}
                 <input id="email" type="email" autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} required />
               </label>
-              <label htmlFor="password">Password
+              <label htmlFor="password">{t("auth.password")}
                 <input id="password" type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} required />
               </label>
-              <label htmlFor="confirm_password">Confirm password
+              <label htmlFor="confirm_password">{t("auth.confirm")}
                 <input
                   id="confirm_password"
                   type="password"
@@ -143,18 +136,18 @@ export default function RegisterPage() {
                 />
               </label>
               {role === "farmer" ? null : (
-                <label className="register-field-full" htmlFor="organization_name">Organisation
+                <label className="register-field-full" htmlFor="organization_name">{t("auth.organisation")}
                   <input id="organization_name" value={organizationName} onChange={(event) => setOrganizationName(event.target.value)} />
                 </label>
               )}
             </div>
             <ul className="password-rules" aria-live="polite">
               {checks.map((check) => (
-                <li key={check.text} className={check.ok ? "met" : undefined}>{check.ok ? "Met" : "Needed"}: {check.text}</li>
+                <li key={check.id} className={check.ok ? "met" : undefined}>{check.ok ? t("auth.met") : t("auth.needed")}: {t(check.text)}</li>
               ))}
             </ul>
-            <button className="primary" type="submit" disabled={saving || !passwordReady}>{saving ? "Creating account…" : "Create account"}</button>
-            <p className="help">Already have an account? <Link href="/login">Sign in</Link></p>
+            <button className="primary" type="submit" disabled={saving || !passwordReady}>{saving ? t("auth.creating") : t("auth.createButton")}</button>
+            <p className="help">{t("auth.already")} <Link href="/login">{t("auth.signIn")}</Link></p>
           </>
         )}
       </form>

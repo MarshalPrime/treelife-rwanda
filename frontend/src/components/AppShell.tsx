@@ -5,53 +5,56 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { AssistantWidget } from "@/components/assistant";
 import { FarmerAccount } from "@/components/farmer-account";
+import { LanguageSwitch } from "@/components/language-switch";
 import { ApiError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { useI18n } from "@/lib/i18n";
+import type { MessageKey } from "@/lib/messages";
 import { readOutbox, removeOutbox } from "@/lib/outbox";
 import type { NotificationList } from "@/lib/types";
 import "./app-shell.css";
 
 const fieldLinks = [
-  ["/dashboard", "Overview"],
-  ["/monitoring", "Monitoring"],
-  ["/farmers", "Farmers"],
-  ["/sites", "Sites"],
-  ["/trees", "Trees"],
-  ["/batches", "Batches"],
-  ["/forests", "Forests"],
-  ["/nursery", "Nursery"],
-  ["/field", "Field"],
-  ["/harvest", "Harvest"],
-  ["/analytics", "Analytics"],
-  ["/map", "Map"],
-  ["/species", "Species"],
-  ["/about", "About"],
+  ["/dashboard", "nav.overview"],
+  ["/monitoring", "nav.monitoring"],
+  ["/farmers", "nav.farmers"],
+  ["/sites", "nav.sites"],
+  ["/trees", "nav.trees"],
+  ["/batches", "nav.batches"],
+  ["/forests", "nav.forests"],
+  ["/nursery", "nav.nursery"],
+  ["/field", "nav.field"],
+  ["/harvest", "nav.harvest"],
+  ["/analytics", "nav.analytics"],
+  ["/map", "nav.map"],
+  ["/species", "nav.species"],
+  ["/about", "nav.about"],
 ];
 
 const adminLinks = [
-  ["/dashboard", "Overview"],
-  ["/discover", "Harvests"],
-  ["/monitoring", "Monitoring"],
-  ["/fmes-preparation", "FMES preparation"],
-  ["/analytics", "Reports"],
-  ["/map", "Map"],
-  ["/agents", "Agents"],
-  ["/sites", "Sites"],
-  ["/trees", "Trees"],
-  ["/batches", "Batches"],
-  ["/forests", "Forests"],
-  ["/species", "Species"],
-  ["/about", "About"],
+  ["/dashboard", "nav.overview"],
+  ["/discover", "nav.harvests"],
+  ["/monitoring", "nav.monitoring"],
+  ["/fmes-preparation", "nav.fmes"],
+  ["/analytics", "nav.reports"],
+  ["/map", "nav.map"],
+  ["/agents", "nav.agents"],
+  ["/sites", "nav.sites"],
+  ["/trees", "nav.trees"],
+  ["/batches", "nav.batches"],
+  ["/forests", "nav.forests"],
+  ["/species", "nav.species"],
+  ["/about", "nav.about"],
 ];
 
 const farmerLinks = fieldLinks.filter(([href]) => href !== "/farmers");
 
 const viewerLinks = [
-  ["/dashboard", "Overview"],
-  ["/discover", "Harvests"],
-  ["/map", "Map"],
-  ["/trees", "Trees"],
-  ["/forests", "Forests"],
+  ["/dashboard", "nav.overview"],
+  ["/discover", "nav.harvests"],
+  ["/map", "nav.map"],
+  ["/trees", "nav.trees"],
+  ["/forests", "nav.forests"],
 ];
 
 function NavIcon({ path }: { path: string }) {
@@ -87,7 +90,7 @@ export function linksForRole(role: string | undefined, _carbonMonitoring?: strin
   const showCarbon = role === "admin" || role === "field_officer";
   if (showCarbon && !links.some(([path]) => path === "/carbon")) {
     const harvest = links.findIndex(([path]) => path === "/harvest");
-    links.splice(harvest >= 0 ? harvest + 1 : links.length, 0, ["/carbon", "Carbon"]);
+    links.splice(harvest >= 0 ? harvest + 1 : links.length, 0, ["/carbon", "nav.carbon"]);
   }
   return links;
 }
@@ -122,6 +125,7 @@ export function pathAllowed(role: string, pathname: string, _carbonMonitoring?: 
 function NotificationBell() {
   const pathname = usePathname();
   const { user } = useAuth();
+  const { t } = useI18n();
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
@@ -139,7 +143,7 @@ function NotificationBell() {
   }, [pathname, user?.id]);
 
   return (
-    <Link className="shell-notification" href="/notifications" aria-label="Notifications">
+    <Link className="shell-notification" href="/notifications" aria-label={t("shell.notifications")}>
       <span aria-hidden="true">🔔</span>
       {unreadCount > 0 ? <b>{unreadCount > 99 ? "99+" : unreadCount}</b> : null}
     </Link>
@@ -150,6 +154,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout } = useAuth();
+  const { t } = useI18n();
   const [pending, setPending] = useState(0);
   const [syncNote, setSyncNote] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -212,16 +217,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   const hasAccount = user?.role === "farmer" || user?.role === "field_officer";
-  const roleName = user?.role === "farmer" ? "Smallholder farmer" : user?.role === "field_officer" ? "Field officer" : user?.role === "admin" ? "Administrator" : "Viewer";
-  const links = [...linksForRole(user?.role, user?.carbon_monitoring), ...(user?.role === "admin" ? [["/messages", "Messages"], ["/audit", "Audit log"]] : [])];
+  const roleName = t(user?.role === "farmer" ? "shell.role.farmer" : user?.role === "field_officer" ? "shell.role.officer" : user?.role === "admin" ? "shell.role.admin" : "shell.role.viewer");
+  const links = [...linksForRole(user?.role, user?.carbon_monitoring), ...(user?.role === "admin" ? [["/messages", "nav.messages"], ["/audit", "nav.audit"]] : [])];
   const groups = [
-    { title: "Workspace", paths: ["/dashboard", "/discover", "/monitoring", "/map"] },
-    { title: "Institutional", paths: ["/fmes-preparation"] },
-    { title: "Planting & people", paths: ["/agents", "/sites", "/trees", "/batches", "/forests", "/farmers", "/species"] },
-    { title: "Care & production", paths: ["/nursery", "/field", "/harvest", "/carbon"] },
-    { title: "Insights", paths: ["/analytics", "/messages", "/audit", "/about"] },
+    { title: "group.workspace" as MessageKey, paths: ["/dashboard", "/discover", "/monitoring", "/map"] },
+    { title: "group.institutional" as MessageKey, paths: ["/fmes-preparation"] },
+    { title: "group.planting" as MessageKey, paths: ["/agents", "/sites", "/trees", "/batches", "/forests", "/farmers", "/species"] },
+    { title: "group.care" as MessageKey, paths: ["/nursery", "/field", "/harvest", "/carbon"] },
+    { title: "group.insights" as MessageKey, paths: ["/analytics", "/messages", "/audit", "/about"] },
   ];
-  const currentPage = links.find(([href]) => pathname === href || pathname.startsWith(`${href}/`))?.[1] ?? "TreeLife";
+  const currentKey = links.find(([href]) => pathname === href || pathname.startsWith(`${href}/`))?.[1];
+  const currentPage = currentKey ? t(currentKey as MessageKey) : "TreeLife";
 
   function signOut() {
     logout();
@@ -230,29 +236,29 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="app-shell shell-v2">
-      <a className="skip" href="#main">Skip to content</a>
-      {menuOpen ? <button className="shell-backdrop" type="button" aria-label="Close navigation backdrop" tabIndex={-1} onClick={() => setMenuOpen(false)} /> : null}
+      <a className="skip" href="#main">{t("shell.skip")}</a>
+      {menuOpen ? <button className="shell-backdrop" type="button" aria-label={t("shell.closeBackdrop")} tabIndex={-1} onClick={() => setMenuOpen(false)} /> : null}
       <aside
         className={`sidebar${menuOpen ? " shell-menu-open" : ""}`}
         id="navigation-panel"
         ref={navigation}
         role={menuOpen ? "dialog" : undefined}
         aria-modal={menuOpen ? true : undefined}
-        aria-label={menuOpen ? "Navigation" : undefined}
+        aria-label={menuOpen ? t("shell.navigation") : undefined}
       >
-        <button className="shell-close ghost" type="button" ref={closeMenuButton} onClick={() => setMenuOpen(false)} aria-label="Close navigation">Close <span aria-hidden="true">×</span></button>
+        <button className="shell-close ghost" type="button" ref={closeMenuButton} onClick={() => setMenuOpen(false)} aria-label={t("shell.closeNav")}>{t("shell.closeWord")} <span aria-hidden="true">×</span></button>
         <Link className="brand" href="/dashboard" onClick={() => setMenuOpen(false)}>
           <strong>TreeLife</strong>
-          <span>Growing Rwanda, together</span>
+          <span>{t("shell.growing")}</span>
         </Link>
         <nav className="nav" aria-label="Primary">
           {groups.map((group) => {
             const items = links.filter(([href]) => group.paths.includes(href));
             if (!items.length) return null;
             return <div className="shell-nav-group" key={group.title}>
-              <span className="shell-nav-heading">{group.title}</span>
+              <span className="shell-nav-heading">{t(group.title)}</span>
               {items.map(([href, name]) => <Link key={href} href={href} onClick={() => setMenuOpen(false)} aria-current={pathname === href || pathname.startsWith(`${href}/`) ? "page" : undefined}>
-                <NavIcon path={href} />{name}
+                <NavIcon path={href} />{t(name as MessageKey)}
               </Link>)}
             </div>;
           })}
@@ -260,19 +266,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="sidebar-foot">
           <p>{user?.full_name}</p>
           <small>{roleName}</small>
-          <button className="ghost" type="button" onClick={signOut}>Log out</button>
+          <button className="ghost" type="button" onClick={signOut}>{t("shell.logout")}</button>
         </div>
       </aside>
       <div className="shell-workspace" inert={menuOpen}>
         <header className="shell-header">
-          <button className="shell-menu-toggle secondary" type="button" ref={menuTrigger} aria-controls="navigation-panel" aria-expanded={menuOpen} onClick={() => setMenuOpen(true)}><span aria-hidden="true">☰</span> Menu</button>
+          <button className="shell-menu-toggle secondary" type="button" ref={menuTrigger} aria-controls="navigation-panel" aria-expanded={menuOpen} onClick={() => setMenuOpen(true)}><span aria-hidden="true">☰</span> {t("shell.menu")}</button>
           <div className="shell-breadcrumb"><span>TreeLife Rwanda</span><strong>{currentPage}</strong></div>
-          <div className="shell-header-actions"><NotificationBell /><div className="shell-identity"><span>{user?.full_name}<small>{roleName}</small></span>{hasAccount ? <FarmerAccount /> : <span className="shell-initial" aria-hidden="true">{user?.full_name.slice(0, 1).toUpperCase()}</span>}</div></div>
+          <div className="shell-header-actions"><LanguageSwitch compact /><NotificationBell /><div className="shell-identity"><span>{user?.full_name}<small>{roleName}</small></span>{hasAccount ? <FarmerAccount /> : <span className="shell-initial" aria-hidden="true">{user?.full_name.slice(0, 1).toUpperCase()}</span>}</div></div>
         </header>
         <main className="content" id="main" tabIndex={-1}>
         {pending > 0 ? (
           <Banner tone="warning">
-            {pending} submission{pending === 1 ? "" : "s"} saved on this device. They send when the connection returns.
+            {t(pending === 1 ? "shell.pendingOne" : "shell.pendingMany", { count: pending })}
           </Banner>
         ) : null}
         {syncNote ? <Banner tone="error">{syncNote}</Banner> : null}
@@ -338,15 +344,16 @@ export function Pager({
   total: number;
   onPage: (page: number) => void;
 }) {
+  const { t } = useI18n();
   const pages = Math.max(1, Math.ceil(total / pageSize));
   return (
     <div className="pager">
       <button className="secondary" type="button" disabled={page <= 1} onClick={() => onPage(page - 1)}>
-        Previous
+        {t("pager.previous")}
       </button>
-      <span>Page {page} of {pages}</span>
+      <span>{t("pager.page", { page, pages })}</span>
       <button className="secondary" type="button" disabled={page >= pages} onClick={() => onPage(page + 1)}>
-        Next
+        {t("pager.next")}
       </button>
     </div>
   );

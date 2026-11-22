@@ -46,15 +46,83 @@ export const eventTypes = [
   ["other", "Other"],
 ] as const;
 
-const labels = new Map<string, string>(
-  [...siteTypes, ...categories, ...treeStatuses, ...siteStatuses, ...organizationTypes, ...eventTypes].map(
-    ([value, label]) => [value, label],
-  ),
-);
+export type UiLanguage = "en" | "rw" | "fr";
+
+const english = Object.fromEntries(
+  [...siteTypes, ...categories, ...treeStatuses, ...siteStatuses, ...organizationTypes, ...eventTypes],
+) as Record<string, string>;
+
+const translated: Record<UiLanguage, Record<string, string>> = {
+  en: english,
+  rw: {
+    farm: "Umurima",
+    urban_plot: "Umurima w'umujyi",
+    roadside: "Inkengero z'umuhanda",
+    institution: "Ikigo",
+    orchard: "Umurima w'imbuto",
+    nursery_holding: "Ah'ingemwe",
+    other: "Ikindi",
+    urban: "Umujyi",
+    fruit: "Imbuto",
+    agroforestry: "Ubuhinzi bw'ibiti",
+    planted: "Byatewe",
+    surviving: "Bikiriho",
+    stressed: "Bikeneye",
+    dead: "Byapfuye",
+    removed: "Byakuweho",
+    unknown: "Bitazwi",
+    active: "Bikora",
+    inactive: "Ntibikora",
+    cooperative: "Koperative",
+    ngo: "Umuryango",
+    public_institution: "Ikigo cya Leta",
+    private: "Abigenga",
+    community_group: "Itsinda ry'abaturage",
+    inspection: "Isuzuma",
+    survival_check: "Gusuzuma niba bikiriho",
+    maintenance: "Kwita",
+    harvest_observation: "Icyitonderwa ku musaruro",
+  },
+  fr: {
+    farm: "Ferme",
+    urban_plot: "Parcelle urbaine",
+    roadside: "Bord de route",
+    institution: "Institution",
+    orchard: "Verger",
+    nursery_holding: "Parc à plants",
+    other: "Autre",
+    urban: "Urbain",
+    fruit: "Fruitier",
+    agroforestry: "Agroforesterie",
+    planted: "Planté",
+    surviving: "Survivant",
+    stressed: "En stress",
+    dead: "Mort",
+    removed: "Retiré",
+    unknown: "Inconnu",
+    active: "Actif",
+    inactive: "Inactif",
+    cooperative: "Coopérative",
+    ngo: "ONG",
+    public_institution: "Institution publique",
+    private: "Privé",
+    community_group: "Groupe communautaire",
+    inspection: "Visite",
+    survival_check: "Contrôle de survie",
+    maintenance: "Entretien",
+    harvest_observation: "Observation de récolte",
+  },
+};
+
+let uiLanguage: UiLanguage = "en";
+
+export function setUiLanguage(language: UiLanguage) {
+  uiLanguage = language;
+}
 
 export function label(value: string | null | undefined): string {
   if (!value) return "—";
-  return labels.get(value) ?? value;
+  return translated[uiLanguage][value] ?? translated.en[value] ?? value;
 }
 
 export function formatWhen(value: string | null | undefined): string {

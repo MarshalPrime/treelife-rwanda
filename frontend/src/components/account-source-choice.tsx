@@ -1,3 +1,7 @@
+"use client";
+
+import { useI18n } from "@/lib/i18n";
+
 export type AccountSource = "treelife" | "amis";
 
 function SourceIcon({ source }: { source: AccountSource }) {
@@ -14,9 +18,10 @@ export function AccountSourceChoice({
   source: AccountSource;
   onChange: (source: AccountSource) => void;
 }) {
+  const { t } = useI18n();
   return (
     <fieldset className="auth-source-choice">
-      <legend>Account source</legend>
+      <legend>{t("auth.source")}</legend>
       <label className={source === "treelife" ? "auth-source-option selected" : "auth-source-option"}>
         <input
           type="radio"
@@ -27,8 +32,8 @@ export function AccountSourceChoice({
         />
         <SourceIcon source="treelife" />
         <span className="auth-source-copy">
-          <strong>TreeLife account</strong>
-          <span className="help">Use TreeLife directly.</span>
+          <strong>{t("auth.treelife")}</strong>
+          <span className="help">{t("auth.treelifeHelp")}</span>
         </span>
         <span className="auth-source-indicator" aria-hidden="true">{source === "treelife" ? "✓" : ""}</span>
       </label>
@@ -42,10 +47,10 @@ export function AccountSourceChoice({
         />
         <SourceIcon source="amis" />
         <span className="auth-source-copy">
-          <strong>AMIS account</strong>
-          <span className="help">Link an existing farmer record.</span>
+          <strong>{t("auth.amis")}</strong>
+          <span className="help">{t("auth.amisHelp")}</span>
         </span>
-        <span className="auth-source-status">Planned</span>
+        <span className="auth-source-status">{t("auth.planned")}</span>
       </label>
     </fieldset>
   );
@@ -58,24 +63,25 @@ export function AmisPreview({
   returnLabel: string;
   onReturn: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <section className="amis-preview" aria-labelledby="amis-preview-heading">
       <div className="amis-preview-heading">
         <div>
-          <p className="lede">AMIS connection</p>
-          <h2 id="amis-preview-heading">Bring your farmer records with you</h2>
+          <p className="lede">{t("auth.amisLede")}</p>
+          <h2 id="amis-preview-heading">{t("auth.amisTitle")}</h2>
         </div>
-        <span className="amis-preview-badge">Coming soon</span>
+        <span className="amis-preview-badge">{t("auth.coming")}</span>
       </div>
-      <p>AMIS will let authorised forestry teams find existing farmer records and create a TreeLife account without entering the same information twice.</p>
+      <p>{t("auth.amisBody")}</p>
       <ol className="amis-steps">
-        <li className="amis-step"><span>1</span><strong>Connect</strong><small>Verify your AMIS account.</small></li>
-        <li className="amis-step"><span>2</span><strong>Find</strong><small>Look up a farmer record.</small></li>
-        <li className="amis-step"><span>3</span><strong>Continue</strong><small>Finish your TreeLife access.</small></li>
+        <li className="amis-step"><span>1</span><strong>{t("auth.connect")}</strong><small>{t("auth.connectHelp")}</small></li>
+        <li className="amis-step"><span>2</span><strong>{t("auth.find")}</strong><small>{t("auth.findHelp")}</small></li>
+        <li className="amis-step"><span>3</span><strong>{t("auth.continue")}</strong><small>{t("auth.continueHelp")}</small></li>
       </ol>
       <div className="amis-preview-actions">
         <button className="secondary" type="button" onClick={onReturn}>{returnLabel}</button>
-        <p className="help">The AMIS connection is reserved for the next integration phase. No external data is requested yet.</p>
+        <p className="help">{t("auth.amisNote")}</p>
       </div>
     </section>
   );

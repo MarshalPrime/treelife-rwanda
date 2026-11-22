@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Banner, Field } from "@/components/AppShell";
 import { ApiError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { useI18n } from "@/lib/i18n";
 import { newRequestId } from "@/lib/validation";
 
 type Overview = {
@@ -115,15 +116,16 @@ const BARS = [
 ] as const;
 
 export function HarvestNotices({ refreshKey = 0 }: { refreshKey?: string | number }) {
+  const { t } = useI18n();
   const [rows, setRows] = useState<Notice[] | null>(null);
   useEffect(() => {
     api<Notice[]>("/harvest-notices").then(setRows).catch(() => setRows([]));
   }, [refreshKey]);
   if (!rows?.length) return null;
   return (
-    <section className="card compact-notices-card" aria-label="Harvest notices">
+    <section className="card compact-notices-card" aria-label={t("harvest.notices")}>
       <div className="compact-panel-head">
-        <h2>Needs attention</h2>
+        <h2>{t("harvest.attention")}</h2>
         <span className="compact-badge warn">{rows.length}</span>
       </div>
       <ul className="record-list compact-record-list">
@@ -134,6 +136,7 @@ export function HarvestNotices({ refreshKey = 0 }: { refreshKey?: string | numbe
 }
 
 export function HarvestSummary({ refreshKey = 0 }: { refreshKey?: string | number }) {
+  const { t } = useI18n();
   const [overview, setOverview] = useState<Overview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<"overview" | "distribution" | "history">("overview");
@@ -143,45 +146,45 @@ export function HarvestSummary({ refreshKey = 0 }: { refreshKey?: string | numbe
     api<Overview>("/harvests/overview").then(setOverview).catch((caught: Error) => setError(caught.message));
   }, [refreshKey]);
   if (error) return <Banner tone="error">{error}</Banner>;
-  if (!overview) return <p className="loading" role="status">Loading harvest summary…</p>;
+  if (!overview) return <p className="loading" role="status">{t("harvest.loading")}</p>;
 
   const total = BARS.reduce((sum, bar) => sum + overview[bar.key], 0);
   const unbalanced = overview.shares.filter((row) => !row.balanced);
   const selectedBar = activeBar ? BARS.find((bar) => bar.key === activeBar) : null;
 
   return (
-    <section className="card compact-harvest-card" aria-label="Harvest summary">
+    <section className="card compact-harvest-card" aria-label={t("harvest.summary")}>
       <div className="compact-panel-head">
         <div className="compact-panel-title">
-          <h2>Harvest summary</h2>
+          <h2>{t("harvest.summary")}</h2>
           {unbalanced.length ? <span className="compact-badge warn">{unbalanced.length} unbalanced</span> : null}
         </div>
-        <div className="compact-tabs" role="tablist" aria-label="Harvest views">
+        <div className="compact-tabs" role="tablist" aria-label={t("harvest.views")}>
           <button type="button" role="tab" aria-selected={tab === "overview"} className={tab === "overview" ? "is-active" : ""} onClick={() => setTab("overview")}>
-            Overview
+            {t("harvest.overview")}
           </button>
           <button type="button" role="tab" aria-selected={tab === "distribution"} className={tab === "distribution" ? "is-active" : ""} onClick={() => setTab("distribution")}>
-            Distribution <small>{overview.shares.length}</small>
+            {t("harvest.distribution")} <small>{overview.shares.length}</small>
           </button>
           <button type="button" role="tab" aria-selected={tab === "history"} className={tab === "history" ? "is-active" : ""} onClick={() => setTab("history")}>
-            History <small>{overview.history.length}</small>
+            {t("harvest.history")} <small>{overview.history.length}</small>
           </button>
         </div>
       </div>
 
       {tab === "overview" ? (
         <div className="harvest-overview-body">
-          <div className="harvest-kpi-strip" role="region" aria-label="Harvest totals">
+          <div className="harvest-kpi-strip" role="region" aria-label={t("harvest.totals")}>
             <article className="harvest-mini-kpi">
-              <span>Harvested</span>
+              <span>{t("harvest.harvested")}</span>
               <strong>{measure(overview.harvested_kg, overview.harvested_count)}</strong>
             </article>
             <article className="harvest-mini-kpi">
-              <span>Sold</span>
+              <span>{t("harvest.sold")}</span>
               <strong>{measure(overview.sold_kg, overview.sold_count)}</strong>
             </article>
             <article className="harvest-mini-kpi">
-              <span>Revenue</span>
+              <span>{t("harvest.revenue")}</span>
               <strong>{number(overview.sales_rwf)} RWF</strong>
             </article>
             <article className="harvest-mini-kpi">
@@ -248,7 +251,7 @@ export function HarvestSummary({ refreshKey = 0 }: { refreshKey?: string | numbe
       {tab === "distribution" ? (
         <div className="table-wrap compact-table-scroll">
           <table>
-            <caption>How each harvest is split</caption>
+            <caption>{t("harvest.split")}</caption>
             <thead>
               <tr>
                 <th scope="col">Harvest</th><th scope="col">Tree or batch</th><th scope="col">Date</th><th scope="col">Total</th>
@@ -298,6 +301,7 @@ export function HarvestSummary({ refreshKey = 0 }: { refreshKey?: string | numbe
 
 export function HarvestFeedback({ refreshKey = 0, harvests }: { refreshKey?: string | number; harvests: { id: string; label: string }[] }) {
   const { user, canWrite } = useAuth();
+  const { t } = useI18n();
   const kinds = user?.role === "farmer" ? FARMER_KINDS : user?.role === "field_officer" ? OFFICER_KINDS : [];
   const [rows, setRows] = useState<Feedback[]>([]);
   const [kind, setKind] = useState(kinds[0]?.[0] ?? "experience");
@@ -342,7 +346,7 @@ export function HarvestFeedback({ refreshKey = 0, harvests }: { refreshKey?: str
   if (!kinds.length && !rows.length) return null;
   return (
     <section className="card">
-      <h2>{user?.role === "farmer" ? "Your harvest feedback" : "Field visit notes"}</h2>
+      <h2>{user?.role === "farmer" ? t("harvest.feedbackFarmer") : t("harvest.feedbackOfficer")}</h2>
       {notice ? <Banner tone="success">{notice}</Banner> : null}
       {error ? <Banner tone="error">{error}</Banner> : null}
       {canWrite && kinds.length ? (

@@ -5,6 +5,8 @@ import { Banner } from "@/components/AppShell";
 import { ChatText } from "@/components/chat-text";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { useI18n } from "@/lib/i18n";
+import type { MessageKey } from "@/lib/messages";
 
 type Turn = { role: "user" | "assistant"; content: string; at: string };
 
@@ -12,7 +14,12 @@ function clock() {
   return new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "Africa/Kigali" });
 }
 
-const GREETING = "Hi there! I am LifeTree Rwanda's AI Buddy.";
+const STARTER_KEYS: Record<string, MessageKey[]> = {
+  farmer: ["assistant.farmer1", "assistant.farmer2"],
+  field_officer: ["assistant.officer1", "assistant.officer2"],
+  admin: ["assistant.admin1", "assistant.admin2"],
+  viewer: ["assistant.viewer1", "assistant.viewer2"],
+};
 
 function LeafMark() {
   return (
@@ -23,15 +30,9 @@ function LeafMark() {
   );
 }
 
-const STARTERS: Record<string, string[]> = {
-  farmer: ["What should I do next for my trees?", "How do I look after them until harvest?"],
-  field_officer: ["Which farmers need a visit?", "What can I tell them about the trees I recorded?"],
-  admin: ["Summarise the records I can see.", "What stands out in these totals?"],
-  viewer: ["Which species are recorded?", "Which districts have the most trees?"],
-};
-
 export function AssistantWidget() {
   const { user } = useAuth();
+  const { t } = useI18n();
   const panelId = useId();
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
@@ -57,11 +58,11 @@ export function AssistantWidget() {
   return (
     <div className="assistant-slot" ref={root}>
       {open ? (
-        <section className="assistant-panel" id={panelId} aria-label="Advisory AI">
+        <section className="assistant-panel" id={panelId} aria-label={t("assistant.name")}>
           <header className="assistant-panel-head">
             <LeafMark />
-            <strong>Advisory AI</strong>
-            <button className="assistant-close" type="button" aria-label="Close" onClick={() => setOpen(false)}>
+            <strong>{t("assistant.name")}</strong>
+            <button className="assistant-close" type="button" aria-label={t("assistant.close")} onClick={() => setOpen(false)}>
               <span aria-hidden="true">×</span>
             </button>
           </header>
@@ -71,8 +72,8 @@ export function AssistantWidget() {
         <button className="assistant-launcher" type="button" aria-expanded={false} aria-controls={panelId} onClick={() => setOpen(true)}>
           <span className="assistant-face" aria-hidden="true"><LeafMark /></span>
           <span className="assistant-label">
-            <strong>Advisory AI</strong>
-            <small>How can I help?</small>
+            <strong>{t("assistant.name")}</strong>
+            <small>{t("assistant.help")}</small>
           </span>
         </button>
       )}
@@ -82,10 +83,11 @@ export function AssistantWidget() {
 
 export function AssistantPage() {
   const { user } = useAuth();
+  const { t } = useI18n();
   return (
     <div className="page">
-      <h1>Advisory AI</h1>
-      <p className="lede">Ask about the trees and records this account can already see, from planting through harvest and selling.</p>
+      <h1>{t("assistant.name")}</h1>
+      <p className="lede">{t("assistant.pageLede")}</p>
       <div className="card assistant-card">
         <AssistantChat role={user?.role} />
       </div>
@@ -94,12 +96,13 @@ export function AssistantPage() {
 }
 
 function BotMessage({ at, children }: { at: string; children: ReactNode }) {
+  const { t } = useI18n();
   return (
     <div className="assistant-turn bot">
       <span className="assistant-face" aria-hidden="true"><LeafMark /></span>
       <div className="assistant-stack">
         <p className="assistant-meta">
-          <strong>Advisory AI</strong>
+          <strong>{t("assistant.name")}</strong>
           <span className="assistant-chip">AI</span>
           <time>{at}</time>
         </p>
@@ -121,7 +124,8 @@ function AssistantChat({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [thinkingAt, setThinkingAt] = useState("");
-  const starters = STARTERS[role ?? "farmer"] ?? STARTERS.farmer;
+  const { t } = useI18n();
+  const starters = (STARTER_KEYS[role ?? "farmer"] ?? STARTER_KEYS.farmer).map((key) => t(key));
   const log = useRef<HTMLDivElement>(null);
   const [openedAt] = useState(clock);
 
@@ -145,7 +149,7 @@ function AssistantChat({
       });
       setTurns([...history, { role: "assistant", content: result.reply, at: clock() }]);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "The assistant could not answer.");
+      setError(caught instanceof Error ? caught.message : t("assistant.failed"));
     } finally {
       setBusy(false);
     }
@@ -155,8 +159,8 @@ function AssistantChat({
     <>
       <div className="assistant-log" ref={log} aria-live="polite">
         <BotMessage at={openedAt}>
-          <div className="assistant-bubble">{GREETING}</div>
-          <div className="assistant-bubble">How can I help?</div>
+          <div className="assistant-bubble">{t("assistant.greeting")}</div>
+          <div className="assistant-bubble">{t("assistant.help")}</div>
         </BotMessage>
         {turns.map((turn, index) =>
           turn.role === "assistant" ? (
@@ -165,7 +169,7 @@ function AssistantChat({
             </BotMessage>
           ) : (
             <div key={`${turn.role}-${index}`} className="assistant-turn you">
-              <p className="assistant-meta"><time>{turn.at}</time> You</p>
+              <p className="assistant-meta"><time>{turn.at}</time> {t("assistant.you")}</p>
               <div className="assistant-bubble">{turn.content}</div>
             </div>
           ),
@@ -173,7 +177,7 @@ function AssistantChat({
         {busy ? (
           <BotMessage at={thinkingAt}>
             <p className="assistant-bubble thinking" role="status">
-              Thinking
+              {t("assistant.thinking")}
               <span className="beat" aria-hidden="true"><i /><i /><i /></span>
             </p>
           </BotMessage>
@@ -189,8 +193,8 @@ function AssistantChat({
         <textarea
           ref={inputRef}
           value={draft}
-          aria-label="Message"
-          placeholder="Write a message"
+          aria-label={t("assistant.message")}
+          placeholder={t("assistant.placeholder")}
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={(event) => {
             if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
@@ -199,7 +203,7 @@ function AssistantChat({
           }}
           required
         />
-        <button className="assistant-send" type="submit" aria-label="Send" disabled={busy}>
+        <button className="assistant-send" type="submit" aria-label={t("assistant.send")} disabled={busy}>
           <span aria-hidden="true">↑</span>
         </button>
       </form>

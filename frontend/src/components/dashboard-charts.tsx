@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useId, useState } from "react";
 import { DashboardEmpty } from "@/components/dashboard-ui";
+import { useI18n } from "@/lib/i18n";
 import { speciesPhoto } from "@/components/map-cards";
 import type { DashboardResponse } from "@/lib/types";
 
@@ -184,6 +185,7 @@ export function BreakdownChart({ title, rows, selected, onSelect, photos = false
   onSelect: (id: string) => void;
   photos?: boolean;
 }) {
+  const { t } = useI18n();
   if (!rows.length) return <DashboardEmpty title="No trees in this view">Clear filters or register a planting to start this comparison.</DashboardEmpty>;
   const maximum = Math.max(1, ...rows.map((row) => row.value));
   const total = rows.reduce((sum, row) => sum + row.value, 0);
@@ -193,7 +195,7 @@ export function BreakdownChart({ title, rows, selected, onSelect, photos = false
         const photo = photos ? speciesPhoto(row.label) : undefined;
         const share = total > 0 ? Math.round((row.value / total) * 100) : 0;
         return <li key={row.id}>
-          <button type="button" className="dashboard-breakdown-button" aria-pressed={selected === row.id} aria-label={`Filter by ${row.label}, ${full.format(row.value)} trees`} onClick={() => onSelect(row.id)}>
+          <button type="button" className="dashboard-breakdown-button" aria-pressed={selected === row.id} aria-label={t("dash.filter", { label: row.label, count: full.format(row.value) })} onClick={() => onSelect(row.id)}>
             <span className="breakdown-name">{photo ? <Image src={photo} width={24} height={24} alt="" className="breakdown-photo" /> : null}<span>{row.label}</span></span>
             <svg viewBox="0 0 300 12" className="breakdown-bar" aria-hidden="true"><rect width="300" height="12" rx="6" fill="#e9ece3" /><rect width={(row.value / maximum) * 300} height="12" rx="6" fill="#397c55" /></svg>
             <strong>{full.format(row.value)} <small>{share}%</small></strong>

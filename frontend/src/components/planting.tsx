@@ -8,11 +8,13 @@ import { PlantingForm } from "@/components/forms";
 import { HealthBadge } from "@/components/tree-card";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { useI18n } from "@/lib/i18n";
 import type { Farmer, Page, PlantingRecord, Site, Species } from "@/lib/types";
 
 export function PlantingList({ mode }: { mode: "tree" | "batch" }) {
   const base = mode === "tree" ? "trees" : "batches";
   const { canWrite } = useAuth();
+  const { t } = useI18n();
   const [query, setQuery] = useState("");
   const [submitted, setSubmitted] = useState("");
   const [category, setCategory] = useState("");
@@ -40,7 +42,7 @@ export function PlantingList({ mode }: { mode: "tree" | "batch" }) {
     <div className="page">
       <div className="page-head">
         <div>
-          <h1>{mode === "tree" ? "Individual trees" : "Planting batches"}</h1>
+          <h1>{mode === "tree" ? t("reg.trees") : t("reg.batches")}</h1>
           <p className="lede">{mode === "tree" ? "One record for one tree." : <>One record for a group of trees planted together. A whole stand is registered as a <Link href="/forests">forest</Link>.</>}</p>
         </div>
         {canWrite ? <Link className="primary" href={`/${base}/new`}>{mode === "tree" ? "Register a tree" : "Register a batch"}</Link> : null}
@@ -103,6 +105,7 @@ export function NewPlanting({ mode }: { mode: "tree" | "batch" }) {
   const router = useRouter();
   const search = useSearchParams();
   const { canWrite, user } = useAuth();
+  const { t } = useI18n();
   const [sites, setSites] = useState<Site[]>([]);
   const [species, setSpecies] = useState<Species[]>([]);
   const [farmers, setFarmers] = useState<Farmer[]>([]);
@@ -129,7 +132,7 @@ export function NewPlanting({ mode }: { mode: "tree" | "batch" }) {
   if (error) return <Banner tone="error">{error}</Banner>;
   return (
     <div className="page">
-      <h1>{mode === "tree" ? "Register an individual tree" : "Register a planting batch"}</h1>
+      <h1>{mode === "tree" ? t("reg.registerTree") : t("reg.registerBatch")}</h1>
       {user?.role === "farmer" ? (
         <p className="help">This record is saved under {user.full_name}. Your name is already on the account, so it is not asked again.</p>
       ) : null}

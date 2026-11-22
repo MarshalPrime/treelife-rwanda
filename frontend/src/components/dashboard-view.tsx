@@ -10,6 +10,7 @@ import { BreakdownChart, SeriesChart, harvestLines, plantingLines, salesLines } 
 import { DashboardEmpty, DashboardKpi, DashboardKpiGrid, DashboardSkeleton } from "@/components/dashboard-ui";
 import { BuyerInterestLink } from "@/components/discover";
 import { HarvestForecast } from "@/components/harvest-forecast";
+import { useI18n } from "@/lib/i18n";
 import { HarvestNotices, HarvestSummary } from "@/components/harvest-insights";
 import { HealthBadge, HealthLegend, IssuePill, MapPopup, RecordKindIcon, TreeCard, type FollowUpReason } from "@/components/tree-card";
 import { api } from "@/lib/api";
@@ -65,20 +66,21 @@ function healthShares(counts: number[]) {
 }
 
 function TreeHealth({ summary }: { summary: DashboardResponse["summary"] }) {
+  const { t } = useI18n();
   const [hovered, setHovered] = useState<string | null>(null);
   const counts = [summary.healthy_trees ?? 0, summary.moderate_trees ?? 0, summary.critical_trees ?? 0];
   const shares = healthShares(counts);
   const rows = [
-    { label: "Healthy", color: "#1f8a4c", count: counts[0], share: shares[0] },
-    { label: "Moderate", color: "#c49212", count: counts[1], share: shares[1] },
-    { label: "Critical", color: "#c44536", count: counts[2], share: shares[2] },
+    { label: t("dash.healthy"), color: "#1f8a4c", count: counts[0], share: shares[0] },
+    { label: t("dash.moderate"), color: "#c49212", count: counts[1], share: shares[1] },
+    { label: t("dash.critical"), color: "#c44536", count: counts[2], share: shares[2] },
   ];
   const total = counts.reduce((sum, count) => sum + count, 0);
   return (
-    <section className="card tree-health" aria-label="Tree health">
+    <section className="card tree-health" aria-label={t("dash.health")}>
       <div className="compact-panel-head">
-        <h2>Tree health</h2>
-        <span className="help">{total ? `${number(total)} assessed` : "Unassessed"}</span>
+        <h2>{t("dash.health")}</h2>
+        <span className="help">{total ? t("dash.assessed", { count: number(total) }) : t("dash.unassessed")}</span>
       </div>
       {total > 0 ? (
         <div className="tree-health-segmented" aria-hidden="true">
@@ -187,6 +189,7 @@ function LiveTreeTotal({
   streamState: LiveStreamState;
   summary: DashboardResponse["summary"];
 }) {
+  const { t } = useI18n();
   const previous = useRef<number | null>(null);
   const [delta, setDelta] = useState<number | null>(null);
   const [now, setNow] = useState(() => new Date());
@@ -250,13 +253,13 @@ function LiveTreeTotal({
       </div>
       <div className="live-total-center">
         <strong aria-live="polite"><CenterExpandingNumber value={value} /></strong>
-        <span>Trees standing</span>
+        <span>{t("dash.standing")}</span>
         {delta != null ? (
           <p className={`dashboard-live-delta ${delta > 0 ? "up" : "down"}`}>
             {delta > 0 ? `+${delta.toLocaleString("en-GB")}` : delta.toLocaleString("en-GB")} {Math.abs(delta) === 1 ? "tree" : "trees"}
           </p>
         ) : (
-          <p className="help">Living trees across the programme.</p>
+          <p className="help">{t("dash.living")}</p>
         )}
       </div>
     </div>
@@ -268,13 +271,13 @@ function LiveTreeTotal({
         <button
           type="button"
           className="live-fullscreen-btn"
-          aria-label="Open full-screen projection"
+          aria-label={t("dash.openFull")}
           onClick={() => setProjecting(true)}
         >
           <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
             <path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
-          <span>Full screen</span>
+          <span>{t("dash.full")}</span>
         </button>,
       )}
 
@@ -284,17 +287,17 @@ function LiveTreeTotal({
           className="live-projection-stage"
           role="dialog"
           aria-modal="true"
-          aria-label="Full-screen programme summary"
+          aria-label={t("dash.programme")}
         >
           {hero(
             <button type="button" className="live-fullscreen-btn" onClick={() => setProjecting(false)}>
-              Exit full screen <kbd>Esc</kbd>
+              {t("dash.exitFull")} <kbd>Esc</kbd>
             </button>,
           )}
           <section aria-label="Key figures" className="dashboard-figures">
             <div className="section-caption">
-              <h2>At a glance</h2>
-              <span className="help">Live stream · production matches selected period</span>
+              <h2>{t("dash.glance")}</h2>
+              <span className="help">{t("dash.glanceHelp")}</span>
             </div>
             <div className="dashboard-glance-row">
               <TreeHealth summary={summary} />
@@ -653,6 +656,7 @@ function filterQuery(filters: DashboardFilters, explicitRange = false) {
 }
 
 export function DashboardView({ mode = "dashboard" }: { mode?: "dashboard" | "report" }) {
+  const { t } = useI18n();
   const { user } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
@@ -783,7 +787,8 @@ export function DashboardView({ mode = "dashboard" }: { mode?: "dashboard" | "re
   const map = mapResult?.path === mapPath ? mapResult.data : null;
   const located = map ? map.features.filter((feature) => matchesHealth(feature, health)) : [];
   const activeMapError = invalidMapPath ? "Locations are unavailable for this view." : mapError?.path === mapPath ? mapError.message : null;
-  const title = mode === "report" ? "Progress reports" : response?.scope_label ?? "Planting overview";
+  const rawTitle = mode === "report" ? "Progress reports" : response?.scope_label ?? "Planting overview";
+  const title = rawTitle === "Programme overview" ? t("dash.programmeTitle") : rawTitle;
   const activeLive = liveState?.query === streamQuery ? liveState.snapshot : null;
   const displaySummary = response
     ? activeLive
@@ -801,23 +806,23 @@ export function DashboardView({ mode = "dashboard" }: { mode?: "dashboard" | "re
   return <div className="page report-page dashboard-view">
     <div className="page-head dashboard-heading">
       <div>
-        <p className="dashboard-eyebrow">A growing future</p>
+        <p className="dashboard-eyebrow">{t("dash.eyebrow")}</p>
         <h1>{title}</h1>
         {mode === "report" ? <p className="lede">Explore planting, fieldwork, and production over time.</p> : viewer ? <p className="lede">Explore the trees and species recorded across Rwanda.</p> : null}
       </div>
       <div className="dashboard-quick-actions">
-        {writer ? <><Link className="primary" href="/trees/new">+ Register a tree</Link><Link className="secondary" href="/batches/new">Register a batch</Link><Link className="secondary" href="/sites/new">Add a site</Link></> : viewer ? <Link className="primary" href="/trees">Browse trees</Link> : role === "admin" ? <><Link className="secondary" href="/analytics">Reports</Link><Link className="secondary" href="/audit">Audit log</Link></> : null}
+        {writer ? <><Link className="primary" href="/trees/new">+ {t("dash.registerTree")}</Link><Link className="secondary" href="/batches/new">{t("reg.registerBatch")}</Link><Link className="secondary" href="/sites/new">{t("dash.addSite")}</Link></> : viewer ? <Link className="primary" href="/trees">{t("dash.browse")}</Link> : role === "admin" ? <><Link className="secondary" href="/analytics">{t("nav.reports")}</Link><Link className="secondary" href="/audit">{t("nav.audit")}</Link></> : null}
       </div>
     </div>
 
     <aside className="dashboard-controls-bar" aria-label="Dashboard filters">
       <section className="dashboard-toolbar">
-        <label htmlFor="dashboard-range"><span>Period</span><select id="dashboard-range" value={filters.range} onChange={(event) => changeFilters({ range: event.target.value as DashboardRange })}>{ranges.map((range) => <option value={range.value} key={range.value}>{range.label}</option>)}</select></label>
-        <label htmlFor="dashboard-district"><span>District</span><select id="dashboard-district" value={filters.district} disabled={!options} onChange={(event) => changeFilters({ district: event.target.value })}><option value="">All districts</option>{options?.districts.map((district) => <option key={district} value={district}>{district}</option>)}</select></label>
-        <label htmlFor="dashboard-species"><span>Species</span><select id="dashboard-species" value={filters.species_id} disabled={!options} onChange={(event) => changeFilters({ species_id: event.target.value })}><option value="">All species</option>{options?.species.map((species) => <option key={species.id} value={species.id}>{species.common_name}</option>)}</select></label>
+        <label htmlFor="dashboard-range"><span>{t("dash.period")}</span><select id="dashboard-range" value={filters.range} onChange={(event) => changeFilters({ range: event.target.value as DashboardRange })}>{ranges.map((range) => <option value={range.value} key={range.value}>{t(range.value === "30" ? "dash.last30" : range.value === "90" ? "dash.last90" : range.value === "ytd" ? "dash.ytd" : "dash.all")}</option>)}</select></label>
+        <label htmlFor="dashboard-district"><span>{t("dash.district")}</span><select id="dashboard-district" value={filters.district} disabled={!options} onChange={(event) => changeFilters({ district: event.target.value })}><option value="">{t("dash.allDistricts")}</option>{options?.districts.map((district) => <option key={district} value={district}>{district}</option>)}</select></label>
+        <label htmlFor="dashboard-species"><span>{t("dash.speciesLabel")}</span><select id="dashboard-species" value={filters.species_id} disabled={!options} onChange={(event) => changeFilters({ species_id: event.target.value })}><option value="">{t("dash.allSpecies")}</option>{options?.species.map((species) => <option key={species.id} value={species.id}>{species.common_name}</option>)}</select></label>
         <div className="dashboard-filter-actions">
-          <button className="ghost" type="button" onClick={reset}>Reset filters</button>
-          <button className="primary" type="button" onClick={() => { setRefresh((value) => value + 1); setMapRefresh((value) => value + 1); }} disabled={loading}>Refresh</button>
+          <button className="ghost" type="button" onClick={reset}>{t("dash.reset")}</button>
+          <button className="primary" type="button" onClick={() => { setRefresh((value) => value + 1); setMapRefresh((value) => value + 1); }} disabled={loading}>{t("dash.refresh")}</button>
         </div>
       </section>
       {filters.district || filters.species_id ? (
@@ -844,8 +849,8 @@ export function DashboardView({ mode = "dashboard" }: { mode?: "dashboard" | "re
 
         <section aria-label="Key figures" className="dashboard-figures">
           <div className="section-caption">
-            <h2>At a glance</h2>
-            <span className="help">{role === "admin" && mode === "dashboard" ? "Live stream · production matches selected period" : "Inventory is current · production matches selected period"}</span>
+            <h2>{t("dash.glance")}</h2>
+            <span className="help">{role === "admin" && mode === "dashboard" ? t("dash.glanceHelp") : t("dash.inventoryHelp")}</span>
           </div>
           <div className="dashboard-glance-row">
             <TreeHealth summary={displaySummary} />
@@ -866,13 +871,13 @@ export function DashboardView({ mode = "dashboard" }: { mode?: "dashboard" | "re
         {(role === "admin" || viewer) && mode === "dashboard" ? <CarbonOverview /> : null}
 
         <div className="dashboard-two-col">
-          <section className="card"><div className="page-head"><h2>Planting & field activity</h2><span className="help">{dateLabel(response.filters.start_date)} – {dateLabel(response.filters.end_date)}</span></div><SeriesChart title="Planting and field activity" series={response.series} lines={plantingLines} unit="records" monthly={filters.range === "all"} /></section>
-          <section className="card"><div className="page-head"><h2>Species coverage</h2><span className="help">Select a species to filter</span></div><BreakdownChart title="Species coverage" photos rows={response.species_counts.map((row) => ({ id: row.species_id, label: row.species_common_name, value: row.trees }))} selected={filters.species_id} onSelect={(id) => changeFilters({ species_id: id === filters.species_id ? "" : id })} /></section>
+          <section className="card"><div className="page-head"><h2>{t("dash.planting")}</h2><span className="help">{dateLabel(response.filters.start_date)} – {dateLabel(response.filters.end_date)}</span></div><SeriesChart title="Planting and field activity" series={response.series} lines={plantingLines} unit="records" monthly={filters.range === "all"} /></section>
+          <section className="card"><div className="page-head"><h2>{t("dash.species")}</h2><span className="help">{t("dash.selectSpecies")}</span></div><BreakdownChart title="Species coverage" photos rows={response.species_counts.map((row) => ({ id: row.species_id, label: row.species_common_name, value: row.trees }))} selected={filters.species_id} onSelect={(id) => changeFilters({ species_id: id === filters.species_id ? "" : id })} /></section>
         </div>
 
         {!viewer ? <div className="dashboard-two-col dashboard-equal-columns">
-          <section className="card"><div className="page-head"><h2>Harvest over time</h2><span className="help">Kilograms harvested</span></div><SeriesChart title="Harvest" series={response.series} lines={harvestLines} unit="kg" monthly={filters.range === "all"} /></section>
-          <section className="card"><div className="page-head"><h2>Sales over time</h2><span className="help">Recorded sales in RWF</span></div><SeriesChart title="Sales" series={response.series} lines={salesLines} unit="RWF" monthly={filters.range === "all"} /></section>
+          <section className="card"><div className="page-head"><h2>{t("dash.harvestTime")}</h2><span className="help">{t("dash.kgHarvested")}</span></div><SeriesChart title="Harvest" series={response.series} lines={harvestLines} unit="kg" monthly={filters.range === "all"} /></section>
+          <section className="card"><div className="page-head"><h2>{t("dash.salesTime")}</h2><span className="help">{t("dash.salesRwf")}</span></div><SeriesChart title="Sales" series={response.series} lines={salesLines} unit="RWF" monthly={filters.range === "all"} /></section>
         </div> : null}
 
         {role === "admin" && mode === "dashboard" ? <BuyerInterestLink /> : null}
@@ -898,10 +903,10 @@ export function DashboardView({ mode = "dashboard" }: { mode?: "dashboard" | "re
         </section> : null}
 
         <div className="dashboard-two-col dashboard-equal-columns">
-          <section className="card"><div className="page-head"><h2>District coverage</h2><span className="help">Select a district to filter</span></div><BreakdownChart title="District coverage" rows={response.districts.map((row) => ({ id: row.district, label: row.district, value: row.trees }))} selected={filters.district} onSelect={(id) => changeFilters({ district: id === filters.district ? "" : id })} /></section>
-          <section className="card recent-card" aria-label="Recent plantings">
+          <section className="card"><div className="page-head"><h2>{t("dash.districts")}</h2><span className="help">{t("dash.selectDistrict")}</span></div><BreakdownChart title="District coverage" rows={response.districts.map((row) => ({ id: row.district, label: row.district, value: row.trees }))} selected={filters.district} onSelect={(id) => changeFilters({ district: id === filters.district ? "" : id })} /></section>
+          <section className="card recent-card" aria-label={t("dash.recent")}>
             <div className="recent-card-head">
-              <h2>Recent plantings</h2>
+              <h2>{t("dash.recent")}</h2>
               <span className="compact-badge">Latest {response.recent.length}</span>
             </div>
             {!response.recent.length ? (
@@ -972,7 +977,7 @@ export function DashboardView({ mode = "dashboard" }: { mode?: "dashboard" | "re
         <section className="card report-map-card">
           <div className="compact-panel-head">
             <div>
-              <h2>Recorded locations</h2>
+              <h2>{t("dash.locations")}</h2>
               <span className="help">{map ? `${number(located.length)} locations shown` : "Locations in this view"}</span>
             </div>
             <button type="button" className="compact-toggle" aria-expanded={mapExpanded} onClick={() => setMapExpanded((open) => !open)}>

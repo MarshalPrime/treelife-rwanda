@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { Banner } from "@/components/AppShell";
 import { api } from "@/lib/api";
+import { localizePhrase, useI18n } from "@/lib/i18n";
 import { newRequestId, todayInput, validateDate } from "@/lib/validation";
 
 export type BiographyEntry = {
@@ -33,6 +34,7 @@ const EVENT_TYPES = new Set(["inspection", "survival_check", "other"]);
 const AMOUNT_TYPES = new Set(["watering", "fertilizer", "pest_control"]);
 
 function BiographyForm({ treeId, onSaved }: { treeId: string; onSaved: () => void }) {
+  const { t } = useI18n();
   const [activity, setActivity] = useState("inspection");
   const [eventDate, setEventDate] = useState(todayInput());
   const [notes, setNotes] = useState("");
@@ -106,13 +108,13 @@ function BiographyForm({ treeId, onSaved }: { treeId: string; onSaved: () => voi
     <form className="form" onSubmit={handleSubmit}>
       {error ? <Banner tone="error">{error}</Banner> : null}
       <div className="row">
-        <label>Activity
-          <select value={activity} onChange={(event) => setActivity(event.target.value)} aria-label="Activity">
+        <label>{t("bio.activity")}
+          <select value={activity} onChange={(event) => setActivity(event.target.value)} aria-label={t("bio.activity")}>
             {ACTIVITIES.map(([value, title]) => <option key={value} value={value}>{title}</option>)}
           </select>
         </label>
-        <label>Date
-          <input type="date" value={eventDate} onChange={(event) => setEventDate(event.target.value)} aria-label="Activity date" />
+        <label>{t("bio.date")}
+          <input type="date" value={eventDate} onChange={(event) => setEventDate(event.target.value)} aria-label={t("bio.date")} />
         </label>
       </div>
       {activity === "harvest" ? (
@@ -129,14 +131,14 @@ function BiographyForm({ treeId, onSaved }: { treeId: string; onSaved: () => voi
         </div>
       ) : null}
       {AMOUNT_TYPES.has(activity) ? (
-        <label>Amount
-          <input value={amount} onChange={(event) => setAmount(event.target.value)} aria-label="Amount" placeholder="For example, 20 litres or 2 kg" />
+        <label>{t("bio.amount")}
+          <input value={amount} onChange={(event) => setAmount(event.target.value)} aria-label={t("bio.amount")} placeholder="For example, 20 litres or 2 kg" />
         </label>
       ) : null}
-      <label>Notes
-        <textarea value={notes} onChange={(event) => setNotes(event.target.value)} aria-label="Biography notes" placeholder="What was done, what was observed, or where the harvest went" />
+      <label>{t("bio.notes")}
+        <textarea value={notes} onChange={(event) => setNotes(event.target.value)} aria-label={t("bio.notes")} placeholder="What was done, what was observed, or where the harvest went" />
       </label>
-      <button className="primary" type="submit" disabled={saving}>{saving ? "Saving…" : "Save to biography"}</button>
+      <button className="primary" type="submit" disabled={saving}>{saving ? t("bio.saving") : t("bio.save")}</button>
     </form>
   );
 }
@@ -156,17 +158,18 @@ export function TreeBiography({
   onToggle: () => void;
   onSaved: () => void;
 }) {
+  const { language, t } = useI18n();
   const later = entries.filter((entry) => entry.chapter !== "planting");
   return (
-    <section className="card" aria-label="Tree biography">
+    <section className="card" aria-label={t("bio.title")}>
       <div className="detail-card-head">
         <div>
-          <h2>Tree biography</h2>
-          <p className="help">Planting, care, inspections, and harvest, in date order.</p>
+          <h2>{t("bio.title")}</h2>
+          <p className="help">{t("bio.help")}</p>
         </div>
         {canWrite ? (
           <button className="secondary compact-action-link" type="button" onClick={onToggle}>
-            {show ? "Close" : "Add an activity"}
+            {show ? t("bio.close") : t("bio.add")}
           </button>
         ) : null}
       </div>
@@ -177,7 +180,7 @@ export function TreeBiography({
             <div className="detail-timeline-top">
               <div className="detail-timeline-left">
                 <strong>{entry.occurred_on}</strong>
-                <span>{entry.title}</span>
+                <span>{localizePhrase(language, entry.title)}</span>
                 {entry.public_code ? <code>{entry.public_code}</code> : null}
               </div>
               {entry.recorded_by_name ? <span className="help">{entry.recorded_by_name}</span> : null}
@@ -186,7 +189,7 @@ export function TreeBiography({
           </li>
         ))}
       </ol>
-      {later.length === 0 ? <p className="help">Later care, inspections, and harvests appear here.</p> : null}
+      {later.length === 0 ? <p className="help">{t("bio.later")}</p> : null}
     </section>
   );
 }

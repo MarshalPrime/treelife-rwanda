@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from collections import Counter
 
 import httpx
@@ -22,6 +23,104 @@ from app.services.dashboard import (
 
 LIST_LIMIT = 30
 UNAVAILABLE = "Sorry, the assistant is unavailable right now. Contact the person responsible, or try again soon."
+_UNAVAILABLE = {
+    "en": UNAVAILABLE,
+    "rw": "Ihangane, umufasha ntari hano ubu. Vugana n'uwubishinzwe, cyangwa ugerageze vuba.",
+    "fr": "Désolé, l'assistant n'est pas disponible pour le moment. Contactez la personne responsable, ou réessayez bientôt.",
+}
+_RW_WORDS = {
+    "muraho",
+    "mwiriwe",
+    "mwaramutse",
+    "bite",
+    "murakoze",
+    "yego",
+    "oya",
+    "nigute",
+    "gute",
+    "igiti",
+    "ibiti",
+    "umusaruro",
+    "amazi",
+    "ifumbire",
+    "cyanjye",
+    "cyane",
+    "ndashaka",
+    "nakwitaho",
+    "witaho",
+    "ese",
+    "kandi",
+    "ariko",
+    "kuko",
+    "ubu",
+    "avoka",
+    "ubuhinzi",
+    "imbuto",
+    "ndumva",
+    "wowe",
+    "ikibazo",
+    "indwara",
+    "udukoko",
+}
+_FR_WORDS = {
+    "bonjour",
+    "bonsoir",
+    "salut",
+    "merci",
+    "comment",
+    "puis",
+    "je",
+    "nous",
+    "vous",
+    "les",
+    "des",
+    "une",
+    "pour",
+    "avec",
+    "dans",
+    "récolte",
+    "recolte",
+    "mangue",
+    "mangues",
+    "arbre",
+    "arbres",
+    "améliorer",
+    "ameliorer",
+    "arrosage",
+    "arroser",
+    "engrais",
+    "maladie",
+    "plantation",
+    "mon",
+    "mes",
+    "que",
+    "quoi",
+    "puis-je",
+}
+_EN_WORDS = {
+    "hi",
+    "hello",
+    "how",
+    "can",
+    "my",
+    "the",
+    "what",
+    "please",
+    "improve",
+    "harvest",
+    "tree",
+    "trees",
+    "should",
+    "which",
+    "water",
+    "mango",
+    "help",
+    "about",
+    "where",
+    "when",
+    "does",
+    "do",
+}
 GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/openai"
 logger = logging.getLogger(__name__)
 
@@ -104,18 +203,53 @@ def account_brief(db: Session, user: User) -> str:
     return "\n".join(lines)
 
 
+def detect_language(text: str) -> str:
+    """Return en, rw, or fr from the words in one message. English is the default."""
+    scores = _language_scores(text)
+    best = max(scores, key=scores.get)
+    if scores[best] == 0:
+        return "en"
+    leaders = [language for language, score in scores.items() if score == scores[best]]
+    if len(leaders) == 1:
+        return leaders[0]
+    return "en" if "en" in leaders else leaders[0]
+
+
+def conversation_language(messages: list[tuple[str, str]]) -> str:
+    """Follow the latest question, then earlier questions if that one has no cue."""
+    asked = [content for role, content in messages if role == "user" and content.strip()]
+    if not asked:
+        return "en"
+    if max(_language_scores(asked[-1]).values()):
+        return detect_language(asked[-1])
+    return detect_language(" ".join(asked))
+
+
+def _language_scores(text: str) -> dict[str, int]:
+    scores = {"en": 0, "rw": 0, "fr": 0}
+    for word in re.findall(r"[0-9a-zà-ÿ']+", text.lower()):
+        if word in _RW_WORDS:
+            scores["rw"] += 2
+        if word in _FR_WORDS:
+            scores["fr"] += 1
+        if word in _EN_WORDS:
+            scores["en"] += 1
+    return scores
+
+
 def reply(db: Session, user: User, messages: list[tuple[str, str]]) -> str:
+    language = conversation_language(messages)
     key, base_url, model = _provider()
     if not key:
         logger.warning("Assistant key is not set")
-        raise DomainError(UNAVAILABLE, status_code=503)
+        raise DomainError(_UNAVAILABLE[language], status_code=503)
     payload = {
         "model": model,
         "temperature": 0.2,
         "max_tokens": 500,
         "reasoning_effort": "none",
         "messages": [
-            {"role": "system", "content": _instructions()},
+            {"role": "system", "content": _instructions(language)},
             {"role": "system", "content": account_brief(db, user)},
             *[{"role": role, "content": content} for role, content in messages],
         ],
@@ -132,15 +266,15 @@ def reply(db: Session, user: User, messages: list[tuple[str, str]]) -> str:
                 logger.warning(
                     "Assistant provider returned %s for model %s", response.status_code, model
                 )
-                raise DomainError(UNAVAILABLE, status_code=502)
+                raise DomainError(_UNAVAILABLE[language], status_code=502)
             text = _message_text(response.json())
     except (httpx.HTTPError, KeyError, IndexError, TypeError) as exc:
         logger.warning("Assistant provider call failed for model %s", model)
-        raise DomainError(UNAVAILABLE, status_code=502) from exc
+        raise DomainError(_UNAVAILABLE[language], status_code=502) from exc
     question = next((content for role, content in reversed(messages) if role == "user"), "")
-    cleaned = concise_reply(str(text), question)
+    cleaned = concise_reply(str(text), question, language)
     if not cleaned:
-        raise DomainError(UNAVAILABLE, status_code=502)
+        raise DomainError(_UNAVAILABLE[language], status_code=502)
     return cleaned
 
 
@@ -172,8 +306,13 @@ def _message_text(body: dict) -> str:
     return "" if content is None else str(content)
 
 
-def concise_reply(text: str, question: str = "") -> str:
+def concise_reply(text: str, question: str = "", language: str = "en") -> str:
     """Keep a phone-sized answer that follows the question."""
+    if language != "en":
+        return _local_reply(text)
+    asked_early = question.lower()
+    if _asks(asked_early, ("how can", "how do", "improve", "advice", "should i")):
+        return _local_reply(text)
     lines = [cleaned for raw in text.splitlines() if (cleaned := _plain_line(raw))]
     sentence = next((line for line in lines if _is_sentence(line) and not _is_aside(line)), "")
     if sentence and _says_nothing_is_scheduled(sentence):
@@ -240,6 +379,19 @@ def concise_reply(text: str, question: str = "") -> str:
     if overview:
         return ". ".join(part.rstrip(".") for part in overview) + "."
     return ""
+
+
+def _local_reply(text: str) -> str:
+    """Keep a short answer in the language the model already used."""
+    lines = [cleaned for raw in text.splitlines() if (cleaned := _plain_line(raw))]
+    kept: list[str] = []
+    for line in lines:
+        if _is_aside(line) or _is_closer(line) or _is_lead_in(line) or _is_intro(line):
+            continue
+        kept.append(line[2:] if line.startswith("- ") else line)
+        if len(kept) >= 4:
+            break
+    return "\n".join(kept)
 
 
 def _complete(lines: list[str]) -> str:
@@ -335,6 +487,12 @@ def _is_closer(line: str) -> bool:
             "would you like",
             "if that would",
             "more detail",
+            "n'hésitez",
+            "n'hesitez",
+            "si vous voulez",
+            "souhaitez-vous",
+            "niba ushaka",
+            "menya ko",
         )
     )
 
@@ -381,9 +539,16 @@ def _says_nothing_is_scheduled(line: str) -> bool:
     )
 
 
-def _instructions() -> str:
+def _instructions(language: str = "en") -> str:
+    names = {"en": "English", "rw": "Kinyarwanda", "fr": "French"}
+    chosen = names.get(language, "English")
     return (
         "You are the TreeLife assistant for one signed-in account in Rwanda. "
+        f"The person's latest message is in {chosen}. Answer only in natural {chosen}. "
+        "Do not ask them to switch language, and do not answer in another language. "
+        "Use everyday words a farmer can follow for planting, watering, fertilizer, pests, "
+        "tree health, harvest, and agroforestry. "
+        "When the brief already names their trees or a recorded practice, use that. "
         "Use only the account brief. Do not invent trees, yields, visits, prices, or partners. "
         "Demonstration records are not field results. "
         "Do not ask for a national ID or a phone number. "

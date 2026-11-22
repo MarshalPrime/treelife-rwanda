@@ -17,6 +17,19 @@
 .shell-breadcrumb > strong { font-size: .95rem; }
 .shell-identity { display: flex; align-items: center; gap: 12px; }
 .shell-header-actions { display: flex; align-items: center; gap: 16px; }
+.language-switch { display: flex; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: 999px; background: white; }
+.language-switch button { border: 0; background: transparent; border-radius: 999px; padding: 6px 10px; color: var(--muted); font-size: .75rem; font-weight: 650; cursor: pointer; }
+.language-switch button[aria-pressed="true"] { background: #153f32; color: white; }
+.language-switch .language-short { display: none; }
+.language-switch.is-compact button { padding: 5px 9px; letter-spacing: .04em; }
+.language-switch.is-dark { background: transparent; border-color: rgba(246, 243, 236, 0.35); }
+.language-switch.is-dark button { color: #f6f3ec; }
+.language-switch.is-dark button[aria-pressed="true"] { background: #e7f0c8; color: #1c4636; }
+@media (max-width: 860px) {
+  .language-switch .language-full { display: none; }
+  .language-switch .language-short { display: inline; }
+  .language-switch button { padding: 6px 8px; }
+}
 .shell-notification { position: relative; display: grid; place-items: center; width: 42px; height: 42px; border: 1px solid var(--line); border-radius: 50%; background: white; text-decoration: none; }
 .shell-notification b { position: absolute; top: -5px; right: -5px; min-width: 20px; padding: 2px 5px; border-radius: 999px; background: var(--danger); color: white; font-size: .68rem; text-align: center; }
 .shell-identity > span { font-size: .83rem; text-align: right; }

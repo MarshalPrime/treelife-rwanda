@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { useI18n } from "@/lib/i18n";
+import type { MessageKey } from "@/lib/messages";
 import { useProfilePhoto } from "@/lib/profile-photo";
 
 type Account = {
@@ -14,10 +16,10 @@ type Account = {
   metal: "bronze" | "silver" | "gold" | null;
 };
 
-const metalLabel: Record<NonNullable<Account["metal"]>, string> = {
-  bronze: "Bronze",
-  silver: "Silver",
-  gold: "Gold",
+const metalLabel: Record<NonNullable<Account["metal"]>, MessageKey> = {
+  bronze: "home.bronze",
+  silver: "home.silver",
+  gold: "home.gold",
 };
 
 export function FarmerAccount() {
@@ -68,6 +70,7 @@ export function FarmerAccount() {
   const photoUrl = useProfilePhoto(user?.profile_photo_at);
   const facts = account?.facts ?? [];
   const metal = account?.metal ?? null;
+  const { t } = useI18n();
 
   function signOut() {
     logout();
@@ -79,7 +82,7 @@ export function FarmerAccount() {
       <button
         className={`account-orb${metal ? ` metal-${metal}` : ""}`}
         type="button"
-        aria-label="Open your account"
+        aria-label={t("account.open")}
         aria-expanded={open}
         aria-controls="farmer-account"
         onClick={() => setOpen((current) => !current)}
@@ -91,22 +94,22 @@ export function FarmerAccount() {
         )}
       </button>
       {open ? (
-        <div className="account-panel" id="farmer-account" role="dialog" aria-label="Your account">
+        <div className="account-panel" id="farmer-account" role="dialog" aria-label={t("account.title")}>
           <div className="account-identity">
             <strong>{name}</strong>
             {facts.length > 0 ? <p>{facts.join(" · ")}</p> : null}
           </div>
           <p className="account-line">
-            Badge: {metal ? metalLabel[metal] : "—"}
+            {t("account.badge", { value: metal ? t(metalLabel[metal]) : "—" })}
             {metal ? (
               <Image src={`/badges/${metal}.jpg`} alt="" width={22} height={22} className="account-medal" />
             ) : null}
           </p>
-          <p className="account-line">Trees: {account ? account.recorded_trees.toLocaleString("en-GB") : "—"}</p>
+          <p className="account-line">{t("account.trees", { value: account ? account.recorded_trees.toLocaleString("en-GB") : "—" })}</p>
           {user?.role === "farmer" || user?.role === "field_officer" ? (
-            <button className="ghost" type="button" onClick={() => { setOpen(false); router.push("/profile"); }}>Edit your details</button>
+            <button className="ghost" type="button" onClick={() => { setOpen(false); router.push("/profile"); }}>{t("account.edit")}</button>
           ) : null}
-          <button className="ghost" type="button" onClick={signOut}>Log out</button>
+          <button className="ghost" type="button" onClick={signOut}>{t("shell.logout")}</button>
         </div>
       ) : null}
     </div>

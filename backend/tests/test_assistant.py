@@ -3,7 +3,7 @@ from sqlalchemy import select
 from app.core.config import get_settings
 from app.db.session import SessionLocal
 from app.models.entities import User
-from app.services.assistant import UNAVAILABLE, account_brief, concise_reply
+from app.services.assistant import UNAVAILABLE, account_brief, concise_reply, detect_language
 from tests.conftest import auth, make_site, make_species
 from tests.test_dashboard import register_user
 
@@ -251,3 +251,37 @@ def test_assistant_hides_the_provider_message(client, accounts, monkeypatch):
     assert response.status_code == 502, response.text
     assert response.json()["detail"] == UNAVAILABLE
     assert "prepayment" not in response.text
+
+
+def test_detects_the_language_of_the_question():
+    assert detect_language("Muraho, nigute nakwitaho igiti cyanjye cya avoka?") == "rw"
+    assert detect_language("Bonjour, comment puis-je améliorer ma récolte de mangues ?") == "fr"
+    assert detect_language("Hi, how can I improve my mango harvest?") == "en"
+
+
+def test_reply_keeps_the_language_of_the_question():
+    rw = concise_reply(
+        "Vomereza igiti cya avoka buri minsi mike, kandi urebe niba amababi arwaye.\n"
+        "Niba ushaka, ndakubwira ibindi.",
+        "Muraho, nigute nakwitaho igiti cyanjye cya avoka?",
+        "rw",
+    )
+    assert "igiti" in rw.lower() or "avoka" in rw.lower()
+    assert "niba ushaka" not in rw.lower()
+    assert "The records do not" not in rw
+    french = concise_reply(
+        "Arrosez le manguier quand la terre sèche, et retirez les fruits abîmés.\n"
+        "N'hésitez pas à demander plus de détails.",
+        "Bonjour, comment puis-je améliorer ma récolte de mangues ?",
+        "fr",
+    )
+    assert "Arrosez" in french or "manguier" in french.lower()
+    assert "n'hésitez" not in french.lower()
+    english = concise_reply(
+        "Water the mango trees when the soil dries, and pick fruit that is fully coloured.\n"
+        "Harvest & Revenue: Across all records, total harvest stands at 34 kg.\n"
+        "If you need more detail, let me know.",
+        "Hi, how can I improve my mango harvest?",
+    )
+    assert "Water the mango" in english
+    assert "let me know" not in english.lower()

@@ -7,6 +7,7 @@ import { Banner, OriginBadge } from "@/components/AppShell";
 import { HealthBadge, TreeCard } from "@/components/tree-card";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { useI18n } from "@/lib/i18n";
 import { coordinateText, formatWhen, label, treeStatuses } from "@/lib/labels";
 import { choiceLabel, plantingMethods, soilTypes, terrains, waterSources, yesNoUnknown } from "@/lib/planting-choices";
 import { plantedAge } from "@/lib/health";
@@ -471,6 +472,7 @@ export function PlantingDetail({ mode }: { mode: "tree" | "batch" }) {
   const params = useParams<{ id: string }>();
   const search = useSearchParams();
   const { canWrite, user } = useAuth();
+  const { t } = useI18n();
   const [record, setRecord] = useState<PlantingRecord | null>(null);
   const [events, setEvents] = useState<LifecycleEvent[]>([]);
   const [biography, setBiography] = useState<BiographyEntry[]>([]);
@@ -612,7 +614,7 @@ export function PlantingDetail({ mode }: { mode: "tree" | "batch" }) {
         <div className="detail-hero-actions">
           {canWrite ? <Link className="primary" href={`/${base}/${record.id}/edit`}>Edit</Link> : null}
           {isViewer || !record.site_id ? null : <Link className="secondary" href={`/sites/${record.site_id}`}>Open site</Link>}
-          {canWrite ? <button type="button" className="secondary" onClick={() => setShowEvent((open) => !open)}>{mode === "tree" ? "+ Add to biography" : "+ Log inspection"}</button> : null}
+          {canWrite ? <button type="button" className="secondary" onClick={() => setShowEvent((open) => !open)}>{mode === "tree" ? t("bio.addHero") : t("bio.logInspection")}</button> : null}
         </div>
       </section>
 

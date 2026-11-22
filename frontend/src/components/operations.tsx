@@ -12,6 +12,7 @@ import { TreePlace } from "@/components/forms";
 import { RegistrationProgress } from "@/components/registration-progress";
 import { ApiError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { useI18n } from "@/lib/i18n";
 import { newRequestId, optionalNumber, todayInput, validateCoordinates } from "@/lib/validation";
 import type { Farmer, Page, PlantingRecord, Site, Species } from "@/lib/types";
 
@@ -743,6 +744,7 @@ const HARVEST_STEPS = ["Harvest", "Where it went", "Review and submit"] as const
 
 export function HarvestPage() {
   const { canWrite, user } = useAuth();
+  const { t } = useI18n();
   const [trees, setTrees] = useState<PlantingRecord[]>([]);
   const [target, setTarget] = useState("");
   const [quantity, setQuantity] = useState("10");
@@ -877,8 +879,8 @@ export function HarvestPage() {
     <div className="page">
       <div className="page-head">
         <div>
-          <h1>Harvest and sales</h1>
-          <p className="lede">Record fruit taken from a tree or batch, then where it went: sold, eaten at home, stored, given away, or another use. The quantities have to add up.</p>
+          <h1>{t("harvest.title")}</h1>
+          <p className="lede">{t("harvest.lede")}</p>
         </div>
         {canWrite ? (
           <button
@@ -893,7 +895,7 @@ export function HarvestPage() {
               }
             }}
           >
-            + Harvest
+            {t("harvest.add")}
           </button>
         ) : null}
       </div>
@@ -987,8 +989,8 @@ export function HarvestPage() {
         <>
           {user?.role === "farmer" || user?.role === "field_officer" ? (
             <section className="card" aria-label="Buyer interest">
-              <h2>Buyer interest</h2>
-              <p className="help">Requests from viewers. Accepting one does not change the forecast or a recorded harvest.</p>
+              <h2>{t("discover.buyerTitle")}</h2>
+              <p className="help">{t("discover.buyerHelp")}</p>
               <BuyerRequests refreshKey={version} />
             </section>
           ) : null}
