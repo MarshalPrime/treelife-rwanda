@@ -915,6 +915,34 @@ class ForecastPlanting(BaseModel):
     high: float | None = None
     basis: Literal["recorded", "household", "reference", "bearing", "young", "none"]
     note: str
+    months: list[int] = []
+    kind: Literal["tree", "batch"] = "tree"
+    province: str | None = None
+    district: str | None = None
+    sector: str | None = None
+    farmer_id: uuid.UUID | None = None
+
+
+class ForecastFarmer(BaseModel):
+    farmer_id: uuid.UUID
+    display_name: str
+    province: str | None = None
+    district: str | None = None
+    registered_trees: int
+    totals: list[ForecastTotal]
+    by_species: list[ForecastSpecies]
+    plantings: list[ForecastPlanting]
+    young_trees: int
+    bearing_trees: int
+    unestimated_trees: int
+    agent_id: uuid.UUID | None = None
+    agent_name: str | None = None
+
+
+class ForecastAgent(BaseModel):
+    agent_id: uuid.UUID
+    display_name: str
+    farmer_count: int
 
 
 class HarvestForecast(BaseModel):
@@ -928,6 +956,10 @@ class HarvestForecast(BaseModel):
     young_trees: int
     bearing_trees: int
     unestimated_trees: int
+    registered_trees: int = 0
+    by_sector: list[ForecastGroup] = []
+    farmers: list[ForecastFarmer] = []
+    agents: list[ForecastAgent] = []
 
 
 class HarvestOffer(BaseModel):

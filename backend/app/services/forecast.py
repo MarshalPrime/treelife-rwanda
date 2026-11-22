@@ -12,11 +12,21 @@ import uuid
 from collections import defaultdict
 from datetime import date
 
-from sqlalchemy import or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy import and_, or_, select
+from sqlalchemy.orm import Session, joinedload
 
-from app.models.entities import Farmer, Harvest, PlantingBatch, SpeciesYieldReference, User
+from app.models.entities import (
+    Farmer,
+    Harvest,
+    IndividualTree,
+    PlantingBatch,
+    PlantingSite,
+    SpeciesYieldReference,
+    User,
+)
 from app.schemas.valuechain import (
+    ForecastAgent,
+    ForecastFarmer,
     ForecastGroup,
     ForecastPlanting,
     ForecastSpecies,
@@ -24,7 +34,7 @@ from app.schemas.valuechain import (
     HarvestForecast,
 )
 from app.services.common import utcnow
-from app.services.dashboard import filter_inventory, read_inventory, row_district
+from app.services.dashboard import Inventory, filter_inventory, read_inventory, row_district
 
 Basis = str
 
@@ -59,12 +69,12 @@ def _standing(row) -> int:
     return _count(row)
 
 
-def _expectation(rows: list[Harvest]) -> tuple[float, str, int] | None:
+def _expectation(rows: list[Harvest]) -> tuple[float, float, float, str, int] | None:
     if not rows:
         return None
     latest = max(rows, key=lambda row: (row.harvested_on, row.created_at))
     same = [row.quantity for row in rows if row.unit == latest.unit]
-    return sum(same) / len(same), latest.unit, len(same)
+    return sum(same) / len(same), min(same), max(same), latest.unit, len(same)
 
 
 def _round(value: float) -> float:
@@ -79,15 +89,36 @@ def _sector(row) -> str | None:
     return None
 
 
+def _household_inventory(db: Session, farmer_id: uuid.UUID) -> Inventory:
+    sites = list(db.scalars(select(PlantingSite).where(PlantingSite.farmer_id == farmer_id)))
+    site_ids = [site.id for site in sites]
+    planted = []
+    for model in (IndividualTree, PlantingBatch):
+        scope = model.farmer_id == farmer_id
+        if site_ids:
+            scope = or_(scope, and_(model.farmer_id.is_(None), model.site_id.in_(site_ids)))
+        planted.append(
+            list(
+                db.scalars(
+                    select(model)
+                    .where(scope)
+                    .options(joinedload(model.site), joinedload(model.species))
+                )
+            )
+        )
+    return Inventory(sites, planted[0], planted[1], farmer_id)
+
+
 def _estimates(
     db: Session,
     user: User,
     *,
     district: str | None = None,
     species_id: uuid.UUID | None = None,
+    inventory: Inventory | None = None,
 ) -> list[dict]:
     district = district.strip() if district and district.strip() else None
-    inventory = filter_inventory(read_inventory(db, user), district, species_id)
+    inventory = filter_inventory(inventory or read_inventory(db, user), district, species_id)
     today = utcnow().date()
     references = {row.scientific_name: row for row in db.scalars(select(SpeciesYieldReference))}
     tree_ids = [row.id for row in inventory.trees]
@@ -114,18 +145,21 @@ def _estimates(
 
     pools: dict[tuple, list[float]] = defaultdict(lambda: [0.0, 0.0])
     own: dict[uuid.UUID, tuple[float, str, int]] = {}
+    spans: dict[uuid.UUID, tuple[float, float]] = {}
     ages: dict[uuid.UUID, float] = {}
     for row in inventory.plantings:
         ages[row.id] = _age(row.planting_date, today)
         expected = _expectation(by_target.get(row.id, []))
         if expected is None:
             continue
-        own[row.id] = expected
+        average, low, high, unit, harvest_count = expected
+        own[row.id] = (average, unit, harvest_count)
+        spans[row.id] = (low, high)
         farmer_id = _farmer_id(row)
         trees = _count(row)
         if farmer_id is None or trees < 1:
             continue
-        qty, unit, _count_harvests = expected
+        qty = average
         bucket = pools[(farmer_id, row.species_id, unit)]
         bucket[0] += qty
         bucket[1] += trees
@@ -159,14 +193,18 @@ def _estimates(
         note = "No yield reference yet."
         source = None
         if harvested:
-            qty, unit, harvest_count = own[row.id]
-            low = high = qty / _count(row) * trees
+            _average, unit, harvest_count = own[row.id]
+            recorded_low, recorded_high = spans[row.id]
+            scale = trees / _count(row)
+            low = recorded_low * scale
+            high = recorded_high * scale
             basis = "recorded"
-            note = (
-                "Average of 1 recorded harvest."
-                if harvest_count == 1
-                else f"Average of {harvest_count} recorded harvests."
-            )
+            if recorded_low != recorded_high:
+                note = f"Range of {harvest_count} recorded harvests."
+            elif harvest_count == 1:
+                note = "Average of 1 recorded harvest."
+            else:
+                note = f"Average of {harvest_count} recorded harvests."
         else:
             floor = reference.years_to_bearing if reference is not None else None
             if floor is None and farmer_id is not None:
@@ -217,6 +255,7 @@ def _estimates(
                 "basis": basis,
                 "note": note,
                 "source": source,
+                "kind": "batch" if isinstance(row, PlantingBatch) else "tree",
                 "district": row_district(row),
                 "province": _province(row),
                 "sector": _sector(row),
@@ -231,6 +270,98 @@ def _estimates(
     return estimates
 
 
+def _farmer_forecasts(
+    db: Session,
+    user: User,
+    *,
+    district: str | None,
+    species_id: uuid.UUID | None,
+    registrar_id: uuid.UUID | None,
+) -> list[ForecastFarmer]:
+    statement = select(Farmer).order_by(Farmer.display_name)
+    if registrar_id is not None:
+        statement = statement.where(Farmer.registered_by == registrar_id)
+    assigned = list(db.scalars(statement))
+    agent_ids = {farmer.registered_by for farmer in assigned}
+    agent_names = {}
+    if agent_ids:
+        agent_names = {
+            row.id: row.full_name for row in db.scalars(select(User).where(User.id.in_(agent_ids)))
+        }
+    farmers = []
+    for farmer in assigned:
+        rows = _estimates(
+            db,
+            user,
+            district=district,
+            species_id=species_id,
+            inventory=_household_inventory(db, farmer.id),
+        )
+        detail = _assemble("farmer", rows)
+        farmers.append(
+            ForecastFarmer(
+                farmer_id=farmer.id,
+                display_name=farmer.display_name,
+                province=farmer.province,
+                district=farmer.district,
+                registered_trees=sum(row["trees"] for row in rows),
+                totals=detail.totals,
+                by_species=detail.by_species,
+                plantings=detail.plantings,
+                young_trees=detail.young_trees,
+                bearing_trees=detail.bearing_trees,
+                unestimated_trees=detail.unestimated_trees,
+                agent_id=farmer.registered_by,
+                agent_name=agent_names.get(farmer.registered_by),
+            )
+        )
+
+    def weight(item: ForecastFarmer) -> float:
+        for total in item.totals:
+            if total.unit == "kg":
+                return total.low
+        return item.totals[0].low if item.totals else -1
+
+    farmers.sort(key=lambda item: (-weight(item), item.display_name))
+    return farmers
+
+
+def _agent_roster(db: Session, farmers: list[ForecastFarmer]) -> list[ForecastAgent]:
+    counts: dict[uuid.UUID, int] = defaultdict(int)
+    names = {}
+    for farmer in farmers:
+        if farmer.agent_id is None:
+            continue
+        counts[farmer.agent_id] += 1
+        if farmer.agent_name:
+            names[farmer.agent_id] = farmer.agent_name
+    roster = []
+    seen = set()
+    officers = db.scalars(select(User).where(User.role == "field_officer").order_by(User.full_name))
+    for officer in officers:
+        seen.add(officer.id)
+        roster.append(
+            ForecastAgent(
+                agent_id=officer.id,
+                display_name=officer.full_name,
+                farmer_count=counts[officer.id],
+            )
+        )
+    for agent_id, count in counts.items():
+        if agent_id in seen:
+            continue
+        roster.append(
+            ForecastAgent(
+                agent_id=agent_id,
+                display_name=names.get(agent_id, ""),
+                farmer_count=count,
+            )
+        )
+    roster = [item for item in roster if item.farmer_count > 0]
+    roster.sort(key=lambda item: (-item.farmer_count, item.display_name))
+    return roster
+
+
 def collect_forecast(
     db: Session,
     user: User,
@@ -238,13 +369,36 @@ def collect_forecast(
     district: str | None = None,
     species_id: uuid.UUID | None = None,
 ) -> HarvestForecast:
-    return _assemble(user.role, _estimates(db, user, district=district, species_id=species_id))
+    farmers = []
+    agents: list[ForecastAgent] = []
+    if user.role in {"field_officer", "admin"}:
+        farmers = _farmer_forecasts(
+            db,
+            user,
+            district=district,
+            species_id=species_id,
+            registrar_id=user.id if user.role == "field_officer" else None,
+        )
+    if user.role == "admin":
+        agents = _agent_roster(db, farmers)
+    return _assemble(
+        user.role,
+        _estimates(db, user, district=district, species_id=species_id),
+        farmers,
+        agents,
+    )
 
 
-def _assemble(role: str, estimates: list[dict]) -> HarvestForecast:
+def _assemble(
+    role: str,
+    estimates: list[dict],
+    assigned: list[ForecastFarmer] | None = None,
+    agents: list[ForecastAgent] | None = None,
+) -> HarvestForecast:
     totals: dict[str, list] = defaultdict(lambda: [0.0, 0.0, 0])
     species: dict[tuple, list] = defaultdict(lambda: [0.0, 0.0, 0, None])
     places: dict[tuple, list] = defaultdict(lambda: [0.0, 0.0, 0])
+    sectors: dict[tuple, list] = defaultdict(lambda: [0.0, 0.0, 0])
     farmers: dict[tuple, list] = defaultdict(lambda: [0.0, 0.0, 0])
     provinces: dict[tuple, list] = defaultdict(lambda: [0.0, 0.0, 0])
     young = bearing = unestimated = 0
@@ -277,12 +431,17 @@ def _assemble(role: str, estimates: list[dict]) -> HarvestForecast:
                 province[0] += row["low"]
                 province[1] += row["high"]
                 province[2] += row["trees"]
+            if row["sector"]:
+                sector = sectors[(row["sector"], row["unit"])]
+                sector[0] += row["low"]
+                sector[1] += row["high"]
+                sector[2] += row["trees"]
             if role != "viewer" and row["farmer"]:
                 farmer = farmers[(row["farmer"], row["unit"])]
                 farmer[0] += row["low"]
                 farmer[1] += row["high"]
                 farmer[2] += row["trees"]
-        if role == "farmer":
+        if role in {"farmer", "admin"}:
             plantings.append(
                 ForecastPlanting(
                     public_code=row["public_code"],
@@ -293,6 +452,12 @@ def _assemble(role: str, estimates: list[dict]) -> HarvestForecast:
                     high=row["high"],
                     basis=row["basis"],
                     note=row["note"],
+                    months=row["months"],
+                    kind=row["kind"],
+                    province=row["province"],
+                    district=row["district"],
+                    sector=row["sector"],
+                    farmer_id=row["farmer_id"],
                 )
             )
 
@@ -328,9 +493,13 @@ def _assemble(role: str, estimates: list[dict]) -> HarvestForecast:
         ],
         by_district=grouped(places),
         by_province=grouped(provinces),
+        by_sector=grouped(sectors),
         by_farmer=grouped(farmers),
         plantings=plantings,
         young_trees=young,
         bearing_trees=bearing,
         unestimated_trees=unestimated,
+        registered_trees=sum(row["trees"] for row in estimates),
+        farmers=assigned or [],
+        agents=agents or [],
     )

@@ -881,12 +881,8 @@ export function DashboardView({ mode = "dashboard" }: { mode?: "dashboard" | "re
         </div> : null}
 
         {role === "admin" && mode === "dashboard" ? <BuyerInterestLink /> : null}
-        {role === "admin" && mode === "dashboard" ? (
-          <HarvestForecast
-            district={filters.district}
-            speciesId={filters.species_id}
-            refreshKey={response.generated_at}
-          />
+        {(role === "admin" || role === "farmer" || role === "field_officer") && mode === "dashboard" ? (
+          <HarvestForecast part="summary" refreshKey={response.generated_at} />
         ) : null}
         {!viewer ? <HarvestSummary refreshKey={response.generated_at} /> : null}
         {role === "admin" || role === "field_officer" ? <HarvestNotices refreshKey={response.generated_at} /> : null}

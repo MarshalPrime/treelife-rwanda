@@ -106,11 +106,12 @@ def test_forecast_uses_age_reference_and_recorded_harvests(client, accounts):
     assert totals["count"]["low"] == 40000
     assert totals["count"]["high"] == 60000
     assert totals["count"]["trees"] == 100
-    assert totals["kg"]["low"] == 30 + 34
-    assert totals["kg"]["high"] == 30 + 34
+    assert totals["kg"]["low"] == 28 + 34
+    assert totals["kg"]["high"] == 32 + 34
     species = {(row["species_common_name"], row["unit"]): row for row in body["by_species"]}
     assert species[("Mango", "count")]["trees"] == 100
-    assert species[("Mango", "kg")]["low"] == 30
+    assert species[("Mango", "kg")]["low"] == 28
+    assert species[("Mango", "kg")]["high"] == 32
     assert species[("Papaya", "kg")]["low"] == 34
     assert ("Soursop", "kg") not in species
     assert body["unestimated_trees"] == 1
@@ -147,14 +148,40 @@ def test_forecast_uses_age_reference_and_recorded_harvests(client, accounts):
     plantings = {row["public_code"]: row for row in farm.json()["plantings"]}
     assert picked["public_code"] in plantings
     assert plantings[picked["public_code"]]["basis"] == "recorded"
-    assert plantings[picked["public_code"]]["low"] == 10
+    assert plantings[picked["public_code"]]["low"] == 8
+    assert plantings[picked["public_code"]]["high"] == 12
+    assert plantings[picked["public_code"]]["months"] == [1, 8]
+    assert plantings[picked["public_code"]]["kind"] == "tree"
     assert plantings[bearing["public_code"]]["basis"] == "household"
     assert plantings[bearing["public_code"]]["low"] == 10
     assert plantings[mature["public_code"]]["basis"] == "household"
     assert plantings[young["public_code"]]["basis"] == "young"
     assert batch.json()["public_code"] not in plantings
+    assert body["agents"] == []
+    assert len(body["farmers"]) == 1
+    assigned = body["farmers"][0]
+    assert assigned["display_name"] == "Forecast Household"
+    assert assigned["district"] == "Bugesera"
+    officer_plantings = {row["public_code"]: row for row in assigned["plantings"]}
+    assert officer_plantings.keys() == plantings.keys()
+    assert officer_plantings[picked["public_code"]]["low"] == 8
+    assert officer_plantings[picked["public_code"]]["high"] == 12
+    assert assigned["young_trees"] == farm.json()["young_trees"]
+    assert assigned["unestimated_trees"] == farm.json()["unestimated_trees"]
 
     admin = client.get("/api/v1/harvests/forecast", headers=auth(accounts, "admin"))
     assert admin.status_code == 200, admin.text
-    assert admin.json()["totals"] == body["totals"]
-    assert admin.json()["plantings"] == []
+    admin_body = admin.json()
+    assert admin_body["totals"] == body["totals"]
+    assert picked["public_code"] in {row["public_code"] for row in admin_body["plantings"]}
+    assert batch.json()["public_code"] in {row["public_code"] for row in admin_body["plantings"]}
+    assert admin_body["registered_trees"] == sum(row["trees"] for row in admin_body["plantings"])
+    household = next(
+        row for row in admin_body["farmers"] if row["display_name"] == "Forecast Household"
+    )
+    assert {row["public_code"] for row in household["plantings"]} == set(plantings)
+    assert household["agent_name"] == "Test Officer"
+    assert any(
+        row["display_name"] == "Test Officer" and row["farmer_count"] >= 1
+        for row in admin_body["agents"]
+    )

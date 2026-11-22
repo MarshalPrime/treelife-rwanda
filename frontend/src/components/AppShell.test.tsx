@@ -45,6 +45,10 @@ describe("workspace navigation", () => {
     expect(pathAllowed("farmer", "/carbon", "approved")).toBe(false);
     expect(pathAllowed("viewer", "/carbon")).toBe(false);
     expect(pathAllowed("admin", "/carbon")).toBe(true);
+    expect(pathAllowed("admin", "/harvest")).toBe(true);
+    const adminPaths = linksForRole("admin").map(([path]) => path);
+    expect(adminPaths.indexOf("/forests")).toBeLessThan(adminPaths.indexOf("/harvest"));
+    expect(adminPaths.indexOf("/harvest")).toBeLessThan(adminPaths.indexOf("/species"));
     const officerLinks = linksForRole("field_officer").map(([path]) => path);
     expect(officerLinks).toContain("/carbon");
     expect(officerLinks.indexOf("/harvest")).toBeLessThan(officerLinks.indexOf("/carbon"));

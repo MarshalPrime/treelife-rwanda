@@ -43,6 +43,7 @@ const adminLinks = [
   ["/trees", "nav.trees"],
   ["/batches", "nav.batches"],
   ["/forests", "nav.forests"],
+  ["/harvest", "nav.harvest"],
   ["/species", "nav.species"],
   ["/about", "nav.about"],
 ];
@@ -116,7 +117,7 @@ export function pathAllowed(role: string, pathname: string, _carbonMonitoring?: 
   if (role === "admin") {
     if (pathname === "/forests/new" || /^\/forests\/[^/]+\/edit$/.test(pathname)) return true;
     if (pathname.includes("/edit") || pathname.endsWith("/new")) return false;
-    const hidden = ["/farmers", "/nursery", "/field", "/harvest"];
+    const hidden = ["/farmers", "/nursery", "/field"];
     return !hidden.some((path) => pathname === path || pathname.startsWith(`${path}/`));
   }
   return true;
@@ -222,8 +223,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const groups = [
     { title: "group.workspace" as MessageKey, paths: ["/dashboard", "/discover", "/monitoring", "/map"] },
     { title: "group.institutional" as MessageKey, paths: ["/fmes-preparation"] },
-    { title: "group.planting" as MessageKey, paths: ["/agents", "/sites", "/trees", "/batches", "/forests", "/farmers", "/species"] },
-    { title: "group.care" as MessageKey, paths: ["/nursery", "/field", "/harvest", "/carbon"] },
+    { title: "group.planting" as MessageKey, paths: user?.role === "admin"
+      ? ["/agents", "/sites", "/trees", "/batches", "/forests", "/harvest", "/species"]
+      : ["/agents", "/sites", "/trees", "/batches", "/forests", "/farmers", "/species"] },
+    { title: "group.care" as MessageKey, paths: user?.role === "admin"
+      ? ["/nursery", "/field", "/carbon"]
+      : ["/nursery", "/field", "/harvest", "/carbon"] },
     { title: "group.insights" as MessageKey, paths: ["/analytics", "/messages", "/audit", "/about"] },
   ];
   const currentKey = links.find(([href]) => pathname === href || pathname.startsWith(`${href}/`))?.[1];

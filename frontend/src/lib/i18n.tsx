@@ -118,6 +118,12 @@ export function localizePhrase(language: Language, text: string) {
       ? `Impuzandengo y'imisaruro ${counted[1]} yanditswe.`
       : `Moyenne de ${counted[1]} récoltes déjà notées.`;
   }
+  const ranged = text.match(/^Range of (\d+) recorded harvests\.$/);
+  if (ranged) {
+    return language === "rw"
+      ? `Intera y'imisaruro ${ranged[1]} yanditswe.`
+      : `Fourchette de ${ranged[1]} récoltes déjà notées.`;
+  }
   if (!text.includes(", ")) return text;
   return text.split(", ").map((part) => {
     const key = phraseKeys[part];

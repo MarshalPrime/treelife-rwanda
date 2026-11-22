@@ -880,7 +880,7 @@ export function HarvestPage() {
       <div className="page-head">
         <div>
           <h1>{t("harvest.title")}</h1>
-          <p className="lede">{t("harvest.lede")}</p>
+          <p className="lede">{user?.role === "admin" ? t("harvest.adminLede") : t("harvest.lede")}</p>
         </div>
         {canWrite ? (
           <button
@@ -994,7 +994,7 @@ export function HarvestPage() {
               <BuyerRequests refreshKey={version} />
             </section>
           ) : null}
-          <HarvestForecast refreshKey={version} />
+          <HarvestForecast refreshKey={version} part="detail" />
           {user?.role === "field_officer" ? <HarvestNotices refreshKey={version} /> : null}
           <HarvestSummary refreshKey={version} />
           <HarvestFeedback refreshKey={version} harvests={harvests} />

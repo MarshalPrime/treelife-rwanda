@@ -959,6 +959,64 @@ a.auth-mark { text-decoration: none; color: white; }
 .language-menu button[aria-selected="true"]:hover { background: #e7eee4; }
 .language-check { width: 16px; height: 16px; margin-left: auto; color: #17382d; }
 .auth-card .language-switch { justify-self: start; margin-bottom: 8px; }
+.farmer-forecast { display: grid; gap: 22px; }
+.farmer-forecast h2 { margin: 0; }
+.farmer-forecast h3 { margin: 0 0 12px; font-size: 1.05rem; }
+.farmer-forecast-kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 28px; }
+.farmer-forecast-kpis span, .farmer-forecast-period span { color: var(--muted); font-size: .82rem; }
+.farmer-forecast-kpis strong, .farmer-forecast-period strong { display: block; margin-top: 4px; font-size: 1.7rem; line-height: 1.15; color: var(--green); font-variant-numeric: tabular-nums; }
+.farmer-forecast-kpis strong.is-count { color: var(--ink); }
+.farmer-forecast-kpis strong.is-empty { color: var(--muted); font-size: 1.15rem; }
+.farmer-forecast-kpis small, .farmer-forecast-period small { display: block; margin-top: 4px; color: var(--muted); font-size: .78rem; }
+.farmer-forecast-species ul { list-style: none; margin: 0; padding: 0; }
+.farmer-forecast-species li { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 12px 0; border-top: 1px solid var(--line); }
+.farmer-forecast-photo { width: 44px; height: 44px; border-radius: 10px; background: #e7eee4 center / cover no-repeat; }
+.farmer-forecast-species strong, .farmer-forecast-species small { display: block; }
+.farmer-forecast-species small { color: var(--muted); font-size: .78rem; }
+.farmer-forecast-species b { font-variant-numeric: tabular-nums; }
+.farmer-forecast-species em { padding: 4px 10px; border-radius: 999px; background: #f8ebe3; color: #a15b32; font-style: normal; font-size: .78rem; font-weight: 650; }
+.farmer-forecast-details table { width: 100%; border-collapse: collapse; }
+.farmer-forecast-details th, .farmer-forecast-details td { padding: 12px 0; border-top: 1px solid var(--line); border-bottom: 0; text-align: left; vertical-align: top; }
+.farmer-forecast-details th { text-transform: none; letter-spacing: 0; font-size: .95rem; color: inherit; }
+.farmer-forecast-details thead th { color: var(--muted); font-size: .78rem; font-weight: 650; }
+.farmer-forecast-details th small { display: block; margin-top: 2px; color: var(--muted); font-weight: 500; font-size: .78rem; }
+.farmer-forecast-details td:nth-child(2), .farmer-forecast-details th:nth-child(2),
+.farmer-forecast-details td:nth-child(3), .farmer-forecast-details th:nth-child(3) { width: 1%; text-align: right; white-space: nowrap; padding-left: 20px; }
+.farmer-forecast-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.farmer-forecast-pill { padding: 4px 10px; border-radius: 999px; background: #e7f6ec; color: #1c7a45; font-size: .78rem; font-weight: 650; white-space: nowrap; }
+.farmer-forecast-back { justify-self: start; margin-bottom: 4px; padding: 0; border: 0; background: transparent; color: var(--muted); font-weight: 650; cursor: pointer; }
+.officer-forecast-species ul, .officer-forecast-farmers ul { list-style: none; margin: 0; padding: 0; }
+.officer-forecast-species li { display: grid; gap: 8px; padding: 12px 0; border-top: 1px solid var(--line); }
+.officer-forecast-species li div { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+.officer-forecast-track { display: block; height: 8px; border-radius: 999px; background: #e6eee8; overflow: hidden; }
+.officer-forecast-track span { display: block; height: 100%; border-radius: 999px; background: #1f8a4c; }
+.officer-forecast-farmers li { display: flex; justify-content: space-between; gap: 16px; margin-top: 10px; padding: 14px; border: 1px solid var(--line); border-radius: 14px; }
+.officer-forecast-farmers strong, .officer-forecast-farmers small, .officer-forecast-farmers b { display: block; }
+.officer-forecast-farmers small { color: var(--muted); font-size: .78rem; }
+.officer-forecast-farmers button { margin-top: 8px; padding: 0; border: 0; background: transparent; color: var(--green); font-weight: 650; cursor: pointer; }
+.forecast-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.forecast-filters select {
+  width: auto;
+  flex: 1 1 160px;
+  min-width: 150px;
+  min-height: 42px;
+  padding: 8px 12px;
+}
+.forecast-level { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; }
+.forecast-level button { min-height: 36px; margin: 0; padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; background: white; color: var(--ink); font-weight: 650; cursor: pointer; }
+.forecast-level button[aria-pressed="true"] { background: var(--green); border-color: var(--green); color: white; }
+.forecast-plain-table { width: 100%; border-collapse: collapse; }
+.forecast-plain-table th { text-transform: none; letter-spacing: 0; color: inherit; font-size: .95rem; }
+.forecast-plain-table thead th { color: var(--muted); font-size: .78rem; }
+.forecast-plain-table th, .forecast-plain-table td { text-align: left; padding: 10px 12px 10px 0; border-bottom: 0; border-top: 1px solid var(--line); vertical-align: top; }
+.forecast-plain-table td:last-child, .forecast-plain-table thead th:last-child { text-align: right; white-space: nowrap; }
+.forecast-plain-table button { display: block; margin-top: 4px; padding: 0; border: 0; background: transparent; color: var(--green); font-weight: 650; cursor: pointer; }
+.officer-forecast-farmers li > div:last-child { text-align: right; }
+.farmer-forecast-more { display: grid; justify-items: center; gap: 2px; width: 100%; margin-top: 8px; border: 0; background: transparent; color: var(--muted); cursor: pointer; }
+.farmer-forecast-more svg { width: 28px; height: 28px; padding: 6px; border: 1px solid var(--line); border-radius: 50%; }
+@media (max-width: 640px) {
+  .farmer-forecast-kpis { grid-template-columns: 1fr; }
+}
 @media (prefers-reduced-motion: reduce) {
   .language-switch-chevron { transition: none; }
 }
