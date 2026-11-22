@@ -238,9 +238,7 @@ def collect_forecast(
     district: str | None = None,
     species_id: uuid.UUID | None = None,
 ) -> HarvestForecast:
-    return _assemble(
-        user.role, _estimates(db, user, district=district, species_id=species_id)
-    )
+    return _assemble(user.role, _estimates(db, user, district=district, species_id=species_id))
 
 
 def _assemble(role: str, estimates: list[dict]) -> HarvestForecast:
