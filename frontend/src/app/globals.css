@@ -943,17 +943,22 @@ a.auth-mark { text-decoration: none; color: white; }
   .table td::before { content: attr(data-label); color: var(--muted); }
 }
 
-.language-switch { display: flex; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: 999px; background: white; }
-.language-switch button { border: 0; background: transparent; border-radius: 999px; padding: 6px 10px; color: var(--muted); font-size: .75rem; font-weight: 650; cursor: pointer; }
-.language-switch button[aria-pressed="true"] { background: #153f32; color: white; }
-.language-switch .language-short { display: none; }
-.language-switch.is-compact button { padding: 5px 9px; letter-spacing: .04em; }
-.language-switch.is-dark { background: transparent; border-color: rgba(246, 243, 236, 0.35); }
-.language-switch.is-dark button { color: #f6f3ec; }
-.language-switch.is-dark button[aria-pressed="true"] { background: #e7f0c8; color: #1c4636; }
+.language-switch { position: relative; }
+.language-switch.is-open { z-index: 30; }
+.language-switch-trigger { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 6px 12px 6px 10px; border: 1px solid var(--line); border-radius: 999px; background: white; color: #1c4636; font-size: .82rem; font-weight: 700; letter-spacing: .04em; cursor: pointer; }
+.language-switch.is-dark .language-switch-trigger { box-shadow: 0 8px 20px rgba(8, 22, 16, .18); }
+.language-flag { display: inline-flex; width: 20px; height: 14px; border-radius: 2px; overflow: hidden; box-shadow: 0 0 0 1px rgba(16, 44, 34, .12); flex: none; }
+.language-flag svg { width: 100%; height: 100%; display: block; }
+.language-switch-chevron { width: 14px; height: 14px; color: #5c6b66; }
+.language-switch.is-open .language-switch-chevron { transform: rotate(180deg); }
+.language-menu { position: absolute; top: calc(100% + 8px); left: 0; min-width: 220px; margin: 0; padding: 6px; list-style: none; border: 1px solid var(--line); border-radius: 16px; background: white; box-shadow: 0 16px 36px rgba(16, 44, 34, .14); }
+.language-switch.align-end .language-menu { left: auto; right: 0; }
+.language-menu button { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 12px; border: 0; border-radius: 10px; background: transparent; color: #3d4a46; font-size: .95rem; font-weight: 650; text-align: left; cursor: pointer; }
+.language-menu button[aria-selected="true"] { background: #eef2ea; color: #17382d; }
+.language-menu button:hover { background: #f6f8f3; }
+.language-menu button[aria-selected="true"]:hover { background: #e7eee4; }
+.language-check { width: 16px; height: 16px; margin-left: auto; color: #17382d; }
 .auth-card .language-switch { justify-self: start; margin-bottom: 8px; }
-@media (max-width: 860px) {
-  .language-switch .language-full { display: none; }
-  .language-switch .language-short { display: inline; }
-  .language-switch button { padding: 6px 8px; }
+@media (prefers-reduced-motion: reduce) {
+  .language-switch-chevron { transition: none; }
 }

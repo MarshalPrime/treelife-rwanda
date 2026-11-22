@@ -11,25 +11,26 @@
 .shell-v2 .nav a:hover .shell-nav-icon, .shell-v2 .nav a[aria-current="page"] .shell-nav-icon { opacity: 1; }
 .shell-v2 .nav a[aria-current="page"] .shell-nav-icon { transform: scale(1.04); }
 .shell-workspace { min-width: 0; }
-.shell-header { min-height: 84px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 32px; background: #fffcf8; border-bottom: 1px solid var(--line); }
+.shell-header { position: relative; z-index: 20; min-height: 84px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 32px; background: #fffcf8; border-bottom: 1px solid var(--line); }
 .shell-breadcrumb { display: flex; flex-direction: column; gap: 2px; }
 .shell-breadcrumb > span { font-size: .7rem; color: var(--muted); letter-spacing: .04em; }
 .shell-breadcrumb > strong { font-size: .95rem; }
 .shell-identity { display: flex; align-items: center; gap: 12px; }
 .shell-header-actions { display: flex; align-items: center; gap: 16px; }
-.language-switch { display: flex; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: 999px; background: white; }
-.language-switch button { border: 0; background: transparent; border-radius: 999px; padding: 6px 10px; color: var(--muted); font-size: .75rem; font-weight: 650; cursor: pointer; }
-.language-switch button[aria-pressed="true"] { background: #153f32; color: white; }
-.language-switch .language-short { display: none; }
-.language-switch.is-compact button { padding: 5px 9px; letter-spacing: .04em; }
-.language-switch.is-dark { background: transparent; border-color: rgba(246, 243, 236, 0.35); }
-.language-switch.is-dark button { color: #f6f3ec; }
-.language-switch.is-dark button[aria-pressed="true"] { background: #e7f0c8; color: #1c4636; }
-@media (max-width: 860px) {
-  .language-switch .language-full { display: none; }
-  .language-switch .language-short { display: inline; }
-  .language-switch button { padding: 6px 8px; }
-}
+.language-switch { position: relative; }
+.language-switch.is-open { z-index: 30; }
+.language-switch-trigger { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 6px 12px 6px 10px; border: 1px solid var(--line); border-radius: 999px; background: white; color: #1c4636; font-size: .82rem; font-weight: 700; letter-spacing: .04em; cursor: pointer; }
+.language-flag { display: inline-flex; width: 20px; height: 14px; border-radius: 2px; overflow: hidden; box-shadow: 0 0 0 1px rgba(16, 44, 34, .12); flex: none; }
+.language-flag svg { width: 100%; height: 100%; display: block; }
+.language-switch-chevron { width: 14px; height: 14px; color: #5c6b66; }
+.language-switch.is-open .language-switch-chevron { transform: rotate(180deg); }
+.language-menu { position: absolute; top: calc(100% + 8px); left: 0; min-width: 220px; margin: 0; padding: 6px; list-style: none; border: 1px solid var(--line); border-radius: 16px; background: white; box-shadow: 0 16px 36px rgba(16, 44, 34, .14); }
+.language-switch.align-end .language-menu { left: auto; right: 0; }
+.language-menu button { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 12px; border: 0; border-radius: 10px; background: transparent; color: #3d4a46; font-size: .95rem; font-weight: 650; text-align: left; cursor: pointer; }
+.language-menu button[aria-selected="true"] { background: #eef2ea; color: #17382d; }
+.language-menu button:hover { background: #f6f8f3; }
+.language-menu button[aria-selected="true"]:hover { background: #e7eee4; }
+.language-check { width: 16px; height: 16px; margin-left: auto; color: #17382d; }
 .shell-notification { position: relative; display: grid; place-items: center; width: 42px; height: 42px; border: 1px solid var(--line); border-radius: 50%; background: white; text-decoration: none; }
 .shell-notification b { position: absolute; top: -5px; right: -5px; min-width: 20px; padding: 2px 5px; border-radius: 999px; background: var(--danger); color: white; font-size: .68rem; text-align: center; }
 .shell-identity > span { font-size: .83rem; text-align: right; }

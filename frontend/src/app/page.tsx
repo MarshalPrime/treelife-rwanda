@@ -38,7 +38,7 @@ export default function HomePage() {
           <a href="#how">{t("home.how")}</a>
           <a href="#acknowledgement">{t("home.acknowledgement")}</a>
           <a href="#platform">{t("home.features")}</a>
-          <LanguageSwitch tone="dark" />
+          <LanguageSwitch tone="dark" align="end" />
           <Link className="secondary" href="/login">{t("home.signIn")}</Link>
           <Link className="primary" href="/register">{t("home.create")}</Link>
         </nav>

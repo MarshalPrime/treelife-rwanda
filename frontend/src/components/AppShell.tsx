@@ -273,7 +273,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <header className="shell-header">
           <button className="shell-menu-toggle secondary" type="button" ref={menuTrigger} aria-controls="navigation-panel" aria-expanded={menuOpen} onClick={() => setMenuOpen(true)}><span aria-hidden="true">☰</span> {t("shell.menu")}</button>
           <div className="shell-breadcrumb"><span>TreeLife Rwanda</span><strong>{currentPage}</strong></div>
-          <div className="shell-header-actions"><LanguageSwitch compact /><NotificationBell /><div className="shell-identity"><span>{user?.full_name}<small>{roleName}</small></span>{hasAccount ? <FarmerAccount /> : <span className="shell-initial" aria-hidden="true">{user?.full_name.slice(0, 1).toUpperCase()}</span>}</div></div>
+          <div className="shell-header-actions"><LanguageSwitch align="end" /><NotificationBell /><div className="shell-identity"><span>{user?.full_name}<small>{roleName}</small></span>{hasAccount ? <FarmerAccount /> : <span className="shell-initial" aria-hidden="true">{user?.full_name.slice(0, 1).toUpperCase()}</span>}</div></div>
         </header>
         <main className="content" id="main" tabIndex={-1}>
         {pending > 0 ? (
