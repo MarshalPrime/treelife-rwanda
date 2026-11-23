@@ -54,10 +54,10 @@ class Settings(BaseSettings):
     )
     access_token_expire_minutes: int = 480
     seed_demo_data: bool = False
-    demo_admin_password: str = "demo-admin-pass"
-    demo_officer_password: str = "demo-officer-pass"
-    demo_viewer_password: str = "demo-viewer-pass"
-    demo_farmer_password: str = "demo-farmer-pass"
+    demo_admin_password: str = "demo-admin-pass1"
+    demo_officer_password: str = "demo-officer-pass1"
+    demo_viewer_password: str = "demo-viewer-pass1"
+    demo_farmer_password: str = "demo-farmer-pass1"
     profile_photo_dir: str = str(BACKEND_ROOT / "profile-photos")
     carbon_document_dir: str = str(BACKEND_ROOT / "carbon-documents")
     assistant_api_key: str = ""

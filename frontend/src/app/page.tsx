@@ -36,8 +36,8 @@ export default function HomePage() {
         <nav aria-label="Page">
           <a href="#scenes">{t("home.record")}</a>
           <a href="#how">{t("home.how")}</a>
-          <a href="#acknowledgement">{t("home.acknowledgement")}</a>
           <a href="#platform">{t("home.features")}</a>
+          <a href="#acknowledgement">{t("home.acknowledgement")}</a>
           <LanguageSwitch tone="dark" align="end" />
           <Link className="secondary" href="/login">{t("home.signIn")}</Link>
           <Link className="primary" href="/register">{t("home.create")}</Link>
@@ -121,6 +121,21 @@ export default function HomePage() {
         </ol>
       </section>
 
+      <section className="home-features" id="platform" aria-labelledby="platform-heading">
+        <div className="home-section-head">
+          <p className="home-kicker dark">{t("home.features")}</p>
+          <h2 id="platform-heading">{t("home.featuresTitle")}</h2>
+        </div>
+        <div className="home-grid">
+          {features.map((feature) => (
+            <article key={feature.title}>
+              <h3>{t(feature.title)}</h3>
+              <p>{t(feature.body)}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
       <section className="home-badges" id="acknowledgement" aria-labelledby="acknowledgement-heading">
         <div className="home-section-head">
           <p className="home-kicker dark">{t("home.acknowledgement")}</p>
@@ -133,21 +148,6 @@ export default function HomePage() {
             <article key={badge.metal}>
               <Image src={badge.src} alt="" width={112} height={112} />
               <h3>{t(badge.metal)}</h3>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <section className="home-features" id="platform" aria-labelledby="platform-heading">
-        <div className="home-section-head">
-          <p className="home-kicker dark">{t("home.features")}</p>
-          <h2 id="platform-heading">{t("home.featuresTitle")}</h2>
-        </div>
-        <div className="home-grid">
-          {features.map((feature) => (
-            <article key={feature.title}>
-              <h3>{t(feature.title)}</h3>
-              <p>{t(feature.body)}</p>
             </article>
           ))}
         </div>

@@ -41,7 +41,7 @@ export default function ExampleMap() {
         />
       ))}
     </MapContainer>
-    <MapLayerToggle satellite={satellite} onToggle={() => setSatellite((current) => !current)} />
+    <MapLayerToggle satellite={satellite} onToggle={() => setSatellite((current) => !current)} satelliteLabel="Satellite" />
     </div>
   );
 }

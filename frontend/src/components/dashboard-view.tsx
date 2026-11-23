@@ -655,6 +655,21 @@ function filterQuery(filters: DashboardFilters, explicitRange = false) {
   return query.toString();
 }
 
+function NurseryReport({ valueChain }: { valueChain: NonNullable<DashboardResponse["value_chain"]> }) {
+  return (
+    <section className="card">
+      <div className="page-head"><h2>Nursery and production</h2><span className="help">Balances are current. Distributions, advice, and harvest use the selected period.</span></div>
+      <DashboardKpiGrid>
+        <DashboardKpi label="Seedlings in nursery" value={number(valueChain.seedlings_remaining)} hint="Current balance" />
+        <DashboardKpi label="Seedlings distributed" value={number(valueChain.seedlings_distributed)} hint="Selected period" />
+        <DashboardKpi label="Harvest not yet sold" value={`${number(valueChain.unsold_kg)} kg`} hint="Current balance" />
+        <DashboardKpi label="Advice notes" value={number(valueChain.advisories)} hint="Selected period" />
+      </DashboardKpiGrid>
+      <div className="table-wrap compact-table-scroll"><table><caption>Harvest by species · selected period</caption><thead><tr><th scope="col">Species</th><th scope="col">Kilograms</th><th scope="col">Fruit count</th></tr></thead><tbody>{valueChain.harvest_by_species.length ? valueChain.harvest_by_species.map((row) => <tr key={row.species_common_name}><th scope="row">{row.species_common_name}</th><td>{number(row.harvested_kg)}</td><td>{number(row.harvested_count)}</td></tr>) : <tr><td colSpan={3}>No harvest records in this period.</td></tr>}</tbody></table></div>
+    </section>
+  );
+}
+
 export function DashboardView({ mode = "dashboard" }: { mode?: "dashboard" | "report" }) {
   const { t } = useI18n();
   const { user } = useAuth();
@@ -808,10 +823,10 @@ export function DashboardView({ mode = "dashboard" }: { mode?: "dashboard" | "re
       <div>
         <p className="dashboard-eyebrow">{t("dash.eyebrow")}</p>
         <h1>{title}</h1>
-        {mode === "report" ? <p className="lede">Explore planting, fieldwork, and production over time.</p> : viewer ? <p className="lede">Explore the trees and species recorded across Rwanda.</p> : null}
+        {mode === "report" ? <p className="lede">{t("dash.reportLede")}</p> : viewer ? <p className="lede">Explore the trees and species recorded across Rwanda.</p> : null}
       </div>
       <div className="dashboard-quick-actions">
-        {writer ? <><Link className="primary" href="/trees/new">+ {t("dash.registerTree")}</Link><Link className="secondary" href="/batches/new">{t("reg.registerBatch")}</Link><Link className="secondary" href="/sites/new">{t("dash.addSite")}</Link></> : viewer ? <Link className="primary" href="/trees">{t("dash.browse")}</Link> : role === "admin" ? <><Link className="secondary" href="/analytics">{t("nav.reports")}</Link><Link className="secondary" href="/audit">{t("nav.audit")}</Link></> : null}
+        {writer ? <><Link className="primary" href="/trees/new">+ {t("dash.registerTree")}</Link><Link className="secondary" href="/batches/new">{t("reg.registerBatch")}</Link><Link className="secondary" href="/sites/new">{t("dash.addSite")}</Link></> : viewer ? <Link className="primary" href="/trees">{t("dash.browse")}</Link> : role === "admin" ? <>{mode === "report" ? <Link className="secondary" href="/dashboard">{t("nav.overview")}</Link> : <Link className="secondary" href="/analytics">{t("nav.reports")}</Link>}<Link className="secondary" href="/audit">{t("nav.audit")}</Link></> : null}
       </div>
     </div>
 
@@ -838,6 +853,7 @@ export function DashboardView({ mode = "dashboard" }: { mode?: "dashboard" | "re
       {(!response && !error) || (loading && !response) ? <DashboardSkeleton /> : null}
       {response && displaySummary && !error ? <div className="dashboard-body" aria-busy={loading}>
         {role === "farmer" && !response.linked ? <Banner tone="warning">Your login is not linked to a farmer record yet. Ask your field officer to link your household.</Banner> : null}
+        {mode === "report" && !viewer && response.value_chain ? <NurseryReport valueChain={response.value_chain} /> : null}
 
         {role === "admin" && mode === "dashboard" ? (
           <LiveTreeTotal
@@ -851,6 +867,7 @@ export function DashboardView({ mode = "dashboard" }: { mode?: "dashboard" | "re
           <div className="section-caption">
             <h2>{t("dash.glance")}</h2>
             <span className="help">{role === "admin" && mode === "dashboard" ? t("dash.glanceHelp") : t("dash.inventoryHelp")}</span>
+            {mode === "dashboard" ? <p className="help">{t(role === "admin" || viewer ? "dash.figuresFor" : "dash.figuresForField")}</p> : null}
           </div>
           <div className="dashboard-glance-row">
             <TreeHealth summary={displaySummary} />
@@ -886,17 +903,6 @@ export function DashboardView({ mode = "dashboard" }: { mode?: "dashboard" | "re
         ) : null}
         {!viewer ? <HarvestSummary refreshKey={response.generated_at} /> : null}
         {role === "admin" || role === "field_officer" ? <HarvestNotices refreshKey={response.generated_at} /> : null}
-
-        {mode === "report" && !viewer && response.value_chain ? <section className="card">
-          <div className="page-head"><h2>Nursery & production detail</h2><span className="help">Balances are current; distributions and advice use the selected period</span></div>
-          <DashboardKpiGrid>
-            <DashboardKpi label="Seedlings in nursery" value={number(response.value_chain.seedlings_remaining)} hint="Current balance" />
-            <DashboardKpi label="Seedlings distributed" value={number(response.value_chain.seedlings_distributed)} hint="Selected period" />
-            <DashboardKpi label="Harvest not yet sold" value={`${number(response.value_chain.unsold_kg)} kg`} hint="Current balance" />
-            <DashboardKpi label="Advice notes" value={number(response.value_chain.advisories)} hint="Selected period" />
-          </DashboardKpiGrid>
-          <div className="table-wrap compact-table-scroll"><table><caption>Harvest by species · selected period</caption><thead><tr><th scope="col">Species</th><th scope="col">Kilograms</th><th scope="col">Fruit count</th></tr></thead><tbody>{response.value_chain.harvest_by_species.length ? response.value_chain.harvest_by_species.map((row) => <tr key={row.species_common_name}><th scope="row">{row.species_common_name}</th><td>{number(row.harvested_kg)}</td><td>{number(row.harvested_count)}</td></tr>) : <tr><td colSpan={3}>No harvest records in this period.</td></tr>}</tbody></table></div>
-        </section> : null}
 
         <div className="dashboard-two-col dashboard-equal-columns">
           <section className="card"><div className="page-head"><h2>{t("dash.districts")}</h2><span className="help">{t("dash.selectDistrict")}</span></div><BreakdownChart title="District coverage" rows={response.districts.map((row) => ({ id: row.district, label: row.district, value: row.trees }))} selected={filters.district} onSelect={(id) => changeFilters({ district: id === filters.district ? "" : id })} /></section>

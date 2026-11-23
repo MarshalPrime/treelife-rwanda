@@ -8,6 +8,12 @@ from tests.conftest import auth, make_site, make_species
 from tests.test_dashboard import register_user
 
 
+def test_reply_stays_on_trees_and_records():
+    assert concise_reply("Mix flour, milk, and eggs, then fry.", "Can you give me a pancake recipe?") == (
+        "I can help with the trees, care, harvest, and records on this account."
+    )
+
+
 def test_reply_stays_short_enough_for_a_phone():
     long = """Based on your records, no visit is scheduled.
 

@@ -14,7 +14,7 @@ import uuid
 
 API = os.environ.get("API_URL", "http://localhost:8000")
 EMAIL = os.environ.get("SMOKE_EMAIL", "officer@demo.treelife.local")
-PASSWORD = os.environ.get("SMOKE_PASSWORD", "demo-officer-pass")
+PASSWORD = os.environ.get("SMOKE_PASSWORD", "demo-officer-pass1")
 
 
 def request(path: str, method: str = "GET", body: dict | None = None, token: str | None = None):

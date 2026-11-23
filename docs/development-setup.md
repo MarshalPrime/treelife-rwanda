@@ -51,7 +51,7 @@ Open `http://localhost:3000`. The browser calls `http://localhost:8000` unless `
 
 The tree and site forms include a map. Current location, a click, a dragged pin, or a place search fills latitude and longitude. The map and the search use OpenStreetMap, so no map key is required. The coordinates can still be typed.
 
-Sign in with `officer@demo.treelife.local` and `demo-officer-pass`, or with `farmer@demo.treelife.local` and `demo-farmer-pass`, after seeding.
+Sign in with `officer@demo.treelife.local` and `demo-officer-pass1`, or with `farmer@demo.treelife.local` and `demo-farmer-pass1`, after seeding.
 
 ## Tests
 

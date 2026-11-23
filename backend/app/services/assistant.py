@@ -306,8 +306,72 @@ def _message_text(body: dict) -> str:
     return "" if content is None else str(content)
 
 
+_OFF_TOPIC = {
+    "en": "I can help with the trees, care, harvest, and records on this account.",
+    "rw": "Nshobora kugufasha ku biti, kwita, umusaruro, n'inyandiko ziri kuri konti yawe.",
+    "fr": "Je peux aider pour les arbres, l'entretien, la récolte et les dossiers de ce compte.",
+}
+
+_TREE_CUES = (
+    "tree",
+    "plant",
+    "harvest",
+    "species",
+    "farmer",
+    "site",
+    "carbon",
+    "nursery",
+    "water",
+    "pest",
+    "sale",
+    "record",
+    "district",
+    "visit",
+    "fruit",
+    "forest",
+    "seed",
+    "agro",
+    "prune",
+    "mulch",
+    "fertil",
+    "mango",
+    "papaya",
+    "avocado",
+    "batch",
+    "care",
+    "seedling",
+    "survival",
+    "how many",
+    "summar",
+    "what do we",
+    "which ",
+    "categor",
+    "overview",
+    "igiti",
+    "ibiti",
+    "umusaruro",
+    "pepiniyeri",
+    "umuhinzi",
+    "arbre",
+    "récolte",
+    "recolte",
+    "pépinière",
+    "pepiniere",
+    "espèce",
+    "espece",
+    "entretien",
+)
+
+
+def _about_trees(question: str) -> bool:
+    asked = question.lower()
+    return any(cue in asked for cue in _TREE_CUES)
+
+
 def concise_reply(text: str, question: str = "", language: str = "en") -> str:
     """Keep a phone-sized answer that follows the question."""
+    if question.strip() and not _about_trees(question):
+        return _OFF_TOPIC.get(language, _OFF_TOPIC["en"])
     if language != "en":
         return _local_reply(text)
     asked_early = question.lower()
@@ -545,6 +609,8 @@ def _instructions(language: str = "en") -> str:
     return (
         "You are the TreeLife assistant for one signed-in account in Rwanda. "
         f"The person's latest message is in {chosen}. Answer only in natural {chosen}. "
+        "Answer only questions about this account's trees, planting, care, harvest, sales, carbon, or how to use TreeLife. "
+        "If the question is about anything else, including recipes, homework, or general chat, reply with one sentence that you can help with the trees and records on this account, then stop. "
         "Do not ask them to switch language, and do not answer in another language. "
         "Use everyday words a farmer can follow for planting, watering, fertilizer, pests, "
         "tree health, harvest, and agroforestry. "

@@ -28,10 +28,10 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
       ACCESS_TOKEN_EXPIRE_MINUTES: "480"
       SEED_DEMO_DATA: "true"
-      DEMO_ADMIN_PASSWORD: demo-admin-pass
-      DEMO_OFFICER_PASSWORD: demo-officer-pass
-      DEMO_VIEWER_PASSWORD: demo-viewer-pass
-      DEMO_FARMER_PASSWORD: demo-farmer-pass
+      DEMO_ADMIN_PASSWORD: demo-admin-pass1
+      DEMO_OFFICER_PASSWORD: demo-officer-pass1
+      DEMO_VIEWER_PASSWORD: demo-viewer-pass1
+      DEMO_FARMER_PASSWORD: demo-farmer-pass1
       PROFILE_PHOTO_DIR: /app/profile-photos
       CARBON_DOCUMENT_DIR: /app/carbon-documents
       ASSISTANT_API_KEY: ${ASSISTANT_API_KEY:-}

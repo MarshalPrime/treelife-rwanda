@@ -96,10 +96,10 @@ Development sign-in, after seeding:
 
 | Email | Role | Password |
 | --- | --- | --- |
-| `admin@demo.treelife.local` | Administrator | `demo-admin-pass` |
-| `officer@demo.treelife.local` | Field officer | `demo-officer-pass` |
-| `viewer@demo.treelife.local` | Viewer | `demo-viewer-pass` |
-| `farmer@demo.treelife.local` | Smallholder farmer | `demo-farmer-pass` |
+| `admin@demo.treelife.local` | Administrator | `demo-admin-pass1` |
+| `officer@demo.treelife.local` | Field officer | `demo-officer-pass1` |
+| `viewer@demo.treelife.local` | Viewer | `demo-viewer-pass1` |
+| `farmer@demo.treelife.local` | Smallholder farmer | `demo-farmer-pass1` |
 
 These are demonstration accounts. The `.local` suffix is intentional so they are not deliverable mailboxes. Change the passwords before any shared deployment, and do not enable the seed outside local development.
 

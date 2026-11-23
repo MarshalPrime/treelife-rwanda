@@ -34,20 +34,24 @@ export function ImageryLayer({ satellite }: { satellite: boolean }) {
 export function MapLayerToggle({
   satellite,
   onToggle,
+  satelliteLabel = "Reference imagery",
+  streetLabel = "Street map",
 }: {
   satellite: boolean;
   onToggle: () => void;
+  satelliteLabel?: string;
+  streetLabel?: string;
 }) {
   return (
     <button
       className="map-layers"
       type="button"
       aria-pressed={satellite}
-      aria-label={satellite ? "Show street map" : "Show reference imagery basemap"}
+      aria-label={satellite ? `Show ${streetLabel.toLowerCase()}` : `Show ${satelliteLabel.toLowerCase()}`}
       onClick={onToggle}
     >
       <span className={satellite ? "map-layers-preview streets" : "map-layers-preview satellite"} />
-      {satellite ? "Street map" : "Reference imagery"}
+      {satellite ? streetLabel : satelliteLabel}
     </button>
   );
 }

@@ -54,6 +54,8 @@ SPECIES = [
 def _get_or_create_user(db, email: str, full_name: str, role: str, password: str) -> User:
     existing = db.scalar(select(User).where(User.email == email))
     if existing is not None:
+        if email.endswith("@demo.treelife.local") and not email.startswith("synthetic-agent-"):
+            existing.password_hash = hash_password(password)
         return existing
     user = User(
         email=email,

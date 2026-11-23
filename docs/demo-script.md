@@ -5,8 +5,8 @@ This script uses the synthetic seed. Say that aloud before showing the map. The 
 ## Prepare
 
 1. Start the database, migrate, seed, and run the API and the web app. See [development-setup.md](development-setup.md).
-2. Sign in as `officer@demo.treelife.local` / `demo-officer-pass`.
-3. Keep a second window ready with `viewer@demo.treelife.local` / `demo-viewer-pass` if you want to show read-only access.
+2. Sign in as `officer@demo.treelife.local` / `demo-officer-pass1`.
+3. Keep a second window ready with `viewer@demo.treelife.local` / `demo-viewer-pass1` if you want to show read-only access.
 
 ## Walkthrough
 
@@ -32,6 +32,6 @@ This script uses the synthetic seed. Say that aloud before showing the map. The 
 
 | Email | Role | Password |
 | --- | --- | --- |
-| `admin@demo.treelife.local` | Administrator, including the audit log | `demo-admin-pass` |
-| `officer@demo.treelife.local` | Can register and edit | `demo-officer-pass` |
-| `viewer@demo.treelife.local` | Read only | `demo-viewer-pass` |
+| `admin@demo.treelife.local` | Administrator, including the audit log | `demo-admin-pass1` |
+| `officer@demo.treelife.local` | Can register and edit | `demo-officer-pass1` |
+| `viewer@demo.treelife.local` | Read only | `demo-viewer-pass1` |
