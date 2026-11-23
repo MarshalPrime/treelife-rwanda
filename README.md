@@ -92,7 +92,7 @@ Copy `.env.example` to `.env` if you need to override the defaults. The checked-
 | `SEED_DEMO_DATA` | When `true`, the API container loads synthetic records |
 | `NEXT_PUBLIC_API_URL` | API origin used by the browser |
 
-Development sign-in, after seeding:
+Development sign-in, once the seed has loaded:
 
 | Email | Role | Password |
 | --- | --- | --- |
