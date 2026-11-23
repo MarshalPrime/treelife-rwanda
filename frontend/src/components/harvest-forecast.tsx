@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Banner } from "@/components/AppShell";
 import { speciesPhoto } from "@/components/map-cards";
+import "@/components/records-ui.css";
 import { api } from "@/lib/api";
 import { localizePhrase, useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/messages";
@@ -255,7 +256,6 @@ function OfficerForecast({ forecast, onBack, heading, part = "full" }: { forecas
   const fruit = t("forecast.fruitUnit");
   const farmers = forecast.farmers ?? [];
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [open, setOpen] = useState(false);
   const selected = farmers.find((farmer) => farmer.farmer_id === selectedId) ?? null;
   const totals = new Map<string, { unit: "kg" | "count"; low: number; high: number; trees: number }>();
   const species = new Map<string, { name: string; unit: "kg" | "count"; low: number; high: number }>();
@@ -288,7 +288,6 @@ function OfficerForecast({ forecast, onBack, heading, part = "full" }: { forecas
   const speciesRows = [...species.values()].sort((left, right) => right.high - left.high || left.name.localeCompare(right.name));
   const peak = new Map<string, number>();
   for (const row of speciesRows) peak.set(row.unit, Math.max(peak.get(row.unit) ?? 0, row.high));
-  const shown = open ? farmers : farmers.slice(0, 4);
   if (selected) {
     const place = placeLabel(selected);
     return (
@@ -300,6 +299,50 @@ function OfficerForecast({ forecast, onBack, heading, part = "full" }: { forecas
       </section>
     );
   }
+  const farmersBlock = (
+    <div>
+      <h3>{t("forecast.farmersTitle")}</h3>
+      {farmers.length ? (
+        <div className="rec-scroll">
+          <div className="rec-list">
+            {farmers.map((farmer) => {
+              const place = placeLabel(farmer);
+              const treeCount = t(farmer.registered_trees === 1 ? "forecast.treeCountOne" : "forecast.treeCountMany", { count: number(farmer.registered_trees) });
+              const meta = [place, treeCount].filter(Boolean).join(" · ");
+              return (
+                <div className="rec-row" key={farmer.farmer_id}>
+                  <div className="rec-row-main">
+                    <div className="rec-row-info">
+                      <div className="rec-row-title">
+                        <strong>{farmer.display_name}</strong>
+                      </div>
+                      <div className="rec-row-meta">
+                        <span>{meta}</span>
+                      </div>
+                    </div>
+                    <div className="rec-row-side">
+                      {farmer.totals.length ? (
+                        farmer.totals.map((row) => (
+                          <span className="rec-badge" key={row.unit}>{amount(row.low, row.high, row.unit, fruit)}</span>
+                        ))
+                      ) : (
+                        <span className="rec-badge is-muted">{t("forecast.notEstimated")}</span>
+                      )}
+                      <button type="button" className="secondary rec-btn-sm" onClick={() => setSelectedId(farmer.farmer_id)}>
+                        {t("forecast.viewFarmer")}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        <div className="rec-empty">{t("forecast.noFarmers")}</div>
+      )}
+    </div>
+  );
   return (
     <section className="card farmer-forecast" aria-label={heading ?? t("forecast.title")}>
       {onBack ? <button type="button" className="farmer-forecast-back" onClick={onBack}>{t("forecast.backAgents")}</button> : null}
@@ -336,49 +379,29 @@ function OfficerForecast({ forecast, onBack, heading, part = "full" }: { forecas
           {missing ? <small>{t(missing === 1 ? "forecast.missingOne" : "forecast.missingMany", { count: number(missing) })}</small> : null}
         </div>
       </div> : null}
-      {part !== "summary" && speciesRows.length ? (
-        <div className="officer-forecast-species">
-          <h3>{t("forecast.bySpecies")}</h3>
-          <ul>
-            {speciesRows.map((row) => {
-              const width = peak.get(row.unit) ? Math.max(8, Math.round((row.high / (peak.get(row.unit) ?? 1)) * 100)) : 0;
-              return (
-                <li key={`${row.name}-${row.unit}`}>
-                  <div><strong>{row.name}</strong><b>{amount(row.low, row.high, row.unit, fruit)}</b></div>
-                  <span className="officer-forecast-track"><span style={{ width: `${width}%` }} /></span>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
+      {part !== "summary" ? (
+        speciesRows.length ? (
+          <div className="rec-grid-2">
+            <div className="officer-forecast-species">
+              <h3>{t("forecast.bySpecies")}</h3>
+              <ul>
+                {speciesRows.map((row) => {
+                  const width = peak.get(row.unit) ? Math.max(8, Math.round((row.high / (peak.get(row.unit) ?? 1)) * 100)) : 0;
+                  return (
+                    <li key={`${row.name}-${row.unit}`}>
+                      <div><strong>{row.name}</strong><b>{amount(row.low, row.high, row.unit, fruit)}</b></div>
+                      <span className="officer-forecast-track"><span style={{ width: `${width}%` }} /></span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+            {farmersBlock}
+          </div>
+        ) : (
+          farmersBlock
+        )
       ) : null}
-      {part !== "summary" ? <div className="officer-forecast-farmers">
-        <h3>{t("forecast.farmersTitle")}</h3>
-        <p className="help">{farmers.length ? t("forecast.farmersHelp") : t("forecast.noFarmers")}</p>
-        <ul>
-          {shown.map((farmer) => (
-            <li key={farmer.farmer_id}>
-              <div>
-                <strong>{farmer.display_name}</strong>
-                {placeLabel(farmer) ? <small>{placeLabel(farmer)}</small> : null}
-                <button type="button" onClick={() => setSelectedId(farmer.farmer_id)}>{t("forecast.viewFarmer")}</button>
-              </div>
-              <div>
-                {farmer.totals.length ? farmer.totals.map((row) => (
-                  <b key={row.unit}>{amount(row.low, row.high, row.unit, fruit)}</b>
-                )) : <b>{t("forecast.notEstimated")}</b>}
-                <small>{t(farmer.registered_trees === 1 ? "forecast.treeCountOne" : "forecast.treeCountMany", { count: number(farmer.registered_trees) })}</small>
-              </div>
-            </li>
-          ))}
-        </ul>
-        {farmers.length > 4 ? (
-          <button type="button" className="farmer-forecast-more" aria-expanded={open} onClick={() => setOpen((current) => !current)}>
-            <svg viewBox="0 0 16 16" aria-hidden="true"><path d={open ? "M4 10 L8 6 L12 10" : "M4 6 L8 10 L12 6"} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
-            <span>{open ? t("forecast.hideFarmers") : t("forecast.showFarmers")}</span>
-          </button>
-        ) : null}
-      </div> : null}
     </section>
   );
 }
@@ -402,11 +425,9 @@ function AdminForecast({ forecast, part }: { forecast: Forecast; part: "summary"
   const fruit = t("forecast.fruitUnit");
   const farmers = forecast.farmers ?? [];
   const agents = forecast.agents ?? [];
+  const [tab, setTab] = useState<"overview" | "officers" | "farmers">("overview");
   const [level, setLevel] = useState<"province" | "district" | "sector">("province");
   const [selected, setSelected] = useState<{ kind: "agent" | "farmer"; id: string } | null>(null);
-  const [openAgents, setOpenAgents] = useState(false);
-  const [openFarmers, setOpenFarmers] = useState(false);
-  const [openPlaces, setOpenPlaces] = useState(false);
   const rows = forecast.plantings;
   const totals = new Map<string, { unit: "kg" | "count"; low: number; high: number; trees: number }>();
   const species = new Map<string, { name: string; unit: "kg" | "count"; low: number; high: number }>();
@@ -446,9 +467,6 @@ function AdminForecast({ forecast, part }: { forecast: Forecast; part: "summary"
   const peak = new Map<string, number>();
   for (const row of speciesRows) peak.set(row.unit, Math.max(peak.get(row.unit) ?? 0, row.high));
   const placeRows = [...places.values()].sort((left, right) => right.high - left.high || left.label.localeCompare(right.label));
-  const shownAgents = openAgents ? agents : agents.slice(0, 4);
-  const shownFarmers = openFarmers ? farmers : farmers.slice(0, 4);
-  const shownPlaces = openPlaces ? placeRows : placeRows.slice(0, 4);
   if (part === "detail" && selected?.kind === "agent") {
     const agent = agents.find((item) => item.agent_id === selected.id);
     const scoped: Forecast = { ...forecast, role: "field_officer", farmers: farmers.filter((farmer) => farmer.agent_id === selected.id) };
@@ -458,6 +476,38 @@ function AdminForecast({ forecast, part }: { forecast: Forecast; part: "summary"
     const farmer = farmers.find((item) => item.farmer_id === selected.id);
     if (farmer) return <FarmerDetail farmer={farmer} onBack={() => setSelected(null)} />;
   }
+  const locationBlock = (
+    <div>
+      <div className="rec-panel-head">
+        <h3>{t("forecast.byLocation")}</h3>
+        <div className="rec-chips" role="group" aria-label={t("forecast.byLocation")}>
+          {(["province", "district", "sector"] as const).map((item) => (
+            <button
+              key={item}
+              type="button"
+              className={`rec-chip${level === item ? " is-active" : ""}`}
+              aria-pressed={level === item}
+              onClick={() => setLevel(item)}
+            >
+              {t(`forecast.${item}`)}
+            </button>
+          ))}
+        </div>
+      </div>
+      {placeRows.length ? (
+        <div className="rec-scroll">
+          <table className="forecast-plain-table">
+            <thead><tr><th scope="col">{t("forecast.location")}</th><th scope="col">{t("forecast.expected")}</th></tr></thead>
+            <tbody>
+              {placeRows.map((row) => (
+                <tr key={`${row.label}-${row.unit}`}><th scope="row">{row.label}</th><td>{amount(row.low, row.high, row.unit, fruit)}</td></tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : <div className="rec-empty">{t("forecast.noLocation")}</div>}
+    </div>
+  );
   return (
     <section className="card farmer-forecast" aria-label={t("forecast.title")}>
       <div className="farmer-forecast-head">
@@ -493,124 +543,140 @@ function AdminForecast({ forecast, part }: { forecast: Forecast; part: "summary"
         </div>
       </div>
       ) : null}
-      {part === "detail" && speciesRows.length ? (
-        <div className="officer-forecast-species">
-          <h3>{t("forecast.bySpecies")}</h3>
-          <ul>
-            {speciesRows.map((row) => {
-              const width = peak.get(row.unit) ? Math.max(8, Math.round((row.high / (peak.get(row.unit) ?? 1)) * 100)) : 0;
-              return (
-                <li key={`${row.name}-${row.unit}`}>
-                  <div><strong>{row.name}</strong><b>{amount(row.low, row.high, row.unit, fruit)}</b></div>
-                  <span className="officer-forecast-track"><span style={{ width: `${width}%` }} /></span>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
+      {part === "detail" ? (
+        <>
+          <div className="rec-chips" role="tablist" aria-label={t("forecast.title")}>
+            <button type="button" role="tab" aria-selected={tab === "overview"} className={`rec-chip${tab === "overview" ? " is-active" : ""}`} onClick={() => setTab("overview")}>
+              Overview
+            </button>
+            <button type="button" role="tab" aria-selected={tab === "officers"} className={`rec-chip${tab === "officers" ? " is-active" : ""}`} onClick={() => setTab("officers")}>
+              Officers ({number(agents.length)})
+            </button>
+            <button type="button" role="tab" aria-selected={tab === "farmers"} className={`rec-chip${tab === "farmers" ? " is-active" : ""}`} onClick={() => setTab("farmers")}>
+              Farmers ({number(farmers.length)})
+            </button>
+          </div>
+          {tab === "overview" ? (
+            speciesRows.length ? (
+              <div className="rec-grid-2">
+                <div className="officer-forecast-species">
+                  <h3>{t("forecast.bySpecies")}</h3>
+                  <ul>
+                    {speciesRows.map((row) => {
+                      const width = peak.get(row.unit) ? Math.max(8, Math.round((row.high / (peak.get(row.unit) ?? 1)) * 100)) : 0;
+                      return (
+                        <li key={`${row.name}-${row.unit}`}>
+                          <div><strong>{row.name}</strong><b>{amount(row.low, row.high, row.unit, fruit)}</b></div>
+                          <span className="officer-forecast-track"><span style={{ width: `${width}%` }} /></span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+                {locationBlock}
+              </div>
+            ) : (
+              locationBlock
+            )
+          ) : null}
+          {tab === "officers" ? (
+            agents.length ? (
+              <div className="rec-scroll">
+                <div className="rec-list">
+                  {agents.map((agent) => {
+                    const group = farmers.filter((farmer) => farmer.agent_id === agent.agent_id);
+                    const agentRows = group.flatMap((farmer) => farmer.plantings);
+                    const agentTotals = new Map<string, { unit: "kg" | "count"; low: number; high: number }>();
+                    let trees = 0;
+                    for (const row of agentRows) {
+                      trees += row.trees;
+                      if (!row.unit || row.low == null || row.high == null) continue;
+                      const current = agentTotals.get(row.unit) ?? { unit: row.unit, low: 0, high: 0 };
+                      current.low += row.low;
+                      current.high += row.high;
+                      agentTotals.set(row.unit, current);
+                    }
+                    return (
+                      <div className="rec-row" key={agent.agent_id}>
+                        <div className="rec-row-main">
+                          <div className="rec-row-info">
+                            <div className="rec-row-title">
+                              <strong>{agent.display_name}</strong>
+                            </div>
+                            <div className="rec-row-meta">
+                              <span>{t("forecast.assignedCount", { count: number(group.length) })} · {t(trees === 1 ? "forecast.treeCountOne" : "forecast.treeCountMany", { count: number(trees) })}</span>
+                            </div>
+                          </div>
+                          <div className="rec-row-side">
+                            {agentTotals.size ? (
+                              [...agentTotals.values()].map((row) => (
+                                <span className="rec-badge" key={row.unit}>{amount(row.low, row.high, row.unit, fruit)}</span>
+                              ))
+                            ) : (
+                              <span className="rec-badge is-muted">{t("forecast.notEstimated")}</span>
+                            )}
+                            <button type="button" className="secondary rec-btn-sm" onClick={() => setSelected({ kind: "agent", id: agent.agent_id })}>
+                              {t("forecast.viewAgent")}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div className="rec-empty">{t("forecast.none")}</div>
+            )
+          ) : null}
+          {tab === "farmers" ? (
+            farmers.length ? (
+              <div className="rec-scroll">
+                <div className="rec-list">
+                  {farmers.map((farmer) => {
+                    const farmerTotals = new Map<string, { unit: "kg" | "count"; low: number; high: number }>();
+                    for (const row of farmer.plantings) {
+                      if (!row.unit || row.low == null || row.high == null) continue;
+                      const current = farmerTotals.get(row.unit) ?? { unit: row.unit, low: 0, high: 0 };
+                      current.low += row.low;
+                      current.high += row.high;
+                      farmerTotals.set(row.unit, current);
+                    }
+                    return (
+                      <div className="rec-row" key={farmer.farmer_id}>
+                        <div className="rec-row-main">
+                          <div className="rec-row-info">
+                            <div className="rec-row-title">
+                              <strong>{farmer.display_name}</strong>
+                            </div>
+                            <div className="rec-row-meta">
+                              <span>{farmer.agent_name ?? "—"}</span>
+                            </div>
+                          </div>
+                          <div className="rec-row-side">
+                            {farmerTotals.size ? (
+                              [...farmerTotals.values()].map((row) => (
+                                <span className="rec-badge" key={row.unit}>{amount(row.low, row.high, row.unit, fruit)}</span>
+                              ))
+                            ) : (
+                              <span className="rec-badge is-muted">{t("forecast.notEstimated")}</span>
+                            )}
+                            <button type="button" className="secondary rec-btn-sm" onClick={() => setSelected({ kind: "farmer", id: farmer.farmer_id })}>
+                              {t("forecast.viewFarmer")}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div className="rec-empty">{t("forecast.noFarmers")}</div>
+            )
+          ) : null}
+        </>
       ) : null}
-      {part === "detail" ? <>
-      <div className="officer-forecast-farmers">
-        <h3>{t("forecast.byLocation")}</h3>
-        <div className="forecast-level" role="group" aria-label={t("forecast.byLocation")}>
-          {(["province", "district", "sector"] as const).map((item) => (
-            <button key={item} type="button" aria-pressed={level === item} onClick={() => { setLevel(item); setOpenPlaces(false); }}>{t(`forecast.${item}`)}</button>
-          ))}
-        </div>
-        {shownPlaces.length ? (
-          <table className="forecast-plain-table">
-            <thead><tr><th scope="col">{t("forecast.location")}</th><th scope="col">{t("forecast.expected")}</th></tr></thead>
-            <tbody>
-              {shownPlaces.map((row) => (
-                <tr key={`${row.label}-${row.unit}`}><th scope="row">{row.label}</th><td>{amount(row.low, row.high, row.unit, fruit)}</td></tr>
-              ))}
-            </tbody>
-          </table>
-        ) : <p className="help">{t("forecast.noLocation")}</p>}
-        {placeRows.length > 4 ? (
-          <button type="button" className="farmer-forecast-more" aria-expanded={openPlaces} onClick={() => setOpenPlaces((current) => !current)}>
-            <svg viewBox="0 0 16 16" aria-hidden="true"><path d={openPlaces ? "M4 10 L8 6 L12 10" : "M4 6 L8 10 L12 6"} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
-            <span>{openPlaces ? t("forecast.hideLocations") : t("forecast.showLocations")}</span>
-          </button>
-        ) : null}
-      </div>
-      <div className="officer-forecast-farmers">
-        <h3>{t("forecast.byAgent")}</h3>
-        <p className="help">{t("forecast.agentHelp")}</p>
-        <ul>
-          {shownAgents.map((agent) => {
-            const group = farmers.filter((farmer) => farmer.agent_id === agent.agent_id);
-            const agentRows = group.flatMap((farmer) => farmer.plantings);
-            const agentTotals = new Map<string, { unit: "kg" | "count"; low: number; high: number }>();
-            let trees = 0;
-            for (const row of agentRows) {
-              trees += row.trees;
-              if (!row.unit || row.low == null || row.high == null) continue;
-              const current = agentTotals.get(row.unit) ?? { unit: row.unit, low: 0, high: 0 };
-              current.low += row.low;
-              current.high += row.high;
-              agentTotals.set(row.unit, current);
-            }
-            return (
-              <li key={agent.agent_id}>
-                <div>
-                  <strong>{agent.display_name}</strong>
-                  <small>{t("forecast.assignedCount", { count: number(group.length) })} · {t(trees === 1 ? "forecast.treeCountOne" : "forecast.treeCountMany", { count: number(trees) })}</small>
-                  <button type="button" onClick={() => setSelected({ kind: "agent", id: agent.agent_id })}>{t("forecast.viewAgent")}</button>
-                </div>
-                <div>
-                  {agentTotals.size ? [...agentTotals.values()].map((row) => <b key={row.unit}>{amount(row.low, row.high, row.unit, fruit)}</b>) : <b>{t("forecast.notEstimated")}</b>}
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-        {agents.length > 4 ? (
-          <button type="button" className="farmer-forecast-more" aria-expanded={openAgents} onClick={() => setOpenAgents((current) => !current)}>
-            <svg viewBox="0 0 16 16" aria-hidden="true"><path d={openAgents ? "M4 10 L8 6 L12 10" : "M4 6 L8 10 L12 6"} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
-            <span>{openAgents ? t("forecast.hideFarmers") : t("forecast.showAgents")}</span>
-          </button>
-        ) : null}
-      </div>
-      <div className="officer-forecast-farmers">
-        <h3>{t("forecast.farmersPlatform")}</h3>
-        <p className="help">{t("forecast.farmersPlatformHelp")}</p>
-        <table className="forecast-plain-table">
-          <thead>
-            <tr><th scope="col">{t("forecast.farmersPlatform")}</th><th scope="col">{t("forecast.agentColumn")}</th><th scope="col">{t("forecast.expected")}</th></tr>
-          </thead>
-          <tbody>
-            {shownFarmers.map((farmer) => {
-              const matched = farmer.plantings;
-              const farmerTotals = new Map<string, { unit: "kg" | "count"; low: number; high: number }>();
-              for (const row of matched) {
-                if (!row.unit || row.low == null || row.high == null) continue;
-                const current = farmerTotals.get(row.unit) ?? { unit: row.unit, low: 0, high: 0 };
-                current.low += row.low;
-                current.high += row.high;
-                farmerTotals.set(row.unit, current);
-              }
-              return (
-                <tr key={farmer.farmer_id}>
-                  <th scope="row">
-                    {farmer.display_name}
-                    <button type="button" onClick={() => setSelected({ kind: "farmer", id: farmer.farmer_id })}>{t("forecast.viewFarmer")}</button>
-                  </th>
-                  <td>{farmer.agent_name ?? "—"}</td>
-                  <td>{farmerTotals.size ? [...farmerTotals.values()].map((row) => amount(row.low, row.high, row.unit, fruit)).join(", ") : t("forecast.notEstimated")}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-        {farmers.length > 4 ? (
-          <button type="button" className="farmer-forecast-more" aria-expanded={openFarmers} onClick={() => setOpenFarmers((current) => !current)}>
-            <svg viewBox="0 0 16 16" aria-hidden="true"><path d={openFarmers ? "M4 10 L8 6 L12 10" : "M4 6 L8 10 L12 6"} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
-            <span>{openFarmers ? t("forecast.hideFarmers") : t("forecast.showFarmers")}</span>
-          </button>
-        ) : null}
-      </div>
-      </> : null}
     </section>
   );
 }

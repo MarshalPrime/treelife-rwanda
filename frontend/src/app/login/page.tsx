@@ -43,7 +43,7 @@ export default function LoginPage() {
         <div className="auth-head">
           <Link className="auth-mark" href="/" aria-label={t("auth.home")}>TL</Link>
           <div>
-            <p className="lede">Ejo Labs</p>
+            {/* <p className="lede">Ejo Labs</p> */}
             <h1>TreeLife Rwanda</h1>
           </div>
         </div>

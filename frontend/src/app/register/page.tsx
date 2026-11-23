@@ -80,7 +80,7 @@ export default function RegisterPage() {
         <div className="auth-head">
           <Link className="auth-mark" href="/" aria-label="TreeLife home">TL</Link>
           <div>
-            <p className="lede">Ejo Labs</p>
+            {/* <p className="lede">Ejo Labs</p> */}
             <h1>{t("auth.createTitle")}</h1>
           </div>
         </div>

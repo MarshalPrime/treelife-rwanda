@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Banner } from "@/components/AppShell";
 import { speciesPhoto } from "@/components/map-cards";
 import { api } from "@/lib/api";
@@ -64,6 +64,7 @@ export function BuyerRequests({ refreshKey = 0 }: { refreshKey?: string | number
   const [rows, setRows] = useState<Interest[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [replies, setReplies] = useState<Record<string, string>>({});
+  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "accepted">("all");
   const { language, t } = useI18n();
   const canAnswer = user?.role === "admin" || user?.role === "field_officer" || user?.role === "farmer";
   const viewer = user?.role === "viewer";
@@ -90,34 +91,120 @@ export function BuyerRequests({ refreshKey = 0 }: { refreshKey?: string | number
     }
   }
 
+  const filteredRows = useMemo(() => {
+    if (!rows) return [];
+    if (statusFilter === "all") return rows;
+    return rows.filter((row) => row.status === statusFilter);
+  }, [rows, statusFilter]);
+
   if (error) return <Banner tone="error">{error}</Banner>;
   if (!rows) return <p className="loading" role="status">{t("discover.loadingRequests")}</p>;
-  if (!rows.length) return <p className="help">{t("discover.noRequests")}</p>;
+  if (!rows.length) {
+    return (
+      <div className="discover-empty">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+          <path d="M4 7h16M7 12h10M10 17h4" strokeLinecap="round" />
+        </svg>
+        <p className="help">{t("discover.noRequests")}</p>
+      </div>
+    );
+  }
+
+  const pendingCount = rows.filter((row) => row.status === "pending").length;
+  const acceptedCount = rows.filter((row) => row.status === "accepted").length;
 
   return (
-    <div className="discover-requests">
-      {rows.map((row) => (
-        <article className="discover-request" key={row.id}>
-          <div className="page-head">
-            <strong>{row.species_common_name}</strong>
-            <span className={`discover-status is-${row.status}`}>{row.status}</span>
-          </div>
-          <p>{row.farmer_name}{row.farm_label ? ` · ${row.farm_label}` : ""}{row.district ? ` · ${row.district}` : ""}</p>
-          <p>{number(row.quantity)} {row.unit === "kg" ? "kg" : fruit} · {localizePhrase(language, row.period)}</p>
-          <p className="help">{viewer ? row.public_code : `${row.public_code} · ${row.requester_name}`}</p>
-          {row.notes ? <p>{row.notes}</p> : null}
-          {row.response_note ? <p>{t("discover.reply", { note: row.response_note })}</p> : null}
-          {row.status === "pending" || row.status === "accepted" ? (
-            <div className="discover-actions">
-              {canAnswer ? <input aria-label={t("discover.replyLabel", { code: row.public_code })} value={replies[row.id] ?? ""} onChange={(event) => setReplies((current) => ({ ...current, [row.id]: event.target.value }))} placeholder={t("discover.replyHint")} /> : null}
-              {canAnswer && row.status === "pending" ? <button className="primary" type="button" onClick={() => void update(row, "accepted")}>{t("discover.accept")}</button> : null}
-              {canAnswer && row.status === "pending" ? <button className="secondary" type="button" onClick={() => void update(row, "rejected")}>{t("discover.reject")}</button> : null}
-              {canAnswer && row.status === "accepted" ? <button className="primary" type="button" onClick={() => void update(row, "completed")}>{t("discover.complete")}</button> : null}
-              {viewer ? <button className="secondary" type="button" onClick={() => void update(row, "cancelled")}>{t("discover.cancel")}</button> : null}
+    <div className="discover-requests-wrap">
+      <div className="discover-chips" role="tablist" aria-label="Filter booking requests">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={statusFilter === "all"}
+          className={`discover-chip${statusFilter === "all" ? " is-active" : ""}`}
+          onClick={() => setStatusFilter("all")}
+        >
+          {t("discover.filterAll")} ({number(rows.length)})
+        </button>
+        {pendingCount > 0 ? (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={statusFilter === "pending"}
+            className={`discover-chip${statusFilter === "pending" ? " is-active" : ""}`}
+            onClick={() => setStatusFilter("pending")}
+          >
+            Pending ({number(pendingCount)})
+          </button>
+        ) : null}
+        {acceptedCount > 0 ? (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={statusFilter === "accepted"}
+            className={`discover-chip${statusFilter === "accepted" ? " is-active" : ""}`}
+            onClick={() => setStatusFilter("accepted")}
+          >
+            Accepted ({number(acceptedCount)})
+          </button>
+        ) : null}
+      </div>
+
+      <div className="discover-requests">
+        {filteredRows.map((row) => (
+          <article className="discover-request" key={row.id}>
+            <div className="discover-request-top">
+              <strong>{row.species_common_name}</strong>
+              <span className={`discover-status is-${row.status}`}>{row.status}</span>
             </div>
-          ) : null}
-        </article>
-      ))}
+            <p className="discover-meta">
+              {row.farmer_name}
+              {row.farm_label ? ` · ${row.farm_label}` : ""}
+              {row.district ? ` · ${row.district}` : ""}
+            </p>
+            <div className="discover-request-stats">
+              <span className="discover-stat-pill">
+                {number(row.quantity)} {row.unit === "kg" ? "kg" : fruit}
+              </span>
+              <span className="discover-stat-pill">{localizePhrase(language, row.period)}</span>
+              <span className="discover-code">{viewer ? row.public_code : `${row.public_code} · ${row.requester_name}`}</span>
+            </div>
+            {row.notes ? <p className="discover-note">{row.notes}</p> : null}
+            {row.response_note ? <p className="discover-note is-reply">{t("discover.reply", { note: row.response_note })}</p> : null}
+            {row.status === "pending" || row.status === "accepted" ? (
+              <div className="discover-actions">
+                {canAnswer ? (
+                  <input
+                    aria-label={t("discover.replyLabel", { code: row.public_code })}
+                    value={replies[row.id] ?? ""}
+                    onChange={(event) => setReplies((current) => ({ ...current, [row.id]: event.target.value }))}
+                    placeholder={t("discover.replyHint")}
+                  />
+                ) : null}
+                {canAnswer && row.status === "pending" ? (
+                  <button className="primary" type="button" onClick={() => void update(row, "accepted")}>
+                    {t("discover.accept")}
+                  </button>
+                ) : null}
+                {canAnswer && row.status === "pending" ? (
+                  <button className="secondary" type="button" onClick={() => void update(row, "rejected")}>
+                    {t("discover.reject")}
+                  </button>
+                ) : null}
+                {canAnswer && row.status === "accepted" ? (
+                  <button className="primary" type="button" onClick={() => void update(row, "completed")}>
+                    {t("discover.complete")}
+                  </button>
+                ) : null}
+                {viewer ? (
+                  <button className="secondary" type="button" onClick={() => void update(row, "cancelled")}>
+                    {t("discover.cancel")}
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+          </article>
+        ))}
+      </div>
     </div>
   );
 }
@@ -129,6 +216,9 @@ export function DiscoverPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [speciesFilter, setSpeciesFilter] = useState<string>("all");
   const [quantity, setQuantity] = useState("");
   const [period, setPeriod] = useState("");
   const [notes, setNotes] = useState("");
@@ -188,61 +278,262 @@ export function DiscoverPage() {
 
   const mine = requests?.filter((row) => row.status === "pending" || row.status === "accepted").length ?? 0;
 
+  const speciesOptions = useMemo(() => {
+    if (!offers) return [];
+    const seen = new Map<string, number>();
+    for (const offer of offers) {
+      seen.set(offer.species_common_name, (seen.get(offer.species_common_name) ?? 0) + 1);
+    }
+    return Array.from(seen.entries());
+  }, [offers]);
+
+  const filteredOffers = useMemo(() => {
+    if (!offers) return [];
+    const query = search.trim().toLowerCase();
+    return offers.filter((offer) => {
+      if (speciesFilter !== "all" && offer.species_common_name !== speciesFilter) return false;
+      if (!query) return true;
+      const haystack = [
+        offer.species_common_name,
+        offer.farm_label,
+        offer.farmer_name,
+        offer.province,
+        offer.district,
+        offer.sector,
+        offer.period,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(query);
+    });
+  }, [offers, search, speciesFilter]);
+
   return (
-    <div className="page">
-      <div className="page-head">
-        <div>
-          <p className="help">{viewer ? t("discover.viewerMark") : t("discover.adminMark")}</p>
+    <div className="page discover-page">
+      <header className="discover-hero">
+        <div className="discover-hero-copy">
+          <div className="discover-eyebrow-row">
+            <span className="discover-eyebrow">{viewer ? t("discover.viewerMark") : t("discover.adminMark")}</span>
+            {viewer ? <span className="discover-pill">{t("discover.badge")}</span> : null}
+          </div>
           <h1>{t("discover.title")}</h1>
           <p className="lede">{t("discover.lede")}</p>
         </div>
-        {viewer ? <span className="discover-pill">{t("discover.badge")}</span> : null}
-      </div>
+
+        <div className="discover-kpis" aria-label="Discovery figures">
+          <div className="discover-kpi">
+            <span>{t("discover.available")}</span>
+            <strong>{offers ? number(offers.length) : "…"}</strong>
+            <small>{t("discover.fromTrees")}</small>
+          </div>
+          <div className="discover-kpi">
+            <span>{viewer ? t("discover.mine") : t("discover.open")}</span>
+            <strong>{requests ? number(mine) : "…"}</strong>
+            <small>{t("discover.pending")}</small>
+          </div>
+        </div>
+      </header>
+
       {notice ? <Banner tone="success">{notice}</Banner> : null}
       {error ? <Banner tone="error">{error}</Banner> : null}
-      <div className="discover-kpis" aria-label="Discovery figures">
-        <div><span>{t("discover.available")}</span><strong>{offers ? number(offers.length) : "…"}</strong><small>{t("discover.fromTrees")}</small></div>
-        <div><span>{viewer ? t("discover.mine") : t("discover.open")}</span><strong>{requests ? number(mine) : "…"}</strong><small>{t("discover.pending")}</small></div>
-      </div>
-      <section className="card" aria-label="Explore harvests">
-        <h2>{t("discover.explore")}</h2>
-        <p className="help">{t("discover.estimate")}</p>
-        {!offers ? <p className="loading" role="status">{t("discover.loading")}</p> : offers.length ? (
-          <div className="discover-list">
-            {offers.map((offer) => {
-              const key = offerKey(offer);
-              const photo = speciesPhoto(offer.species_common_name);
-              return (
-                <article className="discover-offer" key={key}>
-                  <div className="discover-photo" style={photo ? { backgroundImage: `url(${photo})` } : undefined} role="img" aria-label={offer.species_common_name} />
-                  <div>
-                    <h3>{offer.species_common_name}</h3>
-                    <p className="discover-meta">{place([offer.farm_label, offer.farmer_name, offer.province, offer.district, offer.sector])}</p>
-                    <p><strong>{t("discover.estimated", { amount: amount(offer.low, offer.high, offer.unit, fruit) })}</strong></p>
-                    <p className="discover-meta">{t(offer.trees === 1 ? "discover.treeOne" : "discover.treeMany", { count: number(offer.trees) })} · {t("discover.period", { period: localizePhrase(language, offer.period) })}</p>
-                    <span className="discover-pill">{t("discover.pill")}</span>
-                    {viewer ? <div className="discover-actions"><button className="secondary" type="button" onClick={() => setSelected(selected === key ? null : key)}>{selected === key ? t("discover.close") : t("discover.express")}</button></div> : null}
-                  </div>
-                  {viewer && selected === key ? (
-                    <form className="form discover-form" onSubmit={(event) => { event.preventDefault(); void submit(offer); }}>
-                      <div className="row">
-                        <label>{t("discover.quantity")}<input aria-label={t("discover.quantityLabel")} value={quantity} onChange={(event) => setQuantity(event.target.value)} /></label>
-                        <label>{t("discover.collection")}<input aria-label={t("discover.collection")} value={period} onChange={(event) => setPeriod(event.target.value)} placeholder={t("discover.collectionHint")} /></label>
-                      </div>
-                      <label>{t("discover.notes")}<textarea aria-label={t("discover.notesLabel")} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder={t("discover.notesHint")} /></label>
-                      <button className="primary" type="submit" disabled={saving}>{saving ? t("discover.sending") : t("discover.send")}</button>
-                    </form>
-                  ) : null}
-                </article>
-              );
-            })}
+
+      <div className="discover-grid">
+        <section className="card discover-panel" aria-label="Explore harvests">
+          <div className="discover-panel-head">
+            <div>
+              <h2>{t("discover.explore")}</h2>
+              <p className="help">{t("discover.estimate")}</p>
+            </div>
           </div>
-        ) : <p className="help">{t("discover.emptyOffers")}</p>}
-      </section>
-      <section className="card" aria-label={t("discover.booking")}>
-        <h2>{viewer ? t("discover.mine") : t("discover.booking")}</h2>
-        <BuyerRequests refreshKey={version} />
-      </section>
+
+          {offers && offers.length > 0 ? (
+            <div className="discover-toolbar">
+              <div className="discover-search">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                  <circle cx="11" cy="11" r="7" />
+                  <path d="m20 20-3.5-3.5" strokeLinecap="round" />
+                </svg>
+                <input
+                  type="search"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder={t("discover.searchPlaceholder")}
+                  aria-label={t("discover.searchPlaceholder")}
+                />
+              </div>
+
+              {speciesOptions.length > 1 ? (
+                <div className="discover-chips" role="tablist" aria-label="Filter by species">
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={speciesFilter === "all"}
+                    className={`discover-chip${speciesFilter === "all" ? " is-active" : ""}`}
+                    onClick={() => setSpeciesFilter("all")}
+                  >
+                    {t("discover.filterAll")} ({number(offers.length)})
+                  </button>
+                  {speciesOptions.map(([name, count]) => (
+                    <button
+                      key={name}
+                      type="button"
+                      role="tab"
+                      aria-selected={speciesFilter === name}
+                      className={`discover-chip${speciesFilter === name ? " is-active" : ""}`}
+                      onClick={() => setSpeciesFilter(name)}
+                    >
+                      {name} ({number(count)})
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {!offers ? (
+            <p className="loading" role="status">{t("discover.loading")}</p>
+          ) : offers.length === 0 ? (
+            <div className="discover-empty">
+              <p className="help">{t("discover.emptyOffers")}</p>
+            </div>
+          ) : filteredOffers.length === 0 ? (
+            <div className="discover-empty">
+              <p className="help">{t("discover.noMatches")}</p>
+            </div>
+          ) : (
+            <div className="discover-list">
+              {filteredOffers.map((offer) => {
+                const key = offerKey(offer);
+                const photo = speciesPhoto(offer.species_common_name);
+                const isBookingOpen = viewer && selected === key;
+                const isDetailsOpen = !viewer && expanded === key;
+
+                return (
+                  <article className={`discover-offer${isBookingOpen || isDetailsOpen ? " is-open" : ""}`} key={key}>
+                    <div
+                      className="discover-photo"
+                      style={photo ? { backgroundImage: `url(${photo})` } : undefined}
+                      role="img"
+                      aria-label={offer.species_common_name}
+                    />
+                    <div className="discover-offer-body">
+                      <div className="discover-offer-top">
+                        <div className="discover-offer-title">
+                          <h3>{offer.species_common_name}</h3>
+                          <span className="discover-pill">{t("discover.pill")}</span>
+                        </div>
+                        <strong className="discover-yield">
+                          {t("discover.estimated", { amount: amount(offer.low, offer.high, offer.unit, fruit) })}
+                        </strong>
+                      </div>
+
+                      <p className="discover-meta">
+                        {place([offer.farm_label, offer.farmer_name, offer.province, offer.district, offer.sector])}
+                      </p>
+
+                      <div className="discover-offer-foot">
+                        <div className="discover-stats-inline">
+                          <span>{t(offer.trees === 1 ? "discover.treeOne" : "discover.treeMany", { count: number(offer.trees) })}</span>
+                          <span aria-hidden="true">·</span>
+                          <span>{t("discover.period", { period: localizePhrase(language, offer.period) })}</span>
+                        </div>
+
+                        {viewer ? (
+                          <button
+                            className={isBookingOpen ? "secondary discover-btn-sm" : "primary discover-btn-sm"}
+                            type="button"
+                            onClick={() => setSelected(isBookingOpen ? null : key)}
+                          >
+                            {isBookingOpen ? t("discover.close") : t("discover.express")}
+                          </button>
+                        ) : (
+                          <button
+                            className="secondary discover-btn-sm"
+                            type="button"
+                            aria-expanded={isDetailsOpen}
+                            onClick={() => setExpanded(isDetailsOpen ? null : key)}
+                          >
+                            {isDetailsOpen ? t("discover.hideDetails") : t("discover.details")}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {isDetailsOpen ? (
+                      <div className="discover-details-drawer">
+                        <div>
+                          <span>{t("discover.fromTrees")}</span>
+                          <strong>{t(offer.trees === 1 ? "discover.treeOne" : "discover.treeMany", { count: number(offer.trees) })}</strong>
+                        </div>
+                        <div>
+                          <span>{t("discover.period", { period: "" }).replace(/[:\s]+$/, "")}</span>
+                          <strong>{localizePhrase(language, offer.period)}</strong>
+                        </div>
+                        <div>
+                          <span>{offer.district || offer.province || "—"}</span>
+                          <strong>{offer.farm_label || offer.farmer_name}</strong>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {isBookingOpen ? (
+                      <form
+                        className="form discover-form"
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          void submit(offer);
+                        }}
+                      >
+                        <div className="row">
+                          <label>
+                            {t("discover.quantity")}
+                            <input
+                              aria-label={t("discover.quantityLabel")}
+                              value={quantity}
+                              onChange={(event) => setQuantity(event.target.value)}
+                            />
+                          </label>
+                          <label>
+                            {t("discover.collection")}
+                            <input
+                              aria-label={t("discover.collection")}
+                              value={period}
+                              onChange={(event) => setPeriod(event.target.value)}
+                              placeholder={t("discover.collectionHint")}
+                            />
+                          </label>
+                        </div>
+                        <label>
+                          {t("discover.notes")}
+                          <textarea
+                            aria-label={t("discover.notesLabel")}
+                            value={notes}
+                            onChange={(event) => setNotes(event.target.value)}
+                            placeholder={t("discover.notesHint")}
+                          />
+                        </label>
+                        <div className="discover-form-actions">
+                          <button className="primary" type="submit" disabled={saving}>
+                            {saving ? t("discover.sending") : t("discover.send")}
+                          </button>
+                        </div>
+                      </form>
+                    ) : null}
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        <section className="card discover-panel discover-panel-side" aria-label={t("discover.booking")}>
+          <div className="discover-panel-head">
+            <h2>{viewer ? t("discover.mine") : t("discover.booking")}</h2>
+          </div>
+          <BuyerRequests refreshKey={version} />
+        </section>
+      </div>
     </div>
   );
 }
