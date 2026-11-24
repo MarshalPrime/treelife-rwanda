@@ -125,9 +125,8 @@ Use [docs/demo-script.md](docs/demo-script.md). Every seeded record is marked sy
 ## Roadmap
 
 1. Confirm the registration fields with foresters, cooperatives, and urban greening teams.
-2. Add Kinyarwanda and French.
-3. Extend the device queue to edits, and detect conflicts when two officers change one record.
-4. Agree an FMES exchange with the responsible authority before any adapter sends data. See [docs/fmes-integration.md](docs/fmes-integration.md). The adapter still does not send anything.
+2. Extend the device queue to edits, and detect conflicts when two officers change one record.
+3. Agree an FMES exchange with the responsible authority before any adapter sends data. See [docs/fmes-integration.md](docs/fmes-integration.md). The adapter still does not send anything.
 
 The pilot package is [docs/pilot-plan.md](docs/pilot-plan.md). No pilot partner has been selected, and no field results are claimed.
 
