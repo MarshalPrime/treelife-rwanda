@@ -6,10 +6,12 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 import { Banner, Field, OriginBadge, Pager } from "@/components/AppShell";
 import type { Corner } from "@/components/boundary-draw";
+import "@/components/records-ui.css";
 import { HealthBadge } from "@/components/tree-card";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { formatCoordinates, polygonCenter } from "@/lib/coordinates";
+import { useI18n } from "@/lib/i18n";
 import type { MapFeature, Page, Species } from "@/lib/types";
 import { newRequestId } from "@/lib/validation";
 
@@ -70,6 +72,7 @@ function forestCenter(boundary: { latitude: number; longitude: number }[]) {
 
 export function ForestList() {
   const { user } = useAuth();
+  const { t } = useI18n();
   const [query, setQuery] = useState("");
   const [submitted, setSubmitted] = useState("");
   const [distribution, setDistribution] = useState("");
@@ -78,6 +81,7 @@ export function ForestList() {
   const [data, setData] = useState<Page<ForestRecord> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams({ page: String(page), page_size: "10" });
@@ -87,81 +91,215 @@ export function ForestList() {
     let active = true;
     setLoading(true);
     api<Page<ForestRecord>>(`/forests?${params}`)
-      .then((next) => { if (active) setData(next); })
+      .then((next) => {
+        if (active) {
+          setData(next);
+          setExpandedId(null);
+        }
+      })
       .catch((caught: Error) => { if (active) setError(caught.message); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [distribution, page, status, submitted]);
 
+  const hasActiveFilters = Boolean(query || submitted || distribution || status);
+  const pageArea = data ? data.items.reduce((sum, forest) => sum + forest.area_hectares, 0) : 0;
+
   return (
-    <div className="page">
-      <div className="page-head">
-        <div>
+    <div className="page rec-page">
+      <div className="rec-hero">
+        <div className="rec-hero-copy">
+          <span className="rec-eyebrow">Forest stands</span>
           <h1>Forests</h1>
-          <p className="lede">A forest is a batch of trees across an area. Draw the stand once instead of registering every tree.</p>
+          <p className="lede">Mapped forest stands tracked by boundary, area, and condition.</p>
         </div>
-        {canRegister(user?.role) ? <Link className="primary" href="/forests/new">Register a forest</Link> : null}
-      </div>
-      {error ? <Banner tone="error">{error}</Banner> : null}
-      <form className="filters" onSubmit={(event) => { event.preventDefault(); setPage(1); setSubmitted(query); }}>
-        <input aria-label="Search forests" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search name, code, or district" />
-        <select aria-label="Distribution" value={distribution} onChange={(event) => { setDistribution(event.target.value); setPage(1); }}>
-          <option value="">All distributions</option>
-          {distributions.map(([value, name]) => <option key={value} value={value}>{name}</option>)}
-        </select>
-        <select aria-label="Condition" value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }}>
-          <option value="">All conditions</option>
-          {conditions.map(([value, name]) => <option key={value} value={value}>{name}</option>)}
-        </select>
-        <button className="secondary" type="submit">Search</button>
-      </form>
-      {loading ? <p className="loading">Loading forests…</p> : null}
-      {!loading && data?.total === 0 ? (
-        <div className="card">
-          <h2>No forests match</h2>
-          <p>Register a stand by drawing its boundary on the map.</p>
-        </div>
-      ) : null}
-      {data && data.items.length > 0 ? (
-        <div className="card">
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Code</th>
-                  <th>Name</th>
-                  <th>Species</th>
-                  <th>Area</th>
-                  <th>Trees</th>
-                  <th>Distribution</th>
-                  <th>Condition</th>
-                  <th>District</th>
-                  <th>Center</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.items.map((forest) => {
-                  const center = forestCenter(forest.boundary);
-                  return (
-                  <tr key={forest.id}>
-                    <td data-label="Code"><Link href={`/forests/${forest.id}`}>{forest.public_code}</Link></td>
-                    <td data-label="Name">{forest.name}</td>
-                    <td data-label="Species">{forest.species_common_name ?? "—"}</td>
-                    <td data-label="Area">{forest.area_hectares.toLocaleString("en-GB")} ha</td>
-                    <td data-label="Trees">{forest.estimated_trees.toLocaleString("en-GB")}</td>
-                    <td data-label="Distribution">{distributionName(forest.distribution)}</td>
-                    <td data-label="Condition"><HealthBadge status={forest.status} /></td>
-                    <td data-label="District">{forest.district ?? "—"}</td>
-                    <td data-label="Center">{center ? formatCoordinates(center[0], center[1]) : "—"}</td>
-                  </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+        <div className="rec-hero-actions">
+          <div className="rec-kpis">
+            <div className="rec-kpi">
+              <span>Total forests</span>
+              <strong>{data ? data.total.toLocaleString("en-GB") : "—"}</strong>
+            </div>
+            <div className="rec-kpi">
+              <span>Area (page)</span>
+              <strong>{data ? `${pageArea.toLocaleString("en-GB", { maximumFractionDigits: 1 })} ha` : "—"}</strong>
+            </div>
           </div>
-          <Pager page={data.page} pageSize={data.page_size} total={data.total} onPage={setPage} />
+          {canRegister(user?.role) ? (
+            <Link className="primary" href="/forests/new">+ New forest</Link>
+          ) : null}
         </div>
-      ) : null}
+      </div>
+
+      {error ? <Banner tone="error">{error}</Banner> : null}
+
+      <section className="rec-panel">
+        <form
+          className="rec-toolbar"
+          onSubmit={(event) => {
+            event.preventDefault();
+            setPage(1);
+            setSubmitted(query.trim());
+          }}
+        >
+          <div className="rec-search">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <circle cx="11" cy="11" r="7" />
+              <path d="m20 20-3.5-3.5" />
+            </svg>
+            <input
+              aria-label="Search forests"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search name, code, or district"
+            />
+          </div>
+          <select
+            className="rec-select"
+            aria-label="Distribution"
+            value={distribution}
+            onChange={(event) => {
+              setDistribution(event.target.value);
+              setPage(1);
+            }}
+          >
+            <option value="">All distributions</option>
+            {distributions.map(([value, name]) => (
+              <option key={value} value={value}>{name}</option>
+            ))}
+          </select>
+          <select
+            className="rec-select"
+            aria-label="Condition"
+            value={status}
+            onChange={(event) => {
+              setStatus(event.target.value);
+              setPage(1);
+            }}
+          >
+            <option value="">{t("records.allStatuses")}</option>
+            {conditions.map(([value, name]) => (
+              <option key={value} value={value}>{name}</option>
+            ))}
+          </select>
+          <button className="secondary rec-btn-sm" type="submit">Search</button>
+          {hasActiveFilters ? (
+            <button
+              className="secondary rec-btn-sm"
+              type="button"
+              onClick={() => {
+                setQuery("");
+                setSubmitted("");
+                setDistribution("");
+                setStatus("");
+                setPage(1);
+              }}
+            >
+              {t("records.clear")}
+            </button>
+          ) : null}
+        </form>
+
+        {loading ? <p className="loading">Loading forests…</p> : null}
+
+        {!loading && data?.total === 0 ? (
+          <div className="rec-empty">
+            {hasActiveFilters
+              ? "No forests match these filters."
+              : "No forests yet. Register a stand by drawing its boundary on the map."}
+          </div>
+        ) : null}
+
+        {data && data.items.length > 0 ? (
+          <div className="rec-scroll">
+            <div className="rec-list">
+              {data.items.map((forest) => {
+                const center = forestCenter(forest.boundary);
+                const isOpen = expandedId === forest.id;
+
+                return (
+                  <article key={forest.id} className={`rec-row${isOpen ? " is-open" : ""}`}>
+                    <div className="rec-row-main">
+                      <div className="rec-row-info">
+                        <div className="rec-row-title">
+                          <Link href={`/forests/${forest.id}`}>{forest.name}</Link>
+                          <span className="rec-code">{forest.public_code}</span>
+                        </div>
+                        <div className="rec-row-meta">
+                          <span>{forest.species_common_name ?? "No species"}</span>
+                          <span>{forest.area_hectares.toLocaleString("en-GB")} ha</span>
+                          <span>{forest.estimated_trees.toLocaleString("en-GB")} trees</span>
+                          <span>{forest.district ?? "No district"}</span>
+                          <span>{center ? formatCoordinates(center[0], center[1]) : "No boundary center"}</span>
+                        </div>
+                      </div>
+                      <div className="rec-row-side">
+                        <span className="rec-badge is-muted">{distributionName(forest.distribution)}</span>
+                        <HealthBadge status={forest.status} />
+                        <button
+                          type="button"
+                          className="secondary rec-btn-sm"
+                          aria-expanded={isOpen}
+                          onClick={() => setExpandedId(isOpen ? null : forest.id)}
+                        >
+                          {isOpen ? t("discover.hideDetails") : t("discover.details")}
+                        </button>
+                        <Link className="secondary rec-btn-sm" href={`/forests/${forest.id}`}>
+                          {t("records.open")}
+                        </Link>
+                      </div>
+                    </div>
+
+                    {isOpen ? (
+                      <div className="rec-drawer">
+                        <div className="rec-drawer-item">
+                          <span>Species</span>
+                          <strong>{forest.species_common_name ?? "—"}</strong>
+                        </div>
+                        <div className="rec-drawer-item">
+                          <span>Condition</span>
+                          <strong><HealthBadge status={forest.status} /></strong>
+                        </div>
+                        <div className="rec-drawer-item">
+                          <span>Distribution</span>
+                          <strong>{distributionName(forest.distribution)}</strong>
+                        </div>
+                        <div className="rec-drawer-item">
+                          <span>Area</span>
+                          <strong>{forest.area_hectares.toLocaleString("en-GB")} ha</strong>
+                        </div>
+                        <div className="rec-drawer-item">
+                          <span>Estimated trees</span>
+                          <strong>{forest.estimated_trees.toLocaleString("en-GB")}</strong>
+                        </div>
+                        <div className="rec-drawer-item">
+                          <span>Place</span>
+                          <strong>{[forest.province, forest.district].filter(Boolean).join(", ") || "—"}</strong>
+                        </div>
+                        <div className="rec-drawer-item">
+                          <span>Center</span>
+                          <strong>{center ? formatCoordinates(center[0], center[1]) : "—"}</strong>
+                        </div>
+                        <div className="rec-drawer-item">
+                          <span>Registered</span>
+                          <strong>{forest.registered_at.slice(0, 10)}</strong>
+                        </div>
+                        <div className="rec-drawer-item">
+                          <span>Record</span>
+                          <strong><Link href={`/forests/${forest.id}`}>View full record →</Link></strong>
+                        </div>
+                      </div>
+                    ) : null}
+                  </article>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+
+        {data && data.total > 0 ? (
+          <Pager page={data.page} pageSize={data.page_size} total={data.total} onPage={setPage} />
+        ) : null}
+      </section>
     </div>
   );
 }

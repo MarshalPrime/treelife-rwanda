@@ -10,6 +10,7 @@ import { HarvestForecast } from "@/components/harvest-forecast";
 import { HarvestFeedback, HarvestNotices, HarvestSummary } from "@/components/harvest-insights";
 import { TreePlace } from "@/components/forms";
 import { RegistrationProgress } from "@/components/registration-progress";
+import "@/components/records-ui.css";
 import { ApiError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
@@ -742,6 +743,51 @@ const USES = [
 
 const HARVEST_STEPS = ["Harvest", "Where it went", "Review and submit"] as const;
 
+type HarvestRecord = {
+  id: string;
+  public_code: string;
+  tree_id: string | null;
+  batch_id: string | null;
+  target_code: string | null;
+  harvested_on: string;
+  quantity: number;
+  quantity_remaining: number;
+  unit: string;
+  notes: string | null;
+  data_origin: string;
+};
+
+type SaleRecord = {
+  id: string;
+  public_code: string;
+  harvest_id: string;
+  harvest_code: string | null;
+  sold_on: string;
+  quantity: number;
+  unit: string;
+  amount_rwf: number;
+  purpose: string;
+  buyer_name: string | null;
+  notes: string | null;
+  data_origin: string;
+};
+
+type HarvestFeedRow =
+  | { kind: "harvest"; key: string; date: string; code: string; item: HarvestRecord }
+  | { kind: "sale"; key: string; date: string; code: string; item: SaleRecord };
+
+function formatShortDate(value: string) {
+  return new Date(`${value.slice(0, 10)}T00:00:00`).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function purposeLabel(purpose: string) {
+  return USES.find((item) => item.id === purpose)?.label ?? purpose;
+}
+
 export function HarvestPage() {
   const { canWrite, user } = useAuth();
   const { t } = useI18n();
@@ -749,7 +795,11 @@ export function HarvestPage() {
   const [target, setTarget] = useState("");
   const [quantity, setQuantity] = useState("10");
   const [unit, setUnit] = useState("kg");
-  const [harvests, setHarvests] = useState<{ id: string; label: string }[]>([]);
+  const [harvestRecords, setHarvestRecords] = useState<HarvestRecord[]>([]);
+  const [saleRecords, setSaleRecords] = useState<SaleRecord[]>([]);
+  const [filter, setFilter] = useState<"all" | "harvest" | "sale">("all");
+  const [query, setQuery] = useState("");
+  const [openKey, setOpenKey] = useState<string | null>(null);
   const [purpose, setPurpose] = useState("sold");
   const [saleQuantity, setSaleQuantity] = useState("1");
   const [amount, setAmount] = useState("0");
@@ -768,12 +818,14 @@ export function HarvestPage() {
     Promise.all([
       api<Page<PlantingRecord>>("/trees?page_size=100"),
       api<Page<PlantingRecord>>("/batches?page_size=100"),
-      api<{ id: string; public_code: string; target_code: string | null; quantity_remaining: number; unit: string }[]>("/harvests"),
-    ]).then(([treePage, batchPage, harvestList]) => {
+      api<HarvestRecord[]>("/harvests"),
+      api<SaleRecord[]>("/sales"),
+    ]).then(([treePage, batchPage, harvestList, saleList]) => {
       const planted = [...treePage.items, ...batchPage.items];
       setTrees(planted);
       setTarget((current) => current || (planted[0] ? `${treePage.items.includes(planted[0]) ? "tree" : "batch"}:${planted[0].id}` : ""));
-      setHarvests(harvestList.map((item) => ({ id: item.id, label: `${item.public_code} · ${item.quantity_remaining} ${item.unit} left` })));
+      setHarvestRecords(harvestList);
+      setSaleRecords(saleList);
     }).catch((caught: Error) => setError(caught.message));
   }
   useEffect(load, []);
@@ -867,38 +919,88 @@ export function HarvestPage() {
     }
   }
 
+  const harvests = harvestRecords.map((item) => ({
+    id: item.id,
+    label: `${item.public_code} · ${item.quantity_remaining} ${item.unit} left`,
+  }));
   const choices = trees.map((item) => ({
     id: `${item.public_code.startsWith("BATCH") ? "batch" : "tree"}:${item.id}`,
     label: `${item.public_code} · ${item.species_common_name}`,
   }));
   const targetLabel = choices.find((item) => item.id === target)?.label ?? "Not chosen";
-  const useLabel = USES.find((item) => item.id === purpose)?.label ?? purpose;
+  const useLabel = purposeLabel(purpose);
   const unitLabel = unit === "kg" ? "Kilograms" : "Fruit count";
+  const totalRevenueRwf = saleRecords.reduce((sum, item) => sum + (item.amount_rwf || 0), 0);
+
+  const feedRows: HarvestFeedRow[] = [
+    ...harvestRecords.map((item): HarvestFeedRow => ({
+      kind: "harvest",
+      key: `harvest-${item.id}`,
+      date: item.harvested_on,
+      code: item.public_code,
+      item,
+    })),
+    ...saleRecords.map((item): HarvestFeedRow => ({
+      kind: "sale",
+      key: `sale-${item.id}`,
+      date: item.sold_on,
+      code: item.public_code,
+      item,
+    })),
+  ].sort((left, right) => right.date.localeCompare(left.date));
+
+  const trimmedQuery = query.trim().toLowerCase();
+  const visibleRows = feedRows.filter((row) => {
+    if (filter !== "all" && row.kind !== filter) return false;
+    if (!trimmedQuery) return true;
+    const haystack = row.kind === "harvest"
+      ? [row.code, row.item.target_code, row.item.unit, row.item.notes]
+      : [row.code, row.item.harvest_code, row.item.buyer_name, purposeLabel(row.item.purpose), row.item.notes];
+    return haystack.some((part) => part?.toLowerCase().includes(trimmedQuery));
+  });
+
+  const canSeeBuyerRequests = user?.role === "farmer" || user?.role === "field_officer";
 
   return (
-    <div className="page">
-      <div className="page-head">
-        <div>
+    <div className="page rec-page">
+      <header className="rec-hero">
+        <div className="rec-hero-copy">
+          <span className="rec-eyebrow">{t("harvest.totals")}</span>
           <h1>{t("harvest.title")}</h1>
-          <p className="lede">{user?.role === "admin" ? t("harvest.adminLede") : t("harvest.lede")}</p>
         </div>
-        {canWrite ? (
-          <button
-            className="primary"
-            type="button"
-            aria-expanded={adding}
-            onClick={() => {
-              if (adding) closeForm();
-              else {
-                setAdding(true);
-                goTo(1);
-              }
-            }}
-          >
-            {t("harvest.add")}
-          </button>
-        ) : null}
-      </div>
+        <div className="rec-hero-actions">
+          <div className="rec-kpis" aria-label={t("harvest.totals")}>
+            <div className="rec-kpi">
+              <span>{t("harvest.harvested")}</span>
+              <strong>{harvestRecords.length}</strong>
+            </div>
+            <div className="rec-kpi">
+              <span>{t("harvest.sold")}</span>
+              <strong>{saleRecords.length}</strong>
+            </div>
+            <div className="rec-kpi">
+              <span>{t("harvest.revenue")} (RWF)</span>
+              <strong>{totalRevenueRwf.toLocaleString("en-GB")}</strong>
+            </div>
+          </div>
+          {canWrite ? (
+            <button
+              className="primary"
+              type="button"
+              aria-expanded={adding}
+              onClick={() => {
+                if (adding) closeForm();
+                else {
+                  setAdding(true);
+                  goTo(1);
+                }
+              }}
+            >
+              {t("harvest.add")}
+            </button>
+          ) : null}
+        </div>
+      </header>
       {notice ? <Banner tone="success">{notice}</Banner> : null}
       {error ? <Banner tone="error">{error}</Banner> : null}
       {canWrite && adding ? (
@@ -987,15 +1089,159 @@ export function HarvestPage() {
         </div>
       ) : (
         <>
-          {user?.role === "farmer" || user?.role === "field_officer" ? (
-            <section className="card" aria-label="Buyer interest">
-              <h2>{t("discover.buyerTitle")}</h2>
-              <p className="help">{t("discover.buyerHelp")}</p>
-              <BuyerRequests refreshKey={version} />
+          <div className={canSeeBuyerRequests || user?.role === "field_officer" ? "rec-grid-2" : undefined}>
+            <section className="rec-panel" aria-label={t("harvest.history")}>
+              <div className="rec-panel-head">
+                <h2>{t("harvest.history")}</h2>
+                <span className="rec-badge is-muted">{visibleRows.length}</span>
+              </div>
+              <div className="rec-toolbar">
+                <div className="rec-search">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                    <circle cx="11" cy="11" r="8" />
+                    <path d="m21 21-4.3-4.3" />
+                  </svg>
+                  <input
+                    type="search"
+                    aria-label="Filter harvest and sale records"
+                    placeholder="Filter by code, tree, buyer…"
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                  />
+                </div>
+                <select
+                  className="rec-select"
+                  aria-label="Record type"
+                  value={filter}
+                  onChange={(event) => setFilter(event.target.value as "all" | "harvest" | "sale")}
+                >
+                  <option value="all">All ({feedRows.length})</option>
+                  <option value="harvest">Harvests ({harvestRecords.length})</option>
+                  <option value="sale">Sales &amp; uses ({saleRecords.length})</option>
+                </select>
+                {filter !== "all" || query.trim() !== "" ? (
+                  <button
+                    type="button"
+                    className="secondary rec-btn-sm"
+                    onClick={() => {
+                      setFilter("all");
+                      setQuery("");
+                    }}
+                  >
+                    {t("records.clear")}
+                  </button>
+                ) : null}
+              </div>
+              {visibleRows.length === 0 ? (
+                <div className="rec-empty">No harvest or sale records match this view.</div>
+              ) : (
+                <div className="rec-scroll">
+                  <div className="rec-list">
+                    {visibleRows.map((row) => {
+                      const isOpen = openKey === row.key;
+                      if (row.kind === "harvest") {
+                        const { item } = row;
+                        const remainingTone = item.quantity_remaining > 0 ? " is-amber" : "";
+                        return (
+                          <article key={row.key} className={`rec-row${isOpen ? " is-open" : ""}`}>
+                            <div className="rec-row-main">
+                              <div className="rec-row-info">
+                                <div className="rec-row-title">
+                                  <strong>{item.quantity} {item.unit}</strong>
+                                  <span className="rec-code">{item.public_code}</span>
+                                </div>
+                                <div className="rec-row-meta">
+                                  <span>{item.target_code ?? "Tree / batch"}</span>
+                                  <span>{formatShortDate(item.harvested_on)}</span>
+                                </div>
+                              </div>
+                              <div className="rec-row-side">
+                                <span className={`rec-badge${remainingTone}`}>
+                                  {item.quantity_remaining > 0 ? `${item.quantity_remaining} ${item.unit} left` : "Allocated"}
+                                </span>
+                                <button
+                                  type="button"
+                                  className="secondary rec-btn-sm"
+                                  aria-expanded={isOpen}
+                                  onClick={() => setOpenKey(isOpen ? null : row.key)}
+                                >
+                                  {isOpen ? t("discover.hideDetails") : t("discover.details")}
+                                </button>
+                              </div>
+                            </div>
+                            {isOpen ? (
+                              <div className="rec-drawer">
+                                <div className="rec-drawer-item"><span>Source</span><strong>{item.target_code ?? "—"}</strong></div>
+                                <div className="rec-drawer-item"><span>Harvested</span><strong>{item.quantity} {item.unit}</strong></div>
+                                <div className="rec-drawer-item"><span>Remaining</span><strong>{item.quantity_remaining} {item.unit}</strong></div>
+                                <div className="rec-drawer-item"><span>Date</span><strong>{formatShortDate(item.harvested_on)}</strong></div>
+                                {item.notes ? <div className="rec-drawer-item"><span>Notes</span><strong>{item.notes}</strong></div> : null}
+                              </div>
+                            ) : null}
+                          </article>
+                        );
+                      }
+                      const { item } = row;
+                      const isSold = item.purpose === "sold";
+                      return (
+                        <article key={row.key} className={`rec-row${isOpen ? " is-open" : ""}`}>
+                          <div className="rec-row-main">
+                            <div className="rec-row-info">
+                              <div className="rec-row-title">
+                                <strong>{item.quantity} {item.unit} · {purposeLabel(item.purpose)}</strong>
+                                <span className="rec-code">{item.public_code}</span>
+                              </div>
+                              <div className="rec-row-meta">
+                                <span>{item.buyer_name ?? item.harvest_code ?? "Recorded use"}</span>
+                                <span>{formatShortDate(item.sold_on)}</span>
+                              </div>
+                            </div>
+                            <div className="rec-row-side">
+                              <span className={`rec-badge${isSold ? "" : " is-muted"}`}>
+                                {isSold ? `${item.amount_rwf.toLocaleString("en-GB")} RWF` : purposeLabel(item.purpose)}
+                              </span>
+                              <button
+                                type="button"
+                                className="secondary rec-btn-sm"
+                                aria-expanded={isOpen}
+                                onClick={() => setOpenKey(isOpen ? null : row.key)}
+                              >
+                                {isOpen ? t("discover.hideDetails") : t("discover.details")}
+                              </button>
+                            </div>
+                          </div>
+                          {isOpen ? (
+                            <div className="rec-drawer">
+                              <div className="rec-drawer-item"><span>Harvest</span><strong>{item.harvest_code ?? "—"}</strong></div>
+                              <div className="rec-drawer-item"><span>Use</span><strong>{purposeLabel(item.purpose)}</strong></div>
+                              <div className="rec-drawer-item"><span>Quantity</span><strong>{item.quantity} {item.unit}</strong></div>
+                              <div className="rec-drawer-item"><span>Amount</span><strong>{item.amount_rwf.toLocaleString("en-GB")} RWF</strong></div>
+                              {item.buyer_name ? <div className="rec-drawer-item"><span>Buyer</span><strong>{item.buyer_name}</strong></div> : null}
+                              {item.notes ? <div className="rec-drawer-item"><span>Notes</span><strong>{item.notes}</strong></div> : null}
+                            </div>
+                          ) : null}
+                        </article>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </section>
-          ) : null}
+            {canSeeBuyerRequests || user?.role === "field_officer" ? (
+              <div className="rec-page">
+                {canSeeBuyerRequests ? (
+                  <section className="rec-panel" aria-label="Buyer interest">
+                    <div className="rec-panel-head">
+                      <h2>{t("discover.buyerTitle")}</h2>
+                    </div>
+                    <BuyerRequests refreshKey={version} />
+                  </section>
+                ) : null}
+                {user?.role === "field_officer" ? <HarvestNotices refreshKey={version} /> : null}
+              </div>
+            ) : null}
+          </div>
           <HarvestForecast refreshKey={version} part="detail" />
-          {user?.role === "field_officer" ? <HarvestNotices refreshKey={version} /> : null}
           <HarvestSummary refreshKey={version} />
           <HarvestFeedback refreshKey={version} harvests={harvests} />
         </>

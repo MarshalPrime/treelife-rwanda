@@ -3,7 +3,7 @@ export default function AboutPage() {
     <div className="page">
       <div>
         <h1>About TreeLife Rwanda</h1>
-        <p className="lede">TreeLife Rwanda is an Ejo Labs record of urban and fruit trees, from the nursery through planting, care, harvest, and sale. It is meant to complement the Forestry Management and Evaluation System.</p>
+        <p className="lede">TreeLife Rwanda is an Ejo Labs record of urban and fruit trees, from the nursery through planting, care, harvest, and sale platform. It is meant to complement the Forestry Management and Evaluation System.</p>
       </div>
       <section className="card">
         <h2>What you can record</h2>

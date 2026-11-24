@@ -28,7 +28,6 @@ const fieldLinks = [
   ["/analytics", "nav.analytics"],
   ["/map", "nav.map"],
   ["/species", "nav.species"],
-  ["/about", "nav.about"],
 ];
 
 const adminLinks = [
@@ -45,7 +44,6 @@ const adminLinks = [
   ["/forests", "nav.forests"],
   ["/harvest", "nav.harvest"],
   ["/species", "nav.species"],
-  ["/about", "nav.about"],
 ];
 
 const farmerLinks = fieldLinks.filter(([href]) => href !== "/farmers");
@@ -229,7 +227,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     { title: "group.care" as MessageKey, paths: user?.role === "admin"
       ? ["/nursery", "/field", "/carbon"]
       : ["/nursery", "/field", "/harvest", "/carbon"] },
-    { title: "group.insights" as MessageKey, paths: ["/analytics", "/messages", "/audit", "/about"] },
+    { title: "group.insights" as MessageKey, paths: ["/analytics", "/messages", "/audit"] },
   ];
   const currentKey = links.find(([href]) => pathname === href || pathname.startsWith(`${href}/`))?.[1];
   const currentPage = currentKey ? t(currentKey as MessageKey) : "TreeLife";
